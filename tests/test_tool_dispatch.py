@@ -378,7 +378,7 @@ def test_reference_inspectors_format_and_archive_fixtures():
     with tempfile.TemporaryDirectory() as td:
         root = Path(td)
         lj = root / "sample.lj"
-        lj.write_bytes(b"\\x1bLJ" + b"\\x00" * 24)
+        lj.write_bytes(b"\x1bLJ" + b"\x00" * 24)
         assert module.probe_lua_file(lj)["format"] == "LuaJIT bytecode"
 
         good = root / "good.obb"
