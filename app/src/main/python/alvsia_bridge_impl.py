@@ -672,7 +672,7 @@ def run_tool(module_id, sub_id, input_path, out_root, engine_dir, jars_dir):
                 lines.append("cipher_vector=%s roundtrip=%s" % (
                     report.get("cipher_vector_match"), report.get("roundtrip_match")))
                 lines.append("OUT -> %s" % target)
-                return "\\n".join(lines)
+                return "\n".join(lines)
             if sid == "xor_single_byte":
                 r = ult.xor_single_byte_scan(ip, dest_xor)
                 lines.append(str(r))
