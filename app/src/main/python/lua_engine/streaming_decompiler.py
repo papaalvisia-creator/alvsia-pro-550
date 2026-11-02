@@ -81,6 +81,16 @@ def preflight_magic(path: Path) -> str:
         # Distinguish the known multi-member 78DA/raw-DEFLATE game container
         # from an ordinary RFC 1950 zlib stream (78 01/5E/9C/DA etc.).
         if len(head) >= 2 and head[0] == 0x78 and (head[0] * 256 + head[1]) % 31 == 0:
+            # 78 DA is shared by RFC1950 zlib level-9 and the legacy
+            # chunked raw-DEFLATE container. Probe standard zlib first;
+            # accept it only when the inflated prefix is Lua bytecode.
+            try:
+                probe = zlib.decompressobj()
+                inflated = probe.decompress(head, 64)
+                if inflated.startswith((bytes((0x1B,)) + b"Lua", bytes((0x1B,)) + b"LJ")):
+                    return "zlib"
+            except zlib.error:
+                pass
             if head[1] == 0xDA:
                 return "chunked_deflate"
             return "zlib"
