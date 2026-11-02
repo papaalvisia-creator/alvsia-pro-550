@@ -309,7 +309,7 @@ def test_reference_inspection_subtools_are_registered_and_read_only():
     menus = MENUS.read_text(encoding="utf-8")
     bridge = BRIDGE_IMPL.read_text(encoding="utf-8")
     helper = (ROOT / "app/src/main/python/alvsia_reference_tools.py").read_text(encoding="utf-8")
-    for sid in ("priv_lua_probe", "priv_source_triage", "priv_dump_audit"):
+    for sid in ("lua_format_probe", "anti_re_source_triage", "so_dump_audit"):
         assert sid in menus
         assert sid in bridge
     assert "probe_lua_file" in helper
