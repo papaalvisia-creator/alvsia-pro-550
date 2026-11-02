@@ -336,7 +336,7 @@ def test_reference_inspection_subtools_are_registered_and_read_only():
         findings = module.scan_source_file(source)["findings"]
         assert any(item["indicator"] == "dynamic_execution" for item in findings)
         dump = root / "sample.dmp"
-        dump.write_bytes((b"\\x00" * 5000) + b"HELLO_WORLD" + (b"\\x00" * 100))
+        dump.write_bytes((b"\x00" * 5000) + b"HELLO_WORLD" + (b"\x00" * 100))
         report = module.inspect_dump_file(dump, block_size=4096)
         assert report["size"] == dump.stat().st_size
         assert report["strings"]
