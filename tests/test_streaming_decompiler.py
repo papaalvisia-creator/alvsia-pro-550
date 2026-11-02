@@ -33,6 +33,26 @@ class TestPreflightMagic(unittest.TestCase):
             p.write_bytes(b"\x1bLua\x53\x00" + b"\x00" * 32)
             self.assertEqual(preflight_magic(p), "luac_53")
 
+    def test_comment_prefixed_luac53_magic(self):
+        with tempfile.TemporaryDirectory() as td:
+            p = Path(td) / "prefixed.lua"
+            p.write_bytes(b"-- exported Lua chunk\\n-- metadata\\n" +
+                          b"\\x1bLua\\x53\\x00" + b"\\x19\\x93\\x0d\\x0a\\x1a\\x0a" +
+                          b"\\x00" * 32)
+            self.assertEqual(preflight_magic(p), "embedded_luac_53")
+
+    def test_comment_prefixed_luajit_magic(self):
+        with tempfile.TemporaryDirectory() as td:
+            p = Path(td) / "prefixed.lj"
+            p.write_bytes(b"-- exported LuaJIT chunk\\n" + b"\\x1bLJ\\x02" + b"\\x00" * 16)
+            self.assertEqual(preflight_magic(p), "embedded_luajit")
+
+    def test_arbitrary_binary_embedded_magic_is_not_accepted(self):
+        with tempfile.TemporaryDirectory() as td:
+            p = Path(td) / "wrapped.bin"
+            p.write_bytes(b"BIN\\x00garbage\\x1bLua\\x53" + b"\\x00" * 32)
+            self.assertTrue(preflight_magic(p).startswith("unknown_"))
+
     def test_luajit_magic(self):
         with tempfile.TemporaryDirectory() as td:
             p = Path(td) / "x.lj"
