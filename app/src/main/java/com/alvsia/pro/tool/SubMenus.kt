@@ -266,6 +266,12 @@ object SubMenus {
             "Select .bin / .so → OUT/ALVSIA_PRIVATE/entropy_map.txt"),
         SubTool("priv_pak_manifest",  "PAK Manifest CSV",      "Generate CSV manifest of all entries in a TencentPak file",
             "Select .pak → OUT/ALVSIA_PRIVATE/*_manifest.csv"),
+        SubTool("priv_lua_probe",      "Lua Format Probe",       "Identify Lua 5.1–5.4, LuaJIT, source, and common containers without decompiling",
+            "Select .luac/.lua/.bin → OUT/REFERENCE/*.lua_probe.json"),
+        SubTool("priv_source_triage",  "Obfuscation & Behavior Triage", "Static indicators for encoded payloads, dynamic execution, process-memory APIs and anti-cheat evasion patterns; never executes input",
+            "Select .py/.lua/.js/.cpp → OUT/REFERENCE/*.source_triage.json"),
+        SubTool("priv_dump_audit",     "Offline Dump Analyzer",  "Read-only hash, entropy-block and printable-string report for an existing dump file; no live process access or key extraction",
+            "Select an authorized .dmp/.bin → OUT/REFERENCE/*.dump_audit.json"),
     )
 
     else -> emptyList()
