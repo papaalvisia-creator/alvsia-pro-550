@@ -704,8 +704,34 @@ def run_tool(module_id, sub_id, input_path, out_root, engine_dir, jars_dir):
         # ── 13  Decrypt Engine ───────────────────────────────────────────
         if mid == 13 or sid.startswith("dec_"):
             import alvsia_ultimate as ult
-            if not need_file(): return "\n".join(lines)
             dest_dec = out_dir("DEC")
+            if sid == "dec_selftest":
+                test_dir = dest_dec / ".selftest_tmp"
+                test_dir.mkdir(parents=True, exist_ok=True)
+                report = {"test": "NIST AES known-answer tests", "ok": False}
+                try:
+                    ecb_in = test_dir / "aes_ecb_known.bin"
+                    ecb_in.write_bytes(bytes.fromhex("69c4e0d86a7b0430d8cdb78070b4c55a"))
+                    ecb = ult.decrypt_aes(str(ecb_in), test_dir / "ecb", "000102030405060708090a0b0c0d0e0f", "")
+                    ecb_path = Path(ecb.get("out", "")) if isinstance(ecb, dict) else Path("")
+                    ecb_ok = bool(ecb.get("ok")) and ecb_path.is_file() and ecb_path.read_bytes().hex() == "00112233445566778899aabbccddeeff"
+                    cbc_in = test_dir / "aes_cbc_known.bin"
+                    cbc_in.write_bytes(bytes.fromhex("7649abac8119b246cee98e9b12e9197d"))
+                    cbc = ult.decrypt_aes(str(cbc_in), test_dir / "cbc", "2b7e151628aed2a6abf7158809cf4f3c", "000102030405060708090a0b0c0d0e0f")
+                    cbc_path = Path(cbc.get("out", "")) if isinstance(cbc, dict) else Path("")
+                    cbc_ok = bool(cbc.get("ok")) and cbc_path.is_file() and cbc_path.read_bytes().hex() == "6bc1bee22e409f96e93d7e117393172a"
+                    report.update({"aes_ecb_match": ecb_ok, "aes_cbc_match": cbc_ok, "ok": ecb_ok and cbc_ok})
+                except Exception as exc:
+                    report.update({"error": str(exc)[:240]})
+                finally:
+                    shutil.rmtree(test_dir, ignore_errors=True)
+                target = dest_dec / "decrypt_selftest.json"
+                target.write_text(json.dumps(report, indent=2, sort_keys=True), encoding="utf-8")
+                lines.append("OK AES known-answer self-test" if report.get("ok") else "X AES self-test failed")
+                lines.append("AES_ECB=%s AES_CBC=%s" % (report.get("aes_ecb_match"), report.get("aes_cbc_match")))
+                lines.append("OUT -> %s" % target)
+                return "\n".join(lines)
+            if not need_file(): return "\n".join(lines)
             if sid == "dec_auto":
                 r = ult.decrypt_auto(ip, dest_dec, str(work_dir()))
                 lines.append(str(r))
