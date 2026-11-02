@@ -60,11 +60,29 @@ def unwrap_lua_container(data: bytes, max_output: int = 256 * 1024 * 1024):
     # First try a normal zlib stream. This handles ordinary .zlib files.
     try:
         payload = zlib.decompress(data)
-        if payload and (payload.startswith(LUA_MAGIC) or payload.startswith(LJ_MAGIC)):
+        has_lua = payload.startswith((LUA_MAGIC, LJ_MAGIC))
+        if not has_lua:
+            # Allow only a textual comment/shebang banner before Lua magic.
+            candidates = [x for x in (payload.find(LUA_MAGIC, 1, 65536),
+                                       payload.find(LJ_MAGIC, 1, 65536)) if x > 0]
+            for offset in sorted(candidates):
+                try:
+                    prefix = payload[:offset].decode("utf-8")
+                except UnicodeDecodeError:
+                    continue
+                lines = prefix.splitlines()
+                if lines and all(not line.strip() or line.lstrip().startswith(("--", "#!"))
+                                 for line in lines) and not any(
+                    ord(ch) < 32 and ch not in "\\t\\r\\n" for ch in prefix
+                ):
+                    has_lua = True
+                    break
+        if payload and has_lua:
             if len(payload) > max_output:
                 raise ValueError("decompressed Lua payload exceeds output limit")
             return payload, ContainerInfo(True, "zlib", 1, len(payload),
                                           ("standard zlib container",))
+
     except zlib.error:
         pass
 
