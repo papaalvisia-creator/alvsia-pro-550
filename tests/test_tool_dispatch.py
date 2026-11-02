@@ -343,6 +343,18 @@ def test_reference_inspection_subtools_are_registered_and_read_only():
         assert report["memory_acquisition"] is False
         assert report["secret_extraction"] is False
 
+def test_pak_integrity_audit_is_registered_and_read_only():
+    bridge = BRIDGE_IMPL.read_text(encoding="utf-8")
+    menus = MENUS.read_text(encoding="utf-8")
+    core = (ROOT / "app/src/main/python/alvsia_core.py").read_text(encoding="utf-8")
+    assert "pak_deep_integrity_audit" in bridge
+    assert "pak_deep_integrity_audit" in menus
+    assert "def run_pak_integrity_audit(" in core
+    assert "slot_fingerprint_sha256" in core
+    assert "invalid_ranges" in core
+    assert "overlaps" in core
+    assert "Original PAK was not modified" in bridge
+
 if __name__ == "__main__":
     tests = (
         test_python_auth_normalizes_java_string_and_lua_avoids_art_oom,
@@ -360,6 +372,7 @@ if __name__ == "__main__":
         test_large_file_helpers_stream_and_report_hashes,
         test_reference_inspection_subtools_are_registered_and_read_only,
         test_reference_inspection_helpers_smoke,
+        test_pak_integrity_audit_is_registered_and_read_only,
     )
     for test in tests:
         test()
@@ -369,14 +382,3 @@ if __name__ == "__main__":
 
 
 
-def test_pak_integrity_audit_is_registered_and_read_only():
-    bridge = BRIDGE_IMPL.read_text(encoding="utf-8")
-    menus = MENUS.read_text(encoding="utf-8")
-    core = (ROOT / "app/src/main/python/alvsia_core.py").read_text(encoding="utf-8")
-    assert "pak_deep_integrity_audit" in bridge
-    assert "pak_deep_integrity_audit" in menus
-    assert "def run_pak_integrity_audit(" in core
-    assert "slot_fingerprint_sha256" in core
-    assert "invalid_ranges" in core
-    assert "overlaps" in core
-    assert "Original PAK was not modified" in bridge
