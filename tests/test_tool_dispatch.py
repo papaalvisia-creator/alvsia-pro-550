@@ -410,6 +410,16 @@ def test_xor_known_vector_selftest_is_registered():
     assert "9fe1e8bc97ec9eb791ff9e8ab0cad781bb8dcd8ab2cb939bbbdecacfa89c" in bridge
     assert 'sid not in ("xor_batch", "xor_selftest")' in bridge
 
+
+def test_decrypt_known_answer_selftest_is_registered():
+    bridge = BRIDGE_IMPL.read_text(encoding="utf-8")
+    menus = MENUS.read_text(encoding="utf-8")
+    assert "dec_selftest" in bridge
+    assert "dec_selftest" in menus
+    assert "69c4e0d86a7b0430d8cdb78070b4c55a" in bridge
+    assert "7649abac8119b246cee98e9b12e9197d" in bridge
+    assert "NIST AES known-answer tests" in bridge
+
 if __name__ == "__main__":
     tests = (
         test_python_auth_normalizes_java_string_and_lua_avoids_art_oom,
@@ -431,6 +441,7 @@ if __name__ == "__main__":
         test_obb_integrity_audit_is_registered_and_read_only,
         test_reference_inspectors_format_and_archive_fixtures,
         test_xor_known_vector_selftest_is_registered,
+        test_decrypt_known_answer_selftest_is_registered,
     )
     for test in tests:
         test()
