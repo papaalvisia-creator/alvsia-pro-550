@@ -183,9 +183,11 @@ def audit_archive_file(path, max_entry_bytes=268435456, max_total_bytes=53687091
         report["errors"].append("invalid ZIP/OBB: " + str(exc)[:200])
     except Exception as exc:
         report["errors"].append(type(exc).__name__ + ": " + str(exc)[:200])
+    report["crc_coverage_complete"] = not report["skipped_crc"]
     report["ok"] = (
         report["is_zip"] and not report["unsafe_paths"] and
-        not report["symlinks"] and not report["bad_crc"] and
-        not report["errors"]
+        not report["symlinks"] and not report["duplicates"] and
+        not report["bad_crc"] and not report["errors"] and
+        report["crc_coverage_complete"]
     )
     return report
