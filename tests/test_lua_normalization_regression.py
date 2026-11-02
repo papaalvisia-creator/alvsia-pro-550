@@ -48,7 +48,8 @@ class LuaNormalizationRegression(unittest.TestCase):
             src = root / "banner_wrapped.lua"
             src.write_bytes(wrapped)
             normalized, container = _normalized_input(src, root / "out")
-            self.assertEqual(normalized.read_bytes(), payload.split(b"\\x1bLua", 1)[1].join([]) if False else payload[payload.index(b"\\x1bLua"):])
+            expected = payload[payload.index(b"\\x1bLua"):]
+            self.assertEqual(normalized.read_bytes(), expected)
             self.assertEqual(src.read_bytes(), wrapped)
             self.assertEqual(container.format, "zlib")
 
