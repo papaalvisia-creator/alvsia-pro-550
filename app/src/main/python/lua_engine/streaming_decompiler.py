@@ -78,8 +78,12 @@ def preflight_magic(path: Path) -> str:
             return f"luac_{v:02x}"
         if head.startswith(b"\x1bLJ"):
             return "luajit"
-        if head[0] == 0x78 and head[1] == 0xDA:
-            return "chunked_deflate"
+        # Distinguish the known multi-member 78DA/raw-DEFLATE game container
+        # from an ordinary RFC 1950 zlib stream (78 01/5E/9C/DA etc.).
+        if len(head) >= 2 and head[0] == 0x78 and (head[0] * 256 + head[1]) % 31 == 0:
+            if head[1] == 0xDA:
+                return "chunked_deflate"
+            return "zlib"
         if head[0] == 0x1F and head[1] == 0x8B:
             return "gzip"
         # Some exporters prepend a Lua comment or metadata banner to bytecode.
@@ -97,6 +101,46 @@ def preflight_magic(path: Path) -> str:
         return "unknown_0x" + head[:4].hex()
     except Exception:
         return "preflight_failed"
+
+def stream_inflate_zlib(input_path: Path, out_path: Path) -> Tuple[bool, str]:
+    """Stream a conventional RFC 1950 zlib stream with a strict output cap."""
+    total = 0
+    dec = zlib.decompressobj()
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        with input_path.open("rb") as src, out_path.open("wb") as dst:
+            while True:
+                chunk = src.read(STREAM_CHUNK_SIZE)
+                if not chunk:
+                    break
+                pending = chunk
+                while pending:
+                    part = dec.decompress(pending, min(STREAM_CHUNK_SIZE, MAX_INFLATED_BYTES - total + 1))
+                    pending = dec.unconsumed_tail
+                    if part:
+                        total += len(part)
+                        if total > MAX_INFLATED_BYTES:
+                            raise ValueError(f"zlib output exceeds cap {MAX_INFLATED_BYTES}")
+                        dst.write(part)
+                    if not pending:
+                        break
+            tail = dec.flush()
+            if tail:
+                total += len(tail)
+                if total > MAX_INFLATED_BYTES:
+                    raise ValueError(f"zlib output exceeds cap {MAX_INFLATED_BYTES}")
+                dst.write(tail)
+            if not dec.eof:
+                raise ValueError("truncated zlib stream")
+        with out_path.open("rb") as check:
+            magic = check.read(4)
+        if not magic.startswith((b"\\x1bLua", b"\\x1bLJ")):
+            raise ValueError("zlib payload does not begin with Lua/LuaJIT magic")
+        return True, f"zlib_stream_inflated bytes_out={total}"
+    except Exception as exc:
+        out_path.unlink(missing_ok=True)
+        return False, f"zlib_inflate_failed: {exc}"
+
 
 def stream_inflate_deflate_container(input_path: Path, out_path: Path) -> Tuple[bool, str]:
     """Stream-inflate a 0x78DA-chunked raw-DEFLATE Lua container.
@@ -409,7 +453,19 @@ def decompile_large(path: Path, out_dir: Path, jars_dir: Optional[str] = None) -
         if embedded_temp is not None:
             embedded_temp.unlink(missing_ok=True)
 
-    if fmt == "chunked_deflate":
+    if fmt == "zlib":
+        unwrapped = out / (p.stem + "_zlib_unwrapped.luac")
+        ok, msg = stream_inflate_zlib(p, unwrapped)
+        if not ok:
+            result["error"] = msg
+            return result
+        work_file = unwrapped
+        container_info = {"container": "zlib", "container_msg": msg,
+                          "unwrapped": str(unwrapped)}
+        fmt = preflight_magic(work_file)
+        result["format"] = fmt
+
+    elif fmt == "chunked_deflate":
         unwrapped = out / (p.stem + "_unwrapped.luac")
         ok, msg = stream_inflate_deflate_container(p, unwrapped)
         if not ok:
