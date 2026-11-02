@@ -27,15 +27,15 @@ def main():
         # Smart Decompile instead of being mistaken for an unknown text file.
         prefixed = td/"prefixed.lua"
         prefixed.write_bytes(
-            b"-- exported by a Lua tool\\n-- metadata\\n"
-            + b"\\x1bLua\\x53\\x00" + b"\\x19\\x93\\x0d\\x0a\\x1a\\x0a"
+            b"-- exported by a Lua tool\n-- metadata\n"
+            + b"\x1bLua\x53\x00" + b"\x19\x93\x0d\x0a\x1a\x0a"
             + bytes(32)
         )
         pi=detect_lua(prefixed)
         assert pi.kind=="bytecode" and pi.format=="luac", pi
         assert any(n.startswith("comment_prefix_offset=") for n in pi.notes), pi
         arbitrary = td/"embedded.bin"
-        arbitrary.write_bytes(b"BIN\\x00garbage\\x1bLua\\x53" + bytes(32))
+        arbitrary.write_bytes(b"BIN\x00garbage\x1bLua\x53" + bytes(32))
         assert detect_lua(arbitrary).kind=="unknown"
         bad=td/"bad.bin"; bad.write_bytes(bytes([0, 1]) + b"garbage")
         assert not analyze_lua(bad,td)["ok"]
