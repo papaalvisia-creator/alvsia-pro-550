@@ -2741,21 +2741,27 @@ def run_pak_integrity_audit(pak_path, out_json=None):
             })
     ranges.sort(key=lambda item: (item[0], item[1]))
     overlap_limit = 10000
-    for pos, current in enumerate(ranges):
+    active = []
+    for current in ranges:
         start, end, idx, path, block_no = current
-        for other in ranges[pos + 1:]:
-            if other[0] >= end or len(report['overlaps']) >= overlap_limit:
-                break
+        active = [item for item in active if item[1] > start]
+        for other in active:
             if other[2] != idx:
                 report['overlaps'].append({
-                    'entry_a': idx, 'path_a': path, 'block_a': block_no,
-                    'entry_b': other[2], 'path_b': other[3], 'block_b': other[4],
+                    'entry_a': other[2], 'path_a': other[3], 'block_a': other[4],
+                    'entry_b': idx, 'path_b': path, 'block_b': block_no,
                     'overlap_start': max(start, other[0]),
                     'overlap_end': min(end, other[1]),
                     'note': 'Shared/overlapping payload ranges require format-aware review'
                 })
+                if len(report['overlaps']) >= overlap_limit:
+                    break
+        active.append(current)
+        if len(report['overlaps']) >= overlap_limit:
+            break
     report['overlaps_truncated'] = len(report['overlaps']) >= overlap_limit
-    report['ok'] = not report['invalid_ranges'] and not report['overlaps']
+    report['ok'] = not report['invalid_ranges']
+    report['warnings'] = ['overlapping payload ranges detected'] if report['overlaps'] else []
     if out_json:
         target = Path(out_json)
         target.parent.mkdir(parents=True, exist_ok=True)
