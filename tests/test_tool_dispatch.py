@@ -305,7 +305,22 @@ def test_profile_catalog_matches_canonical_nineteen_modules():
     assert names == chips, f"Home/profile module names differ: home={names}, profile={chips}"
 
 
-if __name__ == "__main__":
+def test_reference_inspection_subtools_are_registered_and_read_only():
+    menus = MENUS.read_text(encoding="utf-8")
+    bridge = BRIDGE_IMPL.read_text(encoding="utf-8")
+    helper = (ROOT / "app/src/main/python/alvsia_reference_tools.py").read_text(encoding="utf-8")
+    for sid in ("priv_lua_probe", "priv_source_triage", "priv_dump_audit"):
+        assert sid in menus
+        assert sid in bridge
+    assert "probe_lua_file" in helper
+    assert "scan_source_file" in helper
+    assert "inspect_dump_file" in helper
+    assert "execution_performed" in helper
+    assert "memory_acquisition" in helper
+    assert "subprocess.run(" not in helper
+    assert "ptrace(" not in helper
+    assert "process_vm_readv(" not in helper
+\n\nif __name__ == "__main__":
     tests = (
         test_python_auth_normalizes_java_string_and_lua_avoids_art_oom,
         test_menu_ids_are_unique_and_reachable,
@@ -327,18 +342,26 @@ if __name__ == "__main__":
     print(f"TOOL DISPATCH TEST: PASS ({len(tests)}/{len(tests)})")
 
 
-def test_reference_inspection_subtools_are_registered_and_read_only():
-    menus = MENUS.read_text(encoding="utf-8")
-    bridge = BRIDGE_IMPL.read_text(encoding="utf-8")
-    helper = (ROOT / "app/src/main/python/alvsia_reference_tools.py").read_text(encoding="utf-8")
-    for sid in ("priv_lua_probe", "priv_source_triage", "priv_dump_audit"):
-        assert sid in menus
-        assert sid in bridge
-    assert "probe_lua_file" in helper
-    assert "scan_source_file" in helper
-    assert "inspect_dump_file" in helper
-    assert "execution_performed" in helper
-    assert "memory_acquisition" in helper
-    assert "subprocess.run(" not in helper
-    assert "ptrace(" not in helper
-    assert "process_vm_readv(" not in helper
+
+def test_reference_inspection_helpers_smoke():
+    import importlib.util
+    helper_path = ROOT / "app/src/main/python/alvsia_reference_tools.py"
+    spec = importlib.util.spec_from_file_location("alvsia_reference_tools", str(helper_path))
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    with tempfile.TemporaryDirectory() as td:
+        root = Path(td)
+        lua = root / "sample.luac"
+        lua.write_bytes(b"\\x1bLua\\x53\\x00" + (b"\\x00" * 40))
+        assert module.probe_lua_file(lua)["format"] == "Lua 5.3"
+        source = root / "sample.py"
+        source.write_text("import base64\\nexec(payload)\\n", encoding="utf-8")
+        findings = module.scan_source_file(source)["findings"]
+        assert any(item["indicator"] == "dynamic_execution" for item in findings)
+        dump = root / "sample.dmp"
+        dump.write_bytes((b"\\x00" * 5000) + b"HELLO_WORLD" + (b"\\x00" * 100))
+        report = module.inspect_dump_file(dump, block_size=4096)
+        assert report["size"] == dump.stat().st_size
+        assert report["strings"]
+        assert report["memory_acquisition"] is False
+        assert report["secret_extraction"] is False
