@@ -707,10 +707,12 @@ def run_tool(module_id, sub_id, input_path, out_root, engine_dir, jars_dir):
             target = dest_pakd / (Path(ip).name + ".integrity_audit.json")
             try:
                 result = core.run_pak_integrity_audit(ip, target)
-                lines.append("OK structural audit complete" if result.get("ok") else "WARN structural issues detected")
+                lines.append("OK range validation complete" if result.get("ok") else "WARN invalid payload/index ranges detected")
                 lines.append("entries=%s invalid_ranges=%s overlaps=%s" % (
                     result.get("entry_count"), len(result.get("invalid_ranges", [])),
                     len(result.get("overlaps", []))))
+                if result.get("warnings"):
+                    lines.append("WARN: %s" % "; ".join(result.get("warnings", [])))
                 lines.append("OUT -> %s" % result.get("out", target))
                 lines.append("Original PAK was not modified")
             except Exception as exc:
