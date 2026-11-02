@@ -22,6 +22,8 @@ def _entropy(data):
 def probe_lua_file(path):
     """Identify common Lua/LuaJIT signatures without attempting decompilation."""
     p = Path(path)
+    if p.stat().st_size > 16777216:
+        raise ValueError("Lua probe input exceeds 16 MiB safety limit")
     raw = p.read_bytes()
     entropy = _entropy(raw[:min(len(raw), 262144)])
     result = {"file": p.name, "size": len(raw),
@@ -70,6 +72,8 @@ _SOURCE_PATTERNS = (
 def scan_source_file(path):
     """Static-only source triage; indicators are not proof of malicious behavior."""
     p = Path(path)
+    if p.stat().st_size > 16777216:
+        raise ValueError("source triage input exceeds 16 MiB safety limit")
     raw = p.read_bytes()
     text = raw.decode("utf-8", "replace")
     findings = []
@@ -87,22 +91,31 @@ def scan_source_file(path):
             "note": "Static indicators only; manually review context before use."}
 
 def inspect_dump_file(path, block_size=65536):
-    """Read-only offline dump report; no live process access or key extraction."""
+    """Read-only offline dump report; streams data and never acquires live memory."""
     p = Path(path)
-    raw = p.read_bytes()
     block_size = max(4096, min(int(block_size), 1048576))
+    digest = hashlib.sha256()
     blocks = []
-    for offset in range(0, len(raw), block_size):
-        chunk = raw[offset:offset + block_size]
-        blocks.append((offset, round(_entropy(chunk), 3), len(chunk)))
-    printable = re.compile(rb"[\x20-\x7e]{6,}")
     strings = []
-    for match in printable.finditer(raw):
-        strings.append((match.start(), match.group(0).decode("ascii", "replace")[:160]))
-        if len(strings) >= 100:
-            break
-    return {"file": p.name, "size": len(raw),
-            "sha256": hashlib.sha256(raw).hexdigest(),
-            "block_size": block_size, "blocks": blocks[:256],
-            "strings": strings, "memory_acquisition": False,
-            "secret_extraction": False}
+    carry = b""
+    offset = 0
+    with p.open("rb") as handle:
+        while True:
+            chunk = handle.read(block_size)
+            if not chunk:
+                break
+            digest.update(chunk)
+            if len(blocks) < 256:
+                blocks.append((offset, round(_entropy(chunk), 3), len(chunk)))
+            scan = carry + chunk
+            base = offset - len(carry)
+            for match in re.finditer(rb"[\\x20-\\x7e]{6,}", scan):
+                strings.append((max(0, base + match.start()),
+                                match.group(0).decode("ascii", "replace")[:160]))
+                if len(strings) >= 100:
+                    break
+            carry = scan[-5:]
+            offset += len(chunk)
+    return {"file": p.name, "size": offset, "sha256": digest.hexdigest(),
+            "block_size": block_size, "blocks": blocks, "strings": strings,
+            "memory_acquisition": False, "secret_extraction": False}
