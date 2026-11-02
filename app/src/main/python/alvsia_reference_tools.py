@@ -109,7 +109,7 @@ def inspect_dump_file(path, block_size=65536):
                 blocks.append((offset, round(_entropy(chunk), 3), len(chunk)))
             scan = carry + chunk
             base = offset - len(carry)
-            for match in re.finditer(rb"[\\x20-\\x7e]{6,}", scan):
+            for match in re.finditer(rb"[\x20-\x7e]{6,}", scan):
                 strings.append((max(0, base + match.start()),
                                 match.group(0).decode("ascii", "replace")[:160]))
                 if len(strings) >= 100:
