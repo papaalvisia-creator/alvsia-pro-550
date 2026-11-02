@@ -25,6 +25,31 @@ class LuaInfo:
         return d
 
 
+def _find_comment_prefixed_magic(data: bytes):
+    """Return (offset, format, version) only for comment/shebang-only prefixes."""
+    candidates = []
+    for marker, fmt in ((b"\x1bLua", "luac"), (b"\x1bLJ", "luajit")):
+        offset = data.find(marker, 1, min(len(data), 65536))
+        if offset > 0:
+            candidates.append((offset, fmt))
+    for offset, fmt in sorted(candidates):
+        try:
+            prefix = data[:offset].decode("utf-8")
+        except UnicodeDecodeError:
+            continue
+        lines = prefix.splitlines()
+        if not lines or not all(
+            not line.strip() or line.lstrip().startswith(("--", "#!"))
+            for line in lines
+        ):
+            continue
+        if any(ord(ch) < 32 and ch not in "\t\r\n" for ch in prefix):
+            continue
+        version = data[offset + 4] if fmt == "luac" and len(data) > offset + 4 else None
+        return offset, fmt, version
+    return None
+
+
 def detect_bytes(data: bytes) -> LuaInfo:
     size = len(data)
     magic = data[:8].hex()
@@ -40,6 +65,18 @@ def detect_bytes(data: bytes) -> LuaInfo:
             return LuaInfo("bytecode", f"Lua {version}", "luac", size, magic, 0.99)
         return LuaInfo("bytecode", None, "luac-unknown", size, magic, 0.90,
                        ("Lua magic present but version byte is unknown",))
+    embedded = _find_comment_prefixed_magic(data)
+    if embedded:
+        offset, fmt, version_byte = embedded
+        if fmt == "luajit":
+            return LuaInfo("bytecode", "LuaJIT 2.0/2.1", "luajit", size, magic, 0.94,
+                           (f"comment_prefix_offset={offset}", "embedded LuaJIT bytecode"))
+        version = LUA_VERSIONS.get(version_byte)
+        if version:
+            return LuaInfo("bytecode", f"Lua {version}", "luac", size, magic, 0.94,
+                           (f"comment_prefix_offset={offset}", "embedded Lua bytecode"))
+        return LuaInfo("bytecode", None, "luac-unknown", size, magic, 0.85,
+                       (f"comment_prefix_offset={offset}", "embedded Lua magic with unknown version"))
     head = data[:8192].decode("utf-8", "ignore")
     stripped = head.lstrip("\ufeff \t\r\n")
     if re.search(r"^(?:#!.*\n\s*)?(?:local|return|function|if|for|while|repeat|do)\b", stripped):
