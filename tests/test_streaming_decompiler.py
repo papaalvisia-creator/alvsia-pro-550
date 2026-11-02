@@ -144,11 +144,11 @@ class TestLuaHeaderDiagnostics(unittest.TestCase):
         with tempfile.TemporaryDirectory() as td:
             src = Path(td) / "wrapped.luac"
             raw = (
-                bytes((0x1B,)) + b"Lua\\x53\\x00BADBAD"
-                + b"\\x04\\x08\\x04\\x08\\x08"
-                + b"\\x78\\x56\\x00\\x00\\x00\\x00\\x00\\x00"
+                bytes((0x1B,)) + b"Lua\x53\x00BADBAD"
+                + b"\x04\x08\x04\x08\x08"
+                + b"\x78\x56\x00\x00\x00\x00\x00\x00"
                 + struct.pack("<d", 370.5)
-                + b"\\x00" * 64
+                + b"\x00" * 64
             )
             src.write_bytes(raw)
             report = probe_lua_header(src)
@@ -162,7 +162,7 @@ class TestLuaHeaderDiagnostics(unittest.TestCase):
     def test_counts_utf8_replacement_markers_without_decoding_input(self):
         with tempfile.TemporaryDirectory() as td:
             src = Path(td) / "damaged.bin"
-            raw = bytes((0x1B,)) + b"Lua\\x53" + bytes((0xEF, 0xBF, 0xBD)) * 3
+            raw = bytes((0x1B,)) + b"Lua\x53" + bytes((0xEF, 0xBF, 0xBD)) * 3
             src.write_bytes(raw)
             report = probe_lua_header(src)
             self.assertEqual(report["utf8_replacement_markers"], 3)
