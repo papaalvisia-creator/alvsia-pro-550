@@ -293,7 +293,7 @@ def run_tool(module_id, sub_id, input_path, out_root, engine_dir, jars_dir):
 
         if sid == "obb_integrity_audit":
             if not need_file():
-                return "\\n".join(lines)
+                return "\n".join(lines)
             source = Path(ip)
             target = out_dir("OBB") / (source.name + ".integrity_audit.json")
             try:
@@ -301,7 +301,7 @@ def run_tool(module_id, sub_id, input_path, out_root, engine_dir, jars_dir):
                 import json as _json
                 report = audit_archive_file(source)
                 target.write_text(_json.dumps(report, indent=2, sort_keys=True), encoding="utf-8")
-                lines.append("OK archive integrity audit" if report.get("ok") else "WARN archive issues or skipped checks")
+                lines.append("OK archive integrity audit" if report.get("ok") else "WARN archive issues or incomplete CRC coverage")
                 lines.append("entries=%s CRC_checked=%s unsafe_paths=%s bad_crc=%s" % (
                     report.get("entries"), report.get("crc_checked_bytes"),
                     len(report.get("unsafe_paths", [])), len(report.get("bad_crc", []))))
@@ -309,7 +309,7 @@ def run_tool(module_id, sub_id, input_path, out_root, engine_dir, jars_dir):
                 lines.append("Archive was not extracted or modified")
             except Exception as exc:
                 lines.append("X OBB integrity audit failed: %s" % str(exc)[:300])
-            return "\\n".join(lines)
+            return "\n".join(lines)
 
         # ── 4  OBB Tools ─────────────────────────────────────────────────
         if mid == 4 or sid.startswith("obb_"):
