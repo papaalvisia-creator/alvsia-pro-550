@@ -320,7 +320,9 @@ def test_reference_inspection_subtools_are_registered_and_read_only():
     assert "subprocess.run(" not in helper
     assert "ptrace(" not in helper
     assert "process_vm_readv(" not in helper
-\n\ndef test_reference_inspection_helpers_smoke():
+
+
+def test_reference_inspection_helpers_smoke():
     import importlib.util
     helper_path = ROOT / "app/src/main/python/alvsia_reference_tools.py"
     spec = importlib.util.spec_from_file_location("alvsia_reference_tools", str(helper_path))
