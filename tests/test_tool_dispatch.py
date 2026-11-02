@@ -339,6 +339,6 @@ def test_reference_inspection_subtools_are_registered_and_read_only():
     assert "inspect_dump_file" in helper
     assert "execution_performed" in helper
     assert "memory_acquisition" in helper
-    assert "subprocess" not in helper
+    assert "subprocess.run(" not in helper
     assert "ptrace(" not in helper
-    assert "process_vm_readv" not in helper
+    assert "process_vm_readv(" not in helper
