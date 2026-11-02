@@ -73,6 +73,7 @@ jobs:
         run: |
           python3 -m pip install --disable-pip-version-check pycryptodome
           python3 -m unittest discover -s tests -p 'test_lua*.py'
+          python3 -m unittest discover -s tests -p 'test_streaming_decompiler.py'
 
       - name: Run Lua Protector round-trip tests
         run: python3 tests/test_vm_protect_roundtrip.py
