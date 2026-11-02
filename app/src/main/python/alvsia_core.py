@@ -2678,7 +2678,7 @@ def run_pak_integrity_audit(pak_path, out_json=None):
     referenced = {}
     for directory, files in (getattr(pak, '_index', {}) or {}).items():
         for name, entry in files.items():
-            referenced[id(entry)] = str(directory / name).replace('\\\\', '/')
+            referenced[id(entry)] = str(directory / name).replace('\\', '/')
     report['referenced_path_count'] = len(referenced)
     ranges = []
     hashes = {}
@@ -2740,10 +2740,11 @@ def run_pak_integrity_audit(pak_path, out_json=None):
                 'content_hash': content_hash, 'entries': indices
             })
     ranges.sort(key=lambda item: (item[0], item[1]))
+    overlap_limit = 10000
     for pos, current in enumerate(ranges):
         start, end, idx, path, block_no = current
         for other in ranges[pos + 1:]:
-            if other[0] >= end:
+            if other[0] >= end or len(report['overlaps']) >= overlap_limit:
                 break
             if other[2] != idx:
                 report['overlaps'].append({
@@ -2753,6 +2754,7 @@ def run_pak_integrity_audit(pak_path, out_json=None):
                     'overlap_end': min(end, other[1]),
                     'note': 'Shared/overlapping payload ranges require format-aware review'
                 })
+    report['overlaps_truncated'] = len(report['overlaps']) >= overlap_limit
     report['ok'] = not report['invalid_ranges'] and not report['overlaps']
     if out_json:
         target = Path(out_json)
