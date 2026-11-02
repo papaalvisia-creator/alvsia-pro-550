@@ -365,6 +365,40 @@ def test_obb_integrity_audit_is_registered_and_read_only():
     assert "archive.open(info, \"r\")" in helper
     assert "extractall(" not in helper
 
+
+def test_reference_inspectors_format_and_archive_fixtures():
+    import importlib.util
+    import zipfile
+    helper_path = ROOT / "app/src/main/python/alvsia_reference_tools.py"
+    spec = importlib.util.spec_from_file_location("alvsia_reference_tools_fixtures", str(helper_path))
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    with tempfile.TemporaryDirectory() as td:
+        root = Path(td)
+        lj = root / "sample.lj"
+        lj.write_bytes(b"\\x1bLJ" + b"\\x00" * 24)
+        assert module.probe_lua_file(lj)["format"] == "LuaJIT bytecode"
+
+        good = root / "good.obb"
+        with zipfile.ZipFile(str(good), "w", zipfile.ZIP_STORED) as archive:
+            archive.writestr("assets/data.bin", b"ALVSIA-OBB-TEST")
+        good_report = module.audit_archive_file(good)
+        assert good_report["ok"] is True
+        assert good_report["crc_checked_bytes"] == len(b"ALVSIA-OBB-TEST")
+        assert good_report["crc_coverage_complete"] is True
+
+        unsafe = root / "unsafe.obb"
+        with zipfile.ZipFile(str(unsafe), "w", zipfile.ZIP_STORED) as archive:
+            archive.writestr("../outside.txt", b"blocked")
+        unsafe_report = module.audit_archive_file(unsafe)
+        assert unsafe_report["ok"] is False
+        assert unsafe_report["unsafe_paths"] == ["../outside.txt"]
+
+        limited_report = module.audit_archive_file(good, max_total_bytes=1)
+        assert limited_report["ok"] is False
+        assert limited_report["crc_coverage_complete"] is False
+        assert limited_report["skipped_crc"]
+
 if __name__ == "__main__":
     tests = (
         test_python_auth_normalizes_java_string_and_lua_avoids_art_oom,
@@ -384,6 +418,7 @@ if __name__ == "__main__":
         test_reference_inspection_helpers_smoke,
         test_pak_integrity_audit_is_registered_and_read_only,
         test_obb_integrity_audit_is_registered_and_read_only,
+        test_reference_inspectors_format_and_archive_fixtures,
     )
     for test in tests:
         test()
