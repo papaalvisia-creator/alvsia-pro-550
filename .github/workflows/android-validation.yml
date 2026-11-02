@@ -270,6 +270,11 @@ jobs:
             --key-pass env:ALVSIA_KEY_PASSWORD \
             --out "$SIGNED" "$RUNNER_TEMP/ALVISIA_PRO_5.5.2-xop_candidate_unsigned.apk"
           "$APKSIGNER" verify --verbose --print-certs "$SIGNED"
+          ZIPALIGN="$(find "$ANDROID_HOME/build-tools" -type f -name zipalign | sort -V | tail -n 1)"
+          AAPT="$(find "$ANDROID_HOME/build-tools" -type f -name aapt | sort -V | tail -n 1)"
+          test -x "$ZIPALIGN" && test -x "$AAPT"
+          "$ZIPALIGN" -c -v 4 "$SIGNED"
+          python3 tools/validate_signed_apk.py "$SIGNED" "$APKSIGNER" "$ZIPALIGN" "$AAPT"
           python3 tools/audit_release_apk.py "$SIGNED"
           cp release_security_audit.txt validation-artifacts/xop_candidate_security_audit.txt
           sha256sum "$SIGNED"
