@@ -700,6 +700,23 @@ def run_tool(module_id, sub_id, input_path, out_root, engine_dir, jars_dir):
                 return "\n".join(lines)
 
         # ── 14  PAK Deep ─────────────────────────────────────────────────
+        if sid == "pak_deep_integrity_audit":
+            if not need_file():
+                return "\\n".join(lines)
+            dest_pakd = out_dir("PAKD")
+            target = dest_pakd / (Path(ip).name + ".integrity_audit.json")
+            try:
+                result = core.run_pak_integrity_audit(ip, target)
+                lines.append("OK structural audit complete" if result.get("ok") else "WARN structural issues detected")
+                lines.append("entries=%s invalid_ranges=%s overlaps=%s" % (
+                    result.get("entry_count"), len(result.get("invalid_ranges", [])),
+                    len(result.get("overlaps", []))))
+                lines.append("OUT -> %s" % result.get("out", target))
+                lines.append("Original PAK was not modified")
+            except Exception as exc:
+                lines.append("X PAK integrity audit failed: %s" % str(exc)[:300])
+            return "\\n".join(lines)
+
         if mid == 14 or sid.startswith("pak_deep_"):
             import alvsia_ultimate as ult
             if not need_file(): return "\n".join(lines)
