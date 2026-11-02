@@ -398,6 +398,12 @@ def decompile_large(path: Path, out_dir: Path, jars_dir: Optional[str] = None) -
             result["out"] = str(dest)
             result.update(container_info)
             return result
+        # Preserve the actual JAR/runtime/parser failure even if the Python
+        # Lua 5.3 parser is attempted next. This distinguishes missing Java,
+        # missing JAR, unsupported bytecode, timeout, and invalid output.
+        result["unluac_jar_error"] = str(msg)[:1000]
+    else:
+        result["unluac_jar_error"] = "jars_dir_unavailable"
 
     # ── Stage 5: pure-Python decompiler53 — works without Java ─────────────
     if fmt.startswith("luac_"):
