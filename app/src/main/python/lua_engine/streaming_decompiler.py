@@ -445,6 +445,7 @@ def decompile_large(path: Path, out_dir: Path, jars_dir: Optional[str] = None) -
             result["out"] = str(dest)
             result["note"] = "LuaJIT disassembly (proto-level ASM, not full source)"
             result.update(container_info)
+            _cleanup_embedded()
             return result
 
     # ── Stage 4: unluac jar (Java) — handles large inputs natively on disk ─
