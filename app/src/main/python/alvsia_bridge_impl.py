@@ -376,6 +376,8 @@ def run_tool(module_id, sub_id, input_path, out_root, engine_dir, jars_dir):
                     lines.append("... streaming decompiler produced no validated source")
                     lines.append("DIAGNOSTIC: input_format=%s error=%s" % (
                         stream_result.get("format", "unknown"), stream_result.get("error", "no detail")))
+                    if stream_result.get("unluac_jar_error"):
+                        lines.append("DIAGNOSTIC: unluac_jar=%s" % str(stream_result.get("unluac_jar_error"))[:220])
                     if stream_result.get("pattern_id_attempted"):
                         lines.append("DIAGNOSTIC: pattern=%s pattern_error=%s" % (
                             stream_result.get("pattern_id_attempted"), stream_result.get("pattern_error", "no detail")))
