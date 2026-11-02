@@ -203,6 +203,7 @@ jobs:
           if 'ndkVersion = "27.0.12077973"' not in check:
               raise SystemExit("ERROR: Xop native NDK pin was not applied")
           print("PASS: Xop native module pinned to NDK 27.0.12077973")
+          PY
           # Disable optional machine-specific UniMP SDK lookup in upstream settings.
           python3 - "$XOP_DIR/settings.gradle.kts" <<'PY'
           import pathlib, sys
