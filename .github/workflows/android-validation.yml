@@ -86,7 +86,7 @@ jobs:
       - name: Install pinned Android NDK and CMake
         run: |
           set -euo pipefail
-          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
           "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "ndk;27.0.12077973" "cmake;3.22.1"
           test -d "$ANDROID_HOME/ndk/27.0.12077973"
           test -x "$ANDROID_HOME/cmake/3.22.1/bin/cmake"
