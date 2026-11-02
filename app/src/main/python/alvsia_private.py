@@ -891,13 +891,13 @@ class LuaOpcodeConverter:
 
     def convert_bytes(self, data: bytes) -> bytes:
         """Decode only the known structured game variant; reject partial parses."""
-        if len(data) < 34 or data[:4] != b'\\x1bLua' or data[4] != 0x53:
+        if len(data) < 34 or data[:4] != b'\x1bLua' or data[4] != 0x53:
             raise ValueError('input is not a Lua 5.3 variant chunk')
-        if data[5] != 0 or data[6:12] != b'\\x19\\x93\\x0d\\x0a\\x1a\\x0a':
+        if data[5] != 0 or data[6:12] != b'\x19\x93\x0d\x0a\x1a\x0a':
             raise ValueError('Lua 5.3 check header does not match supported variant')
         if data[12] != 4 or data[13] != 4 or data[14] != 4 or data[15] != 8 or data[16] != 8:
             raise ValueError('unsupported variant field sizes: ' + data[12:17].hex())
-        if data[17:25] != b'\\x78\\x56\\x00\\x00\\x00\\x00\\x00\\x00':
+        if data[17:25] != b'\x78\x56\x00\x00\x00\x00\x00\x00':
             raise ValueError('Lua integer check value mismatch')
         if _struct.unpack('<d', data[25:33])[0] != 370.5:
             raise ValueError('Lua number check value mismatch')
