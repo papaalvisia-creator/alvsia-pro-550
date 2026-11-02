@@ -126,7 +126,7 @@ class TestStreamInflate(unittest.TestCase):
 
 class TestStandardZlib(unittest.TestCase):
     def test_standard_zlib_levels_are_streamed(self):
-        payload = b"\\x1bLua\\x53\\x00" + b"\\x19\\x93\\x0d\\x0a\\x1a\\x0a" + b"LuaPayload" * 20
+        payload = b"\x1bLua\x53\x00" + b"\x19\x93\x0d\x0a\x1a\x0a" + b"LuaPayload" * 20
         for level in (0, 6, 9):
             wrapped = zlib.compress(payload, level)
             with tempfile.TemporaryDirectory() as td:
