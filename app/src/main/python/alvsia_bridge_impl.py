@@ -429,6 +429,15 @@ def run_tool(module_id, sub_id, input_path, out_root, engine_dir, jars_dir):
                     lines.append("... streaming decompiler produced no validated source")
                     lines.append("DIAGNOSTIC: input_format=%s error=%s" % (
                         stream_result.get("format", "unknown"), stream_result.get("error", "no detail")))
+                    probe = stream_result.get("header_probe") or {}
+                    if probe:
+                        lines.append(
+                            "DIAGNOSTIC: Lua header offset=%s version=%s format=%s luac_data_ok=%s field_sizes=%s replacement_markers=%s"
+                            % (probe.get("magic_offset"), probe.get("version"), probe.get("format_byte"),
+                               probe.get("luac_data_ok"), probe.get("field_sizes"),
+                               probe.get("utf8_replacement_markers"))
+                        )
+                        lines.append("DIAGNOSTIC: first_48_bytes=%s" % probe.get("first_48_hex", ""))
                     if stream_result.get("unluac_jar_error"):
                         lines.append("DIAGNOSTIC: unluac_jar=%s" % str(stream_result.get("unluac_jar_error"))[:220])
                     if stream_result.get("pattern_id_attempted"):
