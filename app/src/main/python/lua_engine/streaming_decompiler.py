@@ -216,23 +216,49 @@ def stream_decompile_lua53(input_path: Path, out_path: Path) -> Tuple[bool, str]
         data = memoryview(Path(input_path).read_bytes())
     except Exception as exc:
         return False, f"read_failed: {exc}"
+    failures = []
+    candidates = [("standard", bytes(data))]
+    # The private source-tool collection contains a BGMI/HePing Lua 5.3
+    # converter (XOR constant-pool transform + opcode remap). Try it only as
+    # a candidate normalizer: never trust its output until the strict Lua
+    # chunk reader AND source validator both accept the result.
     try:
-        chunk = load_chunk(data)
+        from alvsia_private import LuaOpcodeConverter
+        for variant in ("bgmi", "heping"):
+            try:
+                converted = LuaOpcodeConverter(variant=variant).convert_bytes(bytes(data))
+                if converted != bytes(data) and converted.startswith(b"\\x1bLua\\x53"):
+                    candidates.append((variant, converted))
+            except Exception as exc:
+                failures.append(f"{variant}_normalize_failed: {str(exc)[:240]}")
     except Exception as exc:
-        return False, f"load_chunk_failed: {exc}"
-    try:
-        source_text = decompile_bytes(data)
-    except Exception as exc:
-        return False, f"decompile_failed: {exc}"
-    if not source_text or not source_text.strip():
-        return False, "decompiler returned empty source"
-    Path(out_path).parent.mkdir(parents=True, exist_ok=True)
-    Path(out_path).write_text(source_text, encoding="utf-8")
-    ok, msg = validate_lua_source(out_path)
-    if not ok:
-        Path(out_path).unlink(missing_ok=True)
-        return False, f"validation_failed: {msg}"
-    return True, f"decompiled_lua53 size={len(source_text)}"
+        failures.append(f"private_lua_converter_unavailable: {str(exc)[:240]}")
+
+    seen = set()
+    for variant, candidate in candidates:
+        digest = __import__("hashlib").sha256(candidate[:4096]).digest()
+        if digest in seen:
+            continue
+        seen.add(digest)
+        try:
+            chunk = load_chunk(memoryview(candidate))
+            source_text = decompile_bytes(memoryview(candidate))
+            if not source_text or not source_text.strip():
+                raise ValueError("decompiler returned empty source")
+            # Validate in-memory first, then persist only after acceptance.
+            probe = Path(out_path).with_suffix(".candidate.tmp")
+            probe.parent.mkdir(parents=True, exist_ok=True)
+            probe.write_text(source_text, encoding="utf-8")
+            ok, msg = validate_lua_source(probe)
+            if not ok:
+                probe.unlink(missing_ok=True)
+                raise ValueError(f"source validation failed: {msg}")
+            final = Path(out_path)
+            probe.replace(final)
+            return True, f"decompiled_lua53 variant={variant} size={len(source_text)}"
+        except Exception as exc:
+            failures.append(f"{variant}: {str(exc)[:320]}")
+    return False, "all Lua 5.3 normalization/decompile candidates failed: " + " | ".join(failures[-4:])
 
 
 def stream_decompile_luajit(input_path: Path, out_path: Path) -> Tuple[bool, str]:
