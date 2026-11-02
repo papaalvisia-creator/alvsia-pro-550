@@ -2,6 +2,9 @@ import tempfile
 import unittest
 import zlib
 from pathlib import Path
+import sys
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "app/src/main/python"))
 
 from lua_engine.detector import detect_lua
 from lua_engine.engine import _normalized_input
