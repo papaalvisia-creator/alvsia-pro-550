@@ -134,7 +134,7 @@ def stream_inflate_zlib(input_path: Path, out_path: Path) -> Tuple[bool, str]:
                 raise ValueError("truncated zlib stream")
         with out_path.open("rb") as check:
             magic = check.read(4)
-        if not magic.startswith((b"\\x1bLua", b"\\x1bLJ")):
+        if not magic.startswith((b"\x1bLua", b"\x1bLJ")):
             raise ValueError("zlib payload does not begin with Lua/LuaJIT magic")
         return True, f"zlib_stream_inflated bytes_out={total}"
     except Exception as exc:
@@ -271,7 +271,7 @@ def stream_decompile_lua53(input_path: Path, out_path: Path) -> Tuple[bool, str]
         for variant in ("bgmi", "heping"):
             try:
                 converted = LuaOpcodeConverter(variant=variant).convert_bytes(bytes(data))
-                if converted != bytes(data) and converted.startswith(b"\\x1bLua\\x53"):
+                if converted != bytes(data) and converted.startswith(b"\x1bLua\x53"):
                     candidates.append((variant, converted))
             except Exception as exc:
                 failures.append(f"{variant}_normalize_failed: {str(exc)[:240]}")
