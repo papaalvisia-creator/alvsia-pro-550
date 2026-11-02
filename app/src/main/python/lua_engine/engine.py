@@ -80,6 +80,7 @@ def _xor_candidate(data: bytes, key: bytes, offset: int):
 def _normalized_input(path: Path, out: Path):
     """Normalize known wrappers without ever modifying the original input."""
     raw = path.read_bytes()
+    out.mkdir(parents=True, exist_ok=True)
     def _is_zlib_header(d: bytes) -> bool:
         return len(d) >= 2 and d[0] == 0x78 and (d[0] * 256 + d[1]) % 31 == 0
 
