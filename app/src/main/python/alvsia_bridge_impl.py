@@ -401,7 +401,7 @@ def run_tool(module_id, sub_id, input_path, out_root, engine_dir, jars_dir):
                             step.get("step"), step.get("ok"),
                             (" detail=" + str(detail)[:220]) if detail else ""))
                     if r.get("stage_report"):
-                        lines.append("OUT RECOVERY REPORT -> %s" % r.get("stage_report))
+                        lines.append("OUT RECOVERY REPORT -> %s" % r.get("stage_report"))
                     if r.get("final_status"):
                         lines.append("FINAL STATUS: %s" % r.get("final_status"))
                 return "\n".join(lines)
