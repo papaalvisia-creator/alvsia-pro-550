@@ -190,6 +190,8 @@ object SubMenus {
                 "sm4_config.txt: key=<hex32> mode=CBC|ECB iv=<hex16>. → OUT/DEC/*_sm4.bin"),
             SubTool("dec_simple1",     "SIMPLE1 Restore",   "Alvsia SIMPLE1 reversal",
                 "Select SIMPLE1-encrypted .pak or blob → OUT/DEC/*_simple1.bin"),
+            SubTool("dec_selftest", "AES Known-Answer Self-Test", "Verify AES-ECB and AES-CBC against fixed NIST test vectors",
+                "No input required → OUT/DEC/decrypt_selftest.json", needsFile = false),
         )
 
         // ── 14 PAK Deep ───────────────────────────────────────────────────
