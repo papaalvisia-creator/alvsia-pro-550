@@ -38,6 +38,20 @@ class LuaNormalizationRegression(unittest.TestCase):
                 self.assertEqual(container.format, "zlib")
                 self.assertEqual(src.read_bytes(), zlib.compress(payload, level))
 
+    def test_zlib_wrapped_comment_prefixed_lua_is_normalized(self):
+        payload = b"-- exported by tool\\n#!/usr/bin/env lua\\n" + (
+            b"\\x1bLua\\x53\\x00\\x19\\x93\\x0d\\x0a\\x1a\\x0a" + bytes(48)
+        )
+        wrapped = zlib.compress(payload, 6)
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            src = root / "banner_wrapped.lua"
+            src.write_bytes(wrapped)
+            normalized, container = _normalized_input(src, root / "out")
+            self.assertEqual(normalized.read_bytes(), payload.split(b"\\x1bLua", 1)[1].join([]) if False else payload[payload.index(b"\\x1bLua"):])
+            self.assertEqual(src.read_bytes(), wrapped)
+            self.assertEqual(container.format, "zlib")
+
     def test_arbitrary_binary_magic_is_not_stripped(self):
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
