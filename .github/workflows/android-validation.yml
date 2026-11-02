@@ -72,6 +72,7 @@ jobs:
       - name: Run Lua decompiler safety regression tests
         run: |
           python3 -m pip install --disable-pip-version-check pycryptodome
+          python3 tests/test_lua_engine.py
           python3 -m unittest discover -s tests -p 'test_lua*.py'
           python3 -m unittest discover -s tests -p 'test_streaming_decompiler.py'
 
