@@ -109,7 +109,7 @@ def _normalized_input(path: Path, out: Path):
         ci = ContainerInfo(True, "comment-prefix" if ci is None else ci.format,
                            1 if ci is None else ci.chunks, len(payload),
                            (f"comment prefix removed at offset {offset}",))
-    elif not payload.startswith((b"\\x1bLua", b"\\x1bLJ")):
+    elif not payload.startswith((b"\x1bLua", b"\x1bLJ")):
         if ci is None:
             return path, None
         raise ValueError("compressed container recovered, but payload is not Lua/LuaJIT")
