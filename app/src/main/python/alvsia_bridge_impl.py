@@ -363,7 +363,7 @@ def run_tool(module_id, sub_id, input_path, out_root, engine_dir, jars_dir):
                             "NOTE: no validated Lua source was produced. Full recovery needs the matching VM opcode/dispatcher map; "
                             "raising the ART size limit cannot decode a custom VM by itself."
                         )
-                        return "\\n".join(lines)
+                        return "\n".join(lines)
                     if stream_result.get("ok"):
                         lines.append("OK mode=%s lines=%s" % (stream_result.get("mode","?"), stream_result.get("lines",0)))
                         lines.append("OUT -> %s" % stream_result.get("out","(see OUT/LUA/)"))
@@ -371,7 +371,7 @@ def run_tool(module_id, sub_id, input_path, out_root, engine_dir, jars_dir):
                             lines.append("NOTE: %s" % stream_result.get("note"))
                         if stream_result.get("container"):
                             lines.append("OK container=%s" % stream_result.get("container"))
-                        return "\\n".join(lines)
+                        return "\n".join(lines)
                     # Keep actual failure details before the secondary smart fallback.
                     lines.append("... streaming decompiler produced no validated source")
                     lines.append("DIAGNOSTIC: input_format=%s error=%s" % (
