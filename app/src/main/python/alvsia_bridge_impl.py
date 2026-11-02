@@ -641,9 +641,38 @@ def run_tool(module_id, sub_id, input_path, out_root, engine_dir, jars_dir):
         # ── 12  XOR Suite ────────────────────────────────────────────────
         if mid == 12 or sid.startswith("xor_"):
             import alvsia_ultimate as ult
-            if sid != "xor_batch" and not need_file():
+            if sid not in ("xor_batch", "xor_selftest") and not need_file():
                 return "\n".join(lines)
             dest_xor = out_dir("XOR")
+            if sid == "xor_selftest":
+                test_dir = dest_xor / ".selftest_tmp"
+                test_dir.mkdir(parents=True, exist_ok=True)
+                plain = b"ALVSIA XOR engine self-test v1"
+                key_hex = "DEADBEEF"
+                expected_cipher_hex = "9fe1e8bc97ec9eb791ff9e8ab0cad781bb8dcd8ab2cb939bbbdecacfa89c"
+                report = {"test": "repeating-key XOR known vector", "key_hex": key_hex}
+                try:
+                    source = test_dir / "known_plain.bin"
+                    source.write_bytes(plain)
+                    enc = ult.xor_apply_key(str(source), test_dir, key_hex)
+                    enc_path = Path(enc.get("out", "")) if isinstance(enc, dict) else Path("")
+                    cipher_ok = bool(enc.get("ok")) and enc_path.is_file() and enc_path.read_bytes().hex() == expected_cipher_hex
+                    dec = ult.xor_apply_key(str(enc_path), test_dir, key_hex) if cipher_ok else {"ok": False}
+                    dec_path = Path(dec.get("out", "")) if isinstance(dec, dict) else Path("")
+                    roundtrip_ok = bool(dec.get("ok")) and dec_path.is_file() and dec_path.read_bytes() == plain
+                    report.update({"cipher_vector_match": cipher_ok, "roundtrip_match": roundtrip_ok,
+                                   "ok": cipher_ok and roundtrip_ok})
+                except Exception as exc:
+                    report.update({"ok": False, "error": str(exc)[:240]})
+                finally:
+                    shutil.rmtree(test_dir, ignore_errors=True)
+                target = dest_xor / "xor_selftest.json"
+                target.write_text(json.dumps(report, indent=2, sort_keys=True), encoding="utf-8")
+                lines.append("OK XOR known-vector self-test" if report.get("ok") else "X XOR self-test failed")
+                lines.append("cipher_vector=%s roundtrip=%s" % (
+                    report.get("cipher_vector_match"), report.get("roundtrip_match")))
+                lines.append("OUT -> %s" % target)
+                return "\\n".join(lines)
             if sid == "xor_single_byte":
                 r = ult.xor_single_byte_scan(ip, dest_xor)
                 lines.append(str(r))
