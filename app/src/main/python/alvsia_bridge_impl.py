@@ -332,55 +332,55 @@ def run_tool(module_id, sub_id, input_path, out_root, engine_dir, jars_dir):
             dest_lua = out_dir("LUA")
             if sid == "lua_decompile":
                 if not need_file(): return "\n".join(lines)
-                # Use the streaming decompiler for large files (>8 MiB) so we
-                # never OOM on inputs that the in-process ART unluac rejects.
+                # ART unluac may reject a valid source/container or a Lua format
+                # unsupported by its embedded class. Always run the independent
+                # streaming pipeline after ART failure, including inputs <= 1 MiB.
+                # This path is bounded and checks registered VM/container formats.
                 try:
-                    in_size = Path(ip).stat().st_size
-                except Exception:
-                    in_size = 0
-                if in_size > 1 * 1024 * 1024:
-                    try:
-                        from lua_engine.streaming_decompiler import decompile_large
-                        r = decompile_large(Path(ip), dest_lua, jars_dir=jars)
-                        r.setdefault("lines", 0)
-                        r.setdefault("mode", "streaming_fallback")
-                        # BGMI-VM structural recovery writes useful diagnostics but does
-                        # not recover original Lua source. Do not report it as a successful
-                        # decompile just because the analyzer produced recovery artifacts.
-                        if r.get("mode") == "bgmi_vm_partial" or r.get("recovered") is False:
-                            lines.append("PARTIAL mode=%s lines=0" % (r.get("mode", "partial")))
-                            lines.append(
-                                "DIAGNOSTIC: protos=%s main_instructions=%s main_constants=%s parse_errors=%s"
-                                % (r.get("protos_parsed", 0), r.get("main_code_count", 0),
-                                   r.get("main_const_count", 0), r.get("parse_errors", 0))
-                            )
-                            for key, label in (
-                                ("structure_out", "STRUCTURE MAP"),
-                                ("constants_out", "CONSTANT DUMP"),
-                                ("report_out", "RECOVERY REPORT"),
-                            ):
-                                artifact = r.get(key)
-                                if artifact and Path(artifact).is_file():
-                                    lines.append("OUT %s -> %s" % (label, artifact))
-                            if r.get("note"):
-                                lines.append("NOTE: %s" % r.get("note"))
-                            lines.append(
-                                "NOTE: no validated Lua source was produced. Full recovery needs the matching VM opcode/dispatcher map; "
-                                "raising the ART size limit cannot decode a custom VM by itself."
-                            )
-                            return "\n".join(lines)
-                        if r.get("ok"):
-                            lines.append("OK mode=%s lines=%s" % (r.get("mode","?"), r.get("lines",0)))
-                            lines.append("OUT -> %s" % r.get("out","(see OUT/LUA/)"))
-                            if r.get("note"):
-                                lines.append("NOTE: %s" % r.get("note"))
-                            if r.get("container"):
-                                lines.append("OK container=%s" % r.get("container"))
-                            return "\n".join(lines)
-                        # fall through to run_lua_smart as second attempt
-                        lines.append("... streaming decompiler produced no output, trying run_lua_smart")
-                    except Exception as exc:
-                        lines.append("... streaming decompiler exception: %s" % exc)
+                    from lua_engine.streaming_decompiler import decompile_large
+                    stream_result = decompile_large(Path(ip), dest_lua, jars_dir=jars)
+                    stream_result.setdefault("lines", 0)
+                    stream_result.setdefault("mode", "streaming_fallback")
+                    # BGMI-VM structural recovery is useful but is not original source.
+                    if stream_result.get("mode") == "bgmi_vm_partial" or stream_result.get("recovered") is False:
+                        lines.append("PARTIAL mode=%s lines=0" % (stream_result.get("mode", "partial")))
+                        lines.append(
+                            "DIAGNOSTIC: protos=%s main_instructions=%s main_constants=%s parse_errors=%s"
+                            % (stream_result.get("protos_parsed", 0), stream_result.get("main_code_count", 0),
+                               stream_result.get("main_const_count", 0), stream_result.get("parse_errors", 0))
+                        )
+                        for key, label in (
+                            ("structure_out", "STRUCTURE MAP"),
+                            ("constants_out", "CONSTANT DUMP"),
+                            ("report_out", "RECOVERY REPORT"),
+                        ):
+                            artifact = stream_result.get(key)
+                            if artifact and Path(artifact).is_file():
+                                lines.append("OUT %s -> %s" % (label, artifact))
+                        if stream_result.get("note"):
+                            lines.append("NOTE: %s" % stream_result.get("note"))
+                        lines.append(
+                            "NOTE: no validated Lua source was produced. Full recovery needs the matching VM opcode/dispatcher map; "
+                            "raising the ART size limit cannot decode a custom VM by itself."
+                        )
+                        return "\\n".join(lines)
+                    if stream_result.get("ok"):
+                        lines.append("OK mode=%s lines=%s" % (stream_result.get("mode","?"), stream_result.get("lines",0)))
+                        lines.append("OUT -> %s" % stream_result.get("out","(see OUT/LUA/)"))
+                        if stream_result.get("note"):
+                            lines.append("NOTE: %s" % stream_result.get("note"))
+                        if stream_result.get("container"):
+                            lines.append("OK container=%s" % stream_result.get("container"))
+                        return "\\n".join(lines)
+                    # Keep actual failure details before the secondary smart fallback.
+                    lines.append("... streaming decompiler produced no validated source")
+                    lines.append("DIAGNOSTIC: input_format=%s error=%s" % (
+                        stream_result.get("format", "unknown"), stream_result.get("error", "no detail")))
+                    if stream_result.get("pattern_id_attempted"):
+                        lines.append("DIAGNOSTIC: pattern=%s pattern_error=%s" % (
+                            stream_result.get("pattern_id_attempted"), stream_result.get("pattern_error", "no detail")))
+                except Exception as exc:
+                    lines.append("... streaming decompiler exception: %s" % exc)
                 r = feat.run_lua_smart(ip, dest_lua, jars_dir=jars)
                 if r.get("ok"):
                     lines.append("OK mode=%s lines=%s" % (r.get("mode","?"), r.get("lines",0)))
@@ -395,8 +395,15 @@ def run_tool(module_id, sub_id, input_path, out_root, engine_dir, jars_dir):
                         lines.append("OK decompile complete")
                 else:
                     lines.append("X OUT -> operation failed")
-                    for s in (r.get("steps") or [])[-3:]:
-                        lines.append("  step=%s ok=%s" % (s.get("step"), s.get("ok")))
+                    for step in (r.get("steps") or [])[-4:]:
+                        detail = step.get("error") or step.get("note") or step.get("format") or ""
+                        lines.append("  step=%s ok=%s%s" % (
+                            step.get("step"), step.get("ok"),
+                            (" detail=" + str(detail)[:220]) if detail else ""))
+                    if r.get("stage_report"):
+                        lines.append("OUT RECOVERY REPORT -> %s" % r.get("stage_report))
+                    if r.get("final_status"):
+                        lines.append("FINAL STATUS: %s" % r.get("final_status"))
                 return "\n".join(lines)
             if sid == "lua_analyze":
                 r = feat.run_lua_analyze(ip, dest_lua)
