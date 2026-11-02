@@ -332,8 +332,32 @@ def run_lua_smart(input_path, out_dir, jars_dir=None):
                              "version": info.version, "wrapped": info.wrapped,
                              "container": info.container, "chunks": info.container_chunks})
 
-    # ── Step 1: unwrap container if needed ──────────────────────────────────
+    # Normalize a comment-prefixed Lua/LuaJIT payload for every downstream
+    # engine. The original input remains untouched and is still used for
+    # independent strings/constants recovery.
     work_input = input_path
+    prefix_note = next((n for n in info.notes if n.startswith("comment_prefix_offset=")), None)
+    if prefix_note:
+        try:
+            offset = int(prefix_note.split("=", 1)[1])
+            if offset <= 0 or offset >= len(data):
+                raise ValueError("invalid embedded Lua payload offset")
+            normalized_path = out_dir / (input_path.stem + "_embedded_payload.luac")
+            normalized_path.write_bytes(data[offset:])
+            work_input = normalized_path
+            report["steps"].append({
+                "step": "extract_comment_prefixed_payload",
+                "ok": True,
+                "offset": offset,
+                "payload_size": normalized_path.stat().st_size,
+                "out": str(normalized_path),
+            })
+        except Exception as exc:
+            report["steps"].append({"step": "extract_comment_prefixed_payload",
+                                    "ok": False, "error": str(exc)})
+            work_input = input_path
+
+    # ── Step 1: unwrap container if needed ──────────────────────────────────
     if info.wrapped:
         try:
             payload, ci = unwrap_lua_container(data)
