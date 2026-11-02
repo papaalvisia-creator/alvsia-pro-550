@@ -131,6 +131,61 @@ class PrivateToolEngineTests(unittest.TestCase):
         self.assertEqual([item.value for item in info.numbers], [12.5]
 )
 
+    def test_bgmi_and_heping_structured_lua_conversion(self):
+        import struct
+        from lua_engine.decompiler53 import load_chunk
+        keys = {
+            "bgmi": private.ALVSIA_BGMI_XOR_KEY,
+            "heping": private.ALVSIA_HEPING_XOR_KEY,
+        }
+        header = (
+            b"\x1bLua\x53\x00\x19\x93\r\n\x1a\n"
+            + bytes((4, 4, 4, 8, 8))
+            + struct.pack("<q", 0x5678)
+            + struct.pack("<d", 370.5)
+        )
+        self.assertEqual(len(header), 33)
+        for variant, key in keys.items():
+            with self.subTest(variant=variant):
+                def encrypted_string(value):
+                    raw = value.encode("utf-8")
+                    enc = bytes(byte ^ key[i % len(key)] for i, byte in enumerate(raw))
+                    return bytes((len(enc) + 1,)) + enc
+                # Minimal game-variant Lua 5.3 Proto: one RETURN instruction, one string constant.
+                proto = bytearray()
+                proto.extend(encrypted_string("@fixture"))
+                proto.extend(struct.pack("<ii", 0, 0))
+                proto.extend(bytes((0, 0, 2)))
+                proto.extend(struct.pack("<I", 1))
+                proto.extend(struct.pack("<I", 38))
+                proto.extend(struct.pack("<I", 1))
+                proto.append(4)
+                proto.extend(encrypted_string("hello"))
+                proto.extend(struct.pack("<I", 0))  # upvalues
+                proto.extend(struct.pack("<I", 0))  # nested protos
+                proto.extend(struct.pack("<I", 0))  # compressed lineinfo
+                proto.extend(struct.pack("<I", 0))  # abslineinfo
+                proto.extend(struct.pack("<I", 0))  # local variables
+                proto.extend(struct.pack("<I", 0))  # upvalue names
+                source_variant = header + b"\x00" + bytes(proto)
+                converted = private.LuaOpcodeConverter(variant=variant).convert_bytes(source_variant)
+                parsed = load_chunk(converted)
+                self.assertEqual(parsed.source, "@fixture")
+                self.assertEqual(parsed.constants, ["hello"])
+                self.assertEqual(parsed.code[0] & 0x3F, 38)
+
+    def test_lua_variant_converter_rejects_corrupt_counts(self):
+        import struct
+        header = (
+            b"\x1bLua\x53\x00\x19\x93\r\n\x1a\n"
+            + bytes((4, 4, 4, 8, 8))
+            + struct.pack("<q", 0x5678)
+            + struct.pack("<d", 370.5)
+        )
+        raw = header + b"\x00" + bytes((1,)) + b"@" + bytes(8) + bytes((0, 0, 2)) + struct.pack("<I", 0x58E44AA5)
+        with self.assertRaisesRegex(ValueError, "instruction count"):
+            private.LuaOpcodeConverter("bgmi").convert_bytes(raw)
+
     def test_lua_parser_rejects_non_lua_magic(self):
         with self.assertRaisesRegex(ValueError, "missing"):
             private.LuaBytecodeParser(b"not a lua file").parse()
