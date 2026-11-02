@@ -172,6 +172,8 @@ object SubMenus {
                 "Select .luac with XOR-wrapped LuaS → OUT/XOR/*_stripped.lua"),
             SubTool("xor_batch",       "Batch XOR",         "Apply same key to all files in WORK/BATCH/",
                 "Drop files in WORK/BATCH/, enter key in CONFIG → OUT/XOR/batch/", needsFile = false),
+            SubTool("xor_selftest", "XOR Known-Vector Self-Test", "Verify repeating-key XOR against a fixed known ciphertext and round-trip fixture",
+                "No input required → OUT/XOR/xor_selftest.json", needsFile = false),
         )
 
         // ── 13 Decrypt Engine ─────────────────────────────────────────────
