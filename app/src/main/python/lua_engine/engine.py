@@ -88,27 +88,34 @@ def _normalized_input(path: Path, out: Path):
     ci = None
     if _is_zlib_header(raw):
         payload, ci = unwrap_lua_container(raw)
-        if not payload.startswith((b"\x1bLua", b"\x1bLJ")):
-            raise ValueError("compressed container recovered, but payload is not Lua/LuaJIT")
     else:
-        info = detect_lua(path)
-        offset = None
-        for note in info.notes:
-            if note.startswith("comment_prefix_offset="):
-                try:
-                    offset = int(note.split("=", 1)[1])
-                except ValueError:
-                    offset = None
-                break
-        if offset is None:
-            return path, None
-        payload = raw[offset:]
-        if not payload.startswith((b"\x1bLua", b"\x1bLJ")):
-            raise ValueError("comment-prefixed payload does not contain a Lua signature")
-        from .container import ContainerInfo
-        ci = ContainerInfo(True, "comment-prefix", 1, len(payload),
-                           (f"comment prefix removed at offset {offset}",))
+        payload, ci = raw, None
 
+    # Only remove a prefix that detector.py has classified as textual
+    # comment/shebang lines; arbitrary binary prefixes remain untouched.
+    from .detector import detect_bytes
+    inner_info = detect_bytes(payload)
+    offset = None
+    for note in inner_info.notes:
+        if note.startswith("comment_prefix_offset="):
+            try:
+                offset = int(note.split("=", 1)[1])
+            except ValueError:
+                offset = None
+            break
+    if offset is not None:
+        payload = payload[offset:]
+        from .container import ContainerInfo
+        ci = ContainerInfo(True, "comment-prefix" if ci is None else ci.format,
+                           1 if ci is None else ci.chunks, len(payload),
+                           (f"comment prefix removed at offset {offset}",))
+    elif not payload.startswith((b"\\x1bLua", b"\\x1bLJ")):
+        if ci is None:
+            return path, None
+        raise ValueError("compressed container recovered, but payload is not Lua/LuaJIT")
+
+    if ci is None:
+        return path, None
     norm = out / (path.stem + "_normalized.luac")
     norm.write_bytes(payload)
     return norm, ci
@@ -180,63 +187,34 @@ def decompile_lua(path, out_dir, jars_dir=None, timeout=120):
         return {"ok":False,"error":str(exc),"format":"container-unknown"}
     if info.kind=="source":
         dest=out/(p.stem+"_decompiled.lua")
-        shutil.copy2(normalized,dest)
-        ok,msg=validate_lua_source(dest)
-        return {"ok":ok,"mode":"source-pass-through","out":str(dest),
-                "format":info.format,"validation":msg,
-                **({"unwrapped":str(normalized),"container":container.format,
-                    "container_chunks":container.chunks} if container else {})}
-    if info.kind!="bytecode":
-        return {"ok":False,"error":"input is not recognized Lua bytecode/source",
-                "format":info.format,
-                **({"unwrapped":str(normalized),"container":container.format} if container else {})}
-    if info.format=="luajit":
-        # Attempt LuaJIT disassembly (readable ASM — not full source, but honest output)
+
+    def _try_streaming_fallback(reason):
+        if info.format != "luac" or info.version != "Lua 5.3":
+            return None
         try:
-            from lua_engine.luajit_decompiler import disassemble_luajit, detect_luajit
-            if detect_luajit(normalized.read_bytes()):
-                lj_out = out / (p.stem + "_luajit_asm.lua")
-                lj_res = disassemble_luajit(normalized, lj_out)
-                if lj_res.get("ok"):
-                    return {"ok": True, "mode": "luajit_disasm",
-                            "out": str(lj_out),
-                            "note": "LuaJIT disassembly (proto-level ASM, not full source)",
-                            "format": info.format,
-                            **lj_res,
-                            **({"unwrapped": str(normalized), "container": container.format} if container else {})}
-        except Exception:
-            pass
-        return {"ok": False, "error": "LuaJIT: disassembler failed; no full decompiler available",
-                "format": info.format,
-                **({"unwrapped": str(normalized), "container": container.format} if container else {})}
-    jars=Path(jars_dir) if jars_dir else None
-    jar=None
-    if jars and jars.is_dir():
-        for name in ("unluac_2025_12_23.jar","unluac_pro.jar","unluac_patched.jar","unluac.jar"):
-            q=jars/name
-            if q.is_file() and q.stat().st_size>1000:
-                jar=q; break
-    jar_error = None
-    if jar is None:
-        jar_error = "unluac jar not found"
-    java = _find_java()
-    if not java:
-        jar_error = "Java runtime unavailable in this Python environment; trying non-Java backends"
-    dest=out/(p.stem+"_decompiled.lua")
-    if jar is None or not java:
-        if info.format == "luac" and info.version == "Lua 5.3":
-            try:
-                from .streaming_decompiler import stream_decompile_lua53
-                ok, msg = stream_decompile_lua53(normalized, dest)
-                if ok:
+            from .streaming_decompiler import stream_decompile_lua53
+            ok, msg = stream_decompile_lua53(normalized, dest)
+            if ok:
+                valid, validation = validate_lua_source(dest)
+                if valid:
                     return {"ok": True, "mode": "decompiler53", "out": str(dest),
-                            "format": info.format, "validation": msg,
-                            "unluac_jar_error": jar_error,
+                            "format": info.format, "validation": validation,
+                            "unluac_fallback_reason": reason,
                             **({"unwrapped": str(normalized), "container": container.format}
                                if container else {})}
-                jar_error = (jar_error or "") + "; decompiler53: " + str(msg)[:700]
-            except Exception as exc:
-                jar_error = (jar_error or "") + "; decompiler53 exception: " + str(exc)[:500]
+                dest.unlink(missing_ok=True)
+                return {"ok": False, "error": "streaming fallback output failed validation: " + validation}
+            return {"ok": False, "error": "streaming fallback: " + str(msg)[:700]}
+        except Exception as exc:
+            dest.unlink(missing_ok=True)
+            return {"ok": False, "error": "streaming fallback exception: " + str(exc)[:500]}
+
+    if jar is None or not java:
+        fallback = _try_streaming_fallback(jar_error or "Unluac unavailable")
+        if fallback and fallback.get("ok"):
+            return fallback
+        if fallback:
+            jar_error = (jar_error or "") + "; " + fallback.get("error", "")
         return {"ok": False, "error": jar_error or "no compatible decompiler backend",
                 "format": info.format, "unluac_jar_error": jar_error,
                 **({"unwrapped": str(normalized)} if container else {})}
@@ -247,12 +225,19 @@ def decompile_lua(path, out_dir, jars_dir=None, timeout=120):
             proc=subprocess.run([java,"-jar",str(safe_jar),str(safe_in)],
                                 capture_output=True,text=True,errors="replace",timeout=timeout)
         except subprocess.TimeoutExpired:
-            return {"ok":False,"error":"decompiler timeout","format":info.format,
-                    **({"unwrapped":str(normalized)} if container else {})}
+            fallback = _try_streaming_fallback("Unluac timed out")
+            if fallback and fallback.get("ok"):
+                return fallback
+            return {"ok":False,"error":"decompiler timeout" + ("; " + fallback.get("error", "") if fallback else ""),
+                    "format":info.format, **({"unwrapped":str(normalized)} if container else {})}
     text=proc.stdout or ""
     stderr=(proc.stderr or "").strip()
     if proc.returncode != 0 or not text.strip():
-        return {"ok":False,"error":stderr[:1000] or "decompiler returned no source",
+        reason = stderr[:700] or "decompiler returned no source"
+        fallback = _try_streaming_fallback("Unluac failed: " + reason)
+        if fallback and fallback.get("ok"):
+            return fallback
+        return {"ok":False,"error":reason + ("; " + fallback.get("error", "") if fallback else ""),
                 "returncode":proc.returncode,"format":info.format,
                 **({"unwrapped":str(normalized),"container":container.format,
                     "container_chunks":container.chunks} if container else {})}
@@ -260,7 +245,11 @@ def decompile_lua(path, out_dir, jars_dir=None, timeout=120):
     valid,msg=validate_lua_source(dest)
     if not valid:
         dest.unlink(missing_ok=True)
-        return {"ok":False,"error":"decompiler output failed Lua structural validation: "+msg,
+        fallback = _try_streaming_fallback("Unluac output failed validation: " + msg)
+        if fallback and fallback.get("ok"):
+            return fallback
+        return {"ok":False,"error":"decompiler output failed Lua structural validation: "+msg +
+                ("; " + fallback.get("error", "") if fallback else ""),
                 "returncode":proc.returncode,"format":info.format,
                 **({"unwrapped":str(normalized)} if container else {})}
     return {"ok":True,"out":str(dest),"returncode":proc.returncode,
