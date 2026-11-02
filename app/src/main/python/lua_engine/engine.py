@@ -215,14 +215,30 @@ def decompile_lua(path, out_dir, jars_dir=None, timeout=120):
             q=jars/name
             if q.is_file() and q.stat().st_size>1000:
                 jar=q; break
+    jar_error = None
     if jar is None:
-        return {"ok":False,"error":"unluac jar not found","format":info.format,
-                **({"unwrapped":str(normalized)} if container else {})}
-    java=_find_java()
+        jar_error = "unluac jar not found"
+    java = _find_java()
     if not java:
-        return {"ok":False,"error":"Java runtime unavailable in this Python environment; Android uses UnluacRunner",
-                "format":info.format, **({"unwrapped":str(normalized)} if container else {})}
+        jar_error = "Java runtime unavailable in this Python environment; trying non-Java backends"
     dest=out/(p.stem+"_decompiled.lua")
+    if jar is None or not java:
+        if info.format == "luac" and info.version == "Lua 5.3":
+            try:
+                from .streaming_decompiler import stream_decompile_lua53
+                ok, msg = stream_decompile_lua53(normalized, dest)
+                if ok:
+                    return {"ok": True, "mode": "decompiler53", "out": str(dest),
+                            "format": info.format, "validation": msg,
+                            "unluac_jar_error": jar_error,
+                            **({"unwrapped": str(normalized), "container": container.format}
+                               if container else {})}
+                jar_error = (jar_error or "") + "; decompiler53: " + str(msg)[:700]
+            except Exception as exc:
+                jar_error = (jar_error or "") + "; decompiler53 exception: " + str(exc)[:500]
+        return {"ok": False, "error": jar_error or "no compatible decompiler backend",
+                "format": info.format, "unluac_jar_error": jar_error,
+                **({"unwrapped": str(normalized)} if container else {})}
     with tempfile.TemporaryDirectory(prefix="alv_lua_") as td:
         safe_in=Path(td)/"input.luac"; safe_jar=Path(td)/"unluac.jar"
         shutil.copy2(normalized,safe_in); shutil.copy2(jar,safe_jar)
