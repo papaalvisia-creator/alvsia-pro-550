@@ -328,7 +328,7 @@ def run_tool(module_id, sub_id, input_path, out_root, engine_dir, jars_dir):
         # ── Reference-derived read-only inspectors (routed by owning module) ──
         if sid in ("lua_format_probe", "anti_re_source_triage", "so_dump_audit"):
             if not need_file():
-                return "\\n".join(lines)
+                return "\n".join(lines)
             from alvsia_reference_tools import (
                 probe_lua_file, scan_source_file, inspect_dump_file
             )
@@ -336,7 +336,7 @@ def run_tool(module_id, sub_id, input_path, out_root, engine_dir, jars_dir):
             source_path = Path(ip)
             if not source_path.is_file():
                 lines.append("X This inspector accepts one file at a time")
-                return "\\n".join(lines)
+                return "\n".join(lines)
             if sid == "lua_format_probe":
                 report = probe_lua_file(source_path)
                 target = out_dir("LUA") / (source_path.name + ".format_probe.json")
@@ -356,7 +356,7 @@ def run_tool(module_id, sub_id, input_path, out_root, engine_dir, jars_dir):
             else:
                 lines.append("blocks=%s strings=%s (offline file only)" % (
                     len(report.get("blocks", [])), len(report.get("strings", []))))
-            return "\\n".join(lines)
+            return "\n".join(lines)
 
         # ── 5  LUA Tools ─────────────────────────────────────────────────
         if mid == 5 or sid.startswith("lua_"):
@@ -982,7 +982,7 @@ def run_tool(module_id, sub_id, input_path, out_root, engine_dir, jars_dir):
             # process memory is never acquired by these subtools.
             if sid in ("priv_lua_probe", "priv_source_triage", "priv_dump_audit"):
                 if not need_file():
-                    return "\\n".join(lines)
+                    return "\n".join(lines)
                 from alvsia_reference_tools import (
                     probe_lua_file, scan_source_file, inspect_dump_file
                 )
@@ -990,7 +990,7 @@ def run_tool(module_id, sub_id, input_path, out_root, engine_dir, jars_dir):
                 source_path = Path(ip)
                 if not source_path.is_file():
                     lines.append("X This inspector accepts one file at a time")
-                    return "\\n".join(lines)
+                    return "\n".join(lines)
                 if sid == "priv_lua_probe":
                     report = probe_lua_file(source_path)
                     out_file = out_dir("REFERENCE") / (source_path.name + ".lua_probe.json")
@@ -1010,7 +1010,7 @@ def run_tool(module_id, sub_id, input_path, out_root, engine_dir, jars_dir):
                 else:
                     lines.append("blocks=%s strings=%s (offline file only)" % (
                         len(report.get("blocks", [])), len(report.get("strings", []))))
-                return "\\n".join(lines)
+                return "\n".join(lines)
 
             from alvsia_private import (
                 ZUCCipher, AESKeyScanner, XORKeyRecovery, LuaBytecodeParser,
