@@ -39,11 +39,38 @@ STREAM_CHUNK_SIZE = 4 * 1024 * 1024  # 4 MiB
 MAX_INFLATED_BYTES = 4 * 1024 * 1024 * 1024  # 4 GiB hard cap
 
 
+def _comment_prefix_lua_magic(head: bytes) -> Optional[Tuple[int, str]]:
+    """Find a Lua chunk after a textual comment/shebang-only prefix."""
+    candidates = []
+    for marker, label in ((b"\x1bLua", "luac"), (b"\x1bLJ", "luajit")):
+        offset = head.find(marker, 1)
+        if offset > 0:
+            candidates.append((offset, label))
+    for offset, label in sorted(candidates):
+        try:
+            prefix = head[:offset].decode("utf-8")
+        except UnicodeDecodeError:
+            continue
+        lines = prefix.splitlines()
+        if not lines or not all(
+            not line.strip() or line.lstrip().startswith(("--", "#!"))
+            for line in lines
+        ):
+            continue
+        if any(ord(ch) < 32 and ch not in "\t\r\n" for ch in prefix):
+            continue
+        if label == "luac":
+            version = head[offset + 4] if len(head) > offset + 4 else 0
+            return offset, f"embedded_luac_{version:02x}"
+        return offset, "embedded_luajit"
+    return None
+
+
 def preflight_magic(path: Path) -> str:
     """Classify common Lua formats using a bounded header read."""
     try:
         with path.open("rb") as f:
-            head = f.read(8192)
+            head = f.read(65536)
         if len(head) < 4:
             return "too_small"
         if head.startswith(b"\x1bLua"):
@@ -55,8 +82,10 @@ def preflight_magic(path: Path) -> str:
             return "chunked_deflate"
         if head[0] == 0x1F and head[1] == 0x8B:
             return "gzip"
-        # Large plain-text Lua sources must be validated/copied, not sent to
-        # bytecode decompilers that cannot parse source text.
+        # Some exporters prepend a Lua comment or metadata banner to bytecode.
+        embedded = _comment_prefix_lua_magic(head)
+        if embedded:
+            return embedded[1]
         text = head.decode("utf-8", "ignore")
         stripped = text.lstrip("\ufeff \t\r\n")
         if re.search(r"^(?:#!.*\n\s*)?(?:local|return|function|if|for|while|repeat|do)\b", stripped):
@@ -320,9 +349,39 @@ def decompile_large(path: Path, out_dir: Path, jars_dir: Optional[str] = None) -
     except Exception as exc:
         result["pattern_registry_exception"] = str(exc)[:200]
 
-    # ── Stage 2: streaming container unwrap ────────────────────────────────
+    # ── Stage 2: unwrap comment-prefixed bytecode without touching input ─
     work_file = p
     container_info: Dict[str, Any] = {}
+    embedded_temp: Optional[Path] = None
+    if fmt.startswith("embedded_luac_") or fmt == "embedded_luajit":
+        try:
+            with p.open("rb") as f:
+                head = f.read(65536)
+            located = _comment_prefix_lua_magic(head)
+            if not located:
+                result["error"] = "embedded Lua marker disappeared during preflight"
+                return result
+            offset, detected_fmt = located
+            fd, temp_name = tempfile.mkstemp(prefix="alvsia_lua_", suffix=".luac", dir=str(out))
+            os.close(fd)
+            embedded_temp = Path(temp_name)
+            with p.open("rb") as src, embedded_temp.open("wb") as dst:
+                src.seek(offset)
+                shutil.copyfileobj(src, dst, length=STREAM_CHUNK_SIZE)
+            work_file = embedded_temp
+            fmt = "luajit" if detected_fmt == "embedded_luajit" else "luac_" + detected_fmt.rsplit("_", 1)[1]
+            result["format"] = fmt
+            container_info = {"wrapper": "comment_prefix", "payload_offset": offset,
+                              "payload_size": embedded_temp.stat().st_size}
+        except Exception as exc:
+            if embedded_temp:
+                embedded_temp.unlink(missing_ok=True)
+            result["error"] = f"embedded_payload_extract_failed: {exc}"
+            return result
+
+    def _cleanup_embedded() -> None:
+        if embedded_temp is not None:
+            embedded_temp.unlink(missing_ok=True)
 
     if fmt == "chunked_deflate":
         unwrapped = out / (p.stem + "_unwrapped.luac")
@@ -397,6 +456,7 @@ def decompile_large(path: Path, out_dir: Path, jars_dir: Optional[str] = None) -
             result["mode"] = "unluac_jar"
             result["out"] = str(dest)
             result.update(container_info)
+            _cleanup_embedded()
             return result
         # Preserve the actual JAR/runtime/parser failure even if the Python
         # Lua 5.3 parser is attempted next. This distinguishes missing Java,
@@ -414,6 +474,7 @@ def decompile_large(path: Path, out_dir: Path, jars_dir: Optional[str] = None) -
             result["mode"] = "decompiler53"
             result["out"] = str(dest)
             result.update(container_info)
+            _cleanup_embedded()
             return result
         result["error"] = msg
     else:
@@ -422,4 +483,5 @@ def decompile_large(path: Path, out_dir: Path, jars_dir: Optional[str] = None) -
     if not result.get("ok"):
         result.update(container_info)
         result["note"] = "no validated Lua source produced; input preserved under IN/"
+    _cleanup_embedded()
     return result
