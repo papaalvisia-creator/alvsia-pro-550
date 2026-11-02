@@ -937,6 +937,7 @@ def run_tool(module_id, sub_id, input_path, out_root, engine_dir, jars_dir):
             "priv_lua_parse",      "priv_lua_convert",   "priv_lua_heping",
             "priv_compress_fit",   "priv_apk_audit",     "priv_str_recover",
             "priv_entropy_map",    "priv_pak_manifest",  "priv_apk_manifest",
+            "priv_lua_probe",      "priv_source_triage", "priv_dump_audit",
         ):
             # Gate: sealed runtime must be active
             import os as _ose
@@ -944,6 +945,40 @@ def run_tool(module_id, sub_id, input_path, out_root, engine_dir, jars_dir):
                 lines.append("X ALVSIA PRIVATE TOOL: sealed runtime not active")
                 lines.append("X Authenticate via ALVSIA panel first")
                 return "\n".join(lines)
+            # New read-only reference inspectors. Inputs are never executed and
+            # process memory is never acquired by these subtools.
+            if sid in ("priv_lua_probe", "priv_source_triage", "priv_dump_audit"):
+                if not need_file():
+                    return "\\n".join(lines)
+                from alvsia_reference_tools import (
+                    probe_lua_file, scan_source_file, inspect_dump_file
+                )
+                import json as _json
+                source_path = Path(ip)
+                if not source_path.is_file():
+                    lines.append("X This inspector accepts one file at a time")
+                    return "\\n".join(lines)
+                if sid == "priv_lua_probe":
+                    report = probe_lua_file(source_path)
+                    out_file = out_dir("REFERENCE") / (source_path.name + ".lua_probe.json")
+                elif sid == "priv_source_triage":
+                    report = scan_source_file(source_path)
+                    out_file = out_dir("REFERENCE") / (source_path.name + ".source_triage.json")
+                else:
+                    report = inspect_dump_file(source_path)
+                    out_file = out_dir("REFERENCE") / (source_path.name + ".dump_audit.json")
+                out_file.write_text(_json.dumps(report, indent=2, sort_keys=True), encoding="utf-8")
+                lines.append("OK read-only inspection complete")
+                lines.append("OUT -> %s" % out_file)
+                if sid == "priv_lua_probe":
+                    lines.append("format=%s confidence=%s" % (report.get("format"), report.get("confidence")))
+                elif sid == "priv_source_triage":
+                    lines.append("indicators=%s (static only; no execution)" % len(report.get("findings", [])))
+                else:
+                    lines.append("blocks=%s strings=%s (offline file only)" % (
+                        len(report.get("blocks", [])), len(report.get("strings", []))))
+                return "\\n".join(lines)
+
             from alvsia_private import (
                 ZUCCipher, AESKeyScanner, XORKeyRecovery, LuaBytecodeParser,
                 LuaOpcodeConverter, CompressionBestFit, APKAuditor,
