@@ -2644,6 +2644,124 @@ def delete_all_from_pak(pak_path: Path, output_pak: Path) -> dict:
 # ALVSIA PUBLIC API — non-interactive (APK / CLI)
 # =============================================================================
 
+def run_pak_integrity_audit(pak_path, out_json=None):
+    """Read-only structural audit and per-entry payload fingerprints for Tencent PAK."""
+    _alvsia_require_operation(('pak.diagnostics', 'pak.unpack'))
+    pak_path = Path(pak_path)
+    pak = TencentPakFile(pak_path)
+    file_size = len(pak._file_content)
+    index_start = int(pak._pak_info.index_offset)
+    index_end = index_start + int(pak._pak_info.index_size)
+    report = {
+        'ok': True,
+        'file': pak_path.name,
+        'file_size': file_size,
+        'file_sha256': hashlib.sha256(pak._file_content).hexdigest(),
+        'pak_version': int(pak._pak_info.version),
+        'index_offset': index_start,
+        'index_size': int(pak._pak_info.index_size),
+        'index_end': index_end,
+        'entry_count': len(pak._files),
+        'referenced_path_count': 0,
+        'entries': [],
+        'invalid_ranges': [],
+        'overlaps': [],
+        'duplicate_content_hashes': [],
+        'unreferenced_entries': [],
+        'parse_stats': getattr(pak, '_index_parse_stats', {}),
+    }
+    if index_start < 0 or index_end < index_start or index_end > file_size:
+        report['invalid_ranges'].append({
+            'kind': 'index', 'start': index_start, 'end': index_end,
+            'reason': 'index range outside file'
+        })
+    referenced = {}
+    for directory, files in (getattr(pak, '_index', {}) or {}).items():
+        for name, entry in files.items():
+            referenced[id(entry)] = str(directory / name).replace('\\\\', '/')
+    report['referenced_path_count'] = len(referenced)
+    ranges = []
+    hashes = {}
+    for idx, entry in enumerate(pak._files):
+        internal = referenced.get(id(entry))
+        if internal is None:
+            report['unreferenced_entries'].append(idx)
+            internal = ''
+        entry_ranges = []
+        if entry.compression_method == CM_NONE:
+            stored_len = PakCrypto.align_encrypted_content_size(
+                int(entry.size), int(entry.encryption_method)
+            ) if entry.encrypted else int(entry.size)
+            entry_ranges.append((int(entry.offset), int(entry.offset) + stored_len))
+        else:
+            for block_no, block in enumerate(entry.compressed_blocks):
+                entry_ranges.append((int(block.start), int(block.end)))
+        valid_ranges = []
+        for range_no, (start, end) in enumerate(entry_ranges):
+            if start < 0 or end < start or end > index_start:
+                report['invalid_ranges'].append({
+                    'entry': idx, 'path': internal, 'block': range_no,
+                    'start': start, 'end': end,
+                    'reason': 'payload range outside data region'
+                })
+            else:
+                valid_ranges.append((start, end))
+                if end > start:
+                    ranges.append((start, end, idx, internal, range_no))
+        payload_digest = hashlib.sha256()
+        for start, end in valid_ranges:
+            payload_digest.update(pak._file_content[start:end])
+        slot_meta = '|'.join((
+            str(idx), internal, str(int(entry.offset)),
+            str(int(entry.size)), str(int(entry.uncompressed_size)),
+            str(int(entry.compression_method)), str(int(entry.encryption_method)),
+            str(bool(entry.encrypted)), payload_digest.hexdigest()
+        )).encode('utf-8')
+        fingerprint = hashlib.sha256(slot_meta).hexdigest()
+        content_hash = bytes(entry.content_hash).hex()
+        if content_hash:
+            hashes.setdefault(content_hash, []).append(idx)
+        report['entries'].append({
+            'index': idx, 'path': internal,
+            'offset': int(entry.offset), 'stored_size': int(entry.size),
+            'uncompressed_size': int(entry.uncompressed_size),
+            'compression_method': int(entry.compression_method),
+            'encryption_method': int(entry.encryption_method),
+            'encrypted': bool(entry.encrypted),
+            'block_count': len(entry.compressed_blocks),
+            'content_hash': content_hash,
+            'payload_sha256': payload_digest.hexdigest(),
+            'slot_fingerprint_sha256': fingerprint,
+            'ranges': [{'start': a, 'end': b} for a, b in valid_ranges],
+        })
+    for content_hash, indices in hashes.items():
+        if len(indices) > 1:
+            report['duplicate_content_hashes'].append({
+                'content_hash': content_hash, 'entries': indices
+            })
+    ranges.sort(key=lambda item: (item[0], item[1]))
+    for pos, current in enumerate(ranges):
+        start, end, idx, path, block_no = current
+        for other in ranges[pos + 1:]:
+            if other[0] >= end:
+                break
+            if other[2] != idx:
+                report['overlaps'].append({
+                    'entry_a': idx, 'path_a': path, 'block_a': block_no,
+                    'entry_b': other[2], 'path_b': other[3], 'block_b': other[4],
+                    'overlap_start': max(start, other[0]),
+                    'overlap_end': min(end, other[1]),
+                    'note': 'Shared/overlapping payload ranges require format-aware review'
+                })
+    report['ok'] = not report['invalid_ranges'] and not report['overlaps']
+    if out_json:
+        target = Path(out_json)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(json.dumps(report, indent=2, sort_keys=True), encoding='utf-8')
+        report['out'] = str(target)
+    return report
+
+
 def run_pak_unpack(pak_path, out_dir, authorization_operation='pak.unpack'):
     """Full unpack PAK/OBB-as-pak to out_dir. Returns dict status."""
     _alvsia_require_operation((authorization_operation, 'pak.unpack'))
