@@ -22,6 +22,7 @@ sys.path.insert(0, str(PY))
 from lua_engine.streaming_decompiler import (
     preflight_magic,
     stream_inflate_deflate_container,
+    stream_inflate_zlib,
     decompile_large,
 )
 
@@ -120,6 +121,22 @@ class TestStreamInflate(unittest.TestCase):
             self.assertIn("not Lua/LuaJIT", msg)
             self.assertFalse(out.exists())
 
+
+
+
+class TestStandardZlib(unittest.TestCase):
+    def test_standard_zlib_levels_are_streamed(self):
+        payload = b"\\x1bLua\\x53\\x00" + b"\\x19\\x93\\x0d\\x0a\\x1a\\x0a" + b"LuaPayload" * 20
+        for level in (0, 6, 9):
+            wrapped = zlib.compress(payload, level)
+            with tempfile.TemporaryDirectory() as td:
+                src = Path(td) / "input.z"
+                dst = Path(td) / "out.luac"
+                src.write_bytes(wrapped)
+                ok, msg = stream_inflate_zlib(src, dst)
+                self.assertTrue(ok, msg)
+                self.assertEqual(dst.read_bytes(), payload)
+                self.assertEqual(preflight_magic(src), "zlib")
 
 class TestLargeInputDoesNotCrash(unittest.TestCase):
     def test_large_input_routes_to_streaming(self):
