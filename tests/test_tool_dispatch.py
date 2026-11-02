@@ -355,6 +355,16 @@ def test_pak_integrity_audit_is_registered_and_read_only():
     assert "overlaps" in core
     assert "Original PAK was not modified" in bridge
 
+def test_obb_integrity_audit_is_registered_and_read_only():
+    bridge = BRIDGE_IMPL.read_text(encoding="utf-8")
+    menus = MENUS.read_text(encoding="utf-8")
+    helper = (ROOT / "app/src/main/python/alvsia_reference_tools.py").read_text(encoding="utf-8")
+    assert "obb_integrity_audit" in bridge
+    assert "obb_integrity_audit" in menus
+    assert "def audit_archive_file(" in helper
+    assert "archive.open(info, \"r\")" in helper
+    assert "extractall(" not in helper
+
 if __name__ == "__main__":
     tests = (
         test_python_auth_normalizes_java_string_and_lua_avoids_art_oom,
@@ -373,11 +383,13 @@ if __name__ == "__main__":
         test_reference_inspection_subtools_are_registered_and_read_only,
         test_reference_inspection_helpers_smoke,
         test_pak_integrity_audit_is_registered_and_read_only,
+        test_obb_integrity_audit_is_registered_and_read_only,
     )
     for test in tests:
         test()
         print("PASS", test.__name__)
     print(f"TOOL DISPATCH TEST: PASS ({len(tests)}/{len(tests)})")
+
 
 
 
