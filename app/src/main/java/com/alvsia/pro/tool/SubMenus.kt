@@ -74,6 +74,8 @@ object SubMenus {
                 "Select unpacked folder / original .obb stem tree"),
             SubTool("obb_info",  "OBB Info",  "Size listing",
                 "Select .obb/.zip"),
+            SubTool("obb_integrity_audit", "OBB Integrity Audit", "Read-only ZIP/OBB CRC, path traversal, symlink, duplicate-entry and size-limit checks",
+                "Select .obb/.zip → OUT/OBB/*.integrity_audit.json; archive is never extracted or modified"),
         )
 
         // ── 5 LUA Tools ───────────────────────────────────────────────────
