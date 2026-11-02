@@ -156,8 +156,8 @@ class PrivateToolEngineTests(unittest.TestCase):
                 proto.extend(encrypted_string("@fixture"))
                 proto.extend(struct.pack("<ii", 0, 0))
                 proto.extend(bytes((0, 0, 2)))
-                proto.extend(struct.pack("<I", 1))
-                proto.extend(struct.pack("<I", 38))
+                proto.extend(struct.pack("<I", 2))
+                proto.extend(struct.pack("<II", 0, 38))
                 proto.extend(struct.pack("<I", 1))
                 proto.append(4)
                 proto.extend(encrypted_string("hello"))
@@ -172,8 +172,22 @@ class PrivateToolEngineTests(unittest.TestCase):
                 parsed = load_chunk(converted)
                 self.assertEqual(parsed.source, "@fixture")
                 self.assertEqual(parsed.constants, ["hello"])
-                self.assertEqual(parsed.code[0] & 0x3F, 38)
+                self.assertEqual([ins & 0x3F for ins in parsed.code],
+                                 [13, 38] if variant == "bgmi" else [30, 38])
 
+    def test_lua53_instruction_format_table_matches_vm_layout(self):
+        formats = private._STD_FMT
+        self.assertEqual(len(formats), 47)
+        self.assertEqual(formats[30], 2)   # JMP: iAsBx
+        self.assertEqual(formats[38], 0)   # RETURN: iABC
+        self.assertEqual(formats[39], 2)   # FORLOOP: iAsBx
+        self.assertEqual(formats[40], 2)   # FORPREP: iAsBx
+        self.assertEqual(formats[41], 0)   # TFORCALL: iABC
+        self.assertEqual(formats[42], 2)   # TFORLOOP: iAsBx
+        self.assertEqual(formats[43], 0)   # SETLIST: iABC
+        self.assertEqual(formats[44], 1)   # CLOSURE: iABx
+        self.assertEqual(formats[45], 0)   # VARARG: iABC
+        self.assertEqual(formats[46], 3)   # EXTRAARG: iAx
     def test_lua_variant_converter_rejects_corrupt_counts(self):
         import struct
         header = (
