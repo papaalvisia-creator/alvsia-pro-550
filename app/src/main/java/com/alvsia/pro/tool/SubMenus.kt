@@ -90,6 +90,8 @@ object SubMenus {
                 "Select file → OUT/LUA/*.xor"),
             SubTool("lua_multi_xor",   "Multi-XOR Probe",    "Candidate scan",
                 "Select file → OUT/LUA/*_xor_*.bin"),
+            SubTool("lua_format_probe", "Lua Format Probe", "Identify Lua 5.1–5.4, LuaJIT, source and common wrappers before selecting a decompiler",
+                "Select .lua/.luac/.bin → OUT/LUA/*.format_probe.json"),
             SubTool("lua_vm_deobfuscate", "VM Deobfuscate",  "Detect supported ALVSEAL/ALVLUA formats and report recovery results",
                 "Select protected .lua/.luac/.alvlua → OUT/LUA/*_recovered.lua or partial recovery report"),
             SubTool("pubg_lua_convert",  "PUBG→Std Convert",  "Convert PUBG/BGMI scrambled Lua bytecode to standard Lua 5.3 using XOR key from libUE4.so",
@@ -143,6 +145,8 @@ object SubMenus {
                 "Select .so file or folder of .so files → OUT/URLSCAN/urls_found.txt"),
             SubTool("sm4_find_all",    "SM4 Key Finder+", "Scan .so for SM4_SECRET_NEW + SM4_SECRET_4 + SM4_SECRET_2 candidates",
                 "Select folder containing arm64-v8a/*.so → OUT/SM4/sm4_all_keys.txt"),
+            SubTool("so_dump_audit", "Offline Dump Analyzer", "Read-only hash, bounded entropy and printable-string report for an existing authorized dump; no live process access or key extraction",
+                "Select authorized .dmp/.bin → OUT/SO/*.offline_dump.json"),
 
         )
 
@@ -228,6 +232,8 @@ object SubMenus {
                 "Select .lua / .luac → OUT/AUDIT/lua_report.txt"),
             SubTool("audit_so",        "SO Coverage",       "Check native lib for exported symbols, debug info",
                 "Select .so → OUT/AUDIT/so_report.txt"),
+            SubTool("anti_re_source_triage", "Obfuscation & Behavior Triage", "Static indicators for encoded payloads, dynamic execution, process-memory APIs and anti-cheat evasion patterns; never executes input",
+                "Select .py/.lua/.js/.cpp → OUT/AUDIT/*.source_triage.json"),
         )
 
         // ── 18 Lua Protector ──────────────────────────────────────────────
@@ -266,12 +272,6 @@ object SubMenus {
             "Select .bin / .so → OUT/ALVSIA_PRIVATE/entropy_map.txt"),
         SubTool("priv_pak_manifest",  "PAK Manifest CSV",      "Generate CSV manifest of all entries in a TencentPak file",
             "Select .pak → OUT/ALVSIA_PRIVATE/*_manifest.csv"),
-        SubTool("priv_lua_probe",      "Lua Format Probe",       "Identify Lua 5.1–5.4, LuaJIT, source, and common containers without decompiling",
-            "Select .luac/.lua/.bin → OUT/REFERENCE/*.lua_probe.json"),
-        SubTool("priv_source_triage",  "Obfuscation & Behavior Triage", "Static indicators for encoded payloads, dynamic execution, process-memory APIs and anti-cheat evasion patterns; never executes input",
-            "Select .py/.lua/.js/.cpp → OUT/REFERENCE/*.source_triage.json"),
-        SubTool("priv_dump_audit",     "Offline Dump Analyzer",  "Read-only hash, entropy-block and printable-string report for an existing dump file; no live process access or key extraction",
-            "Select an authorized .dmp/.bin → OUT/REFERENCE/*.dump_audit.json"),
     )
 
     else -> emptyList()
