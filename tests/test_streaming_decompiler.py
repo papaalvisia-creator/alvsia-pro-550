@@ -24,6 +24,7 @@ from lua_engine.streaming_decompiler import (
     stream_inflate_deflate_container,
     stream_inflate_zlib,
     decompile_large,
+    probe_lua_header,
 )
 
 
@@ -137,6 +138,35 @@ class TestStandardZlib(unittest.TestCase):
                 self.assertTrue(ok, msg)
                 self.assertEqual(dst.read_bytes(), payload)
                 self.assertEqual(preflight_magic(src), "zlib")
+
+class TestLuaHeaderDiagnostics(unittest.TestCase):
+    def test_reports_bad_lua53_check_bytes_and_preserves_input(self):
+        with tempfile.TemporaryDirectory() as td:
+            src = Path(td) / "wrapped.luac"
+            raw = (
+                bytes((0x1B,)) + b"Lua\\x53\\x00BADBAD"
+                + b"\\x04\\x08\\x04\\x08\\x08"
+                + b"\\x78\\x56\\x00\\x00\\x00\\x00\\x00\\x00"
+                + struct.pack("<d", 370.5)
+                + b"\\x00" * 64
+            )
+            src.write_bytes(raw)
+            report = probe_lua_header(src)
+            self.assertEqual(report["magic_offset"], 0)
+            self.assertEqual(report["version"], 0x53)
+            self.assertFalse(report["luac_data_ok"])
+            self.assertEqual(report["field_sizes"], [4, 8, 4, 8, 8])
+            self.assertEqual(report["size"], len(raw))
+            self.assertEqual(src.read_bytes(), raw)
+
+    def test_counts_utf8_replacement_markers_without_decoding_input(self):
+        with tempfile.TemporaryDirectory() as td:
+            src = Path(td) / "damaged.bin"
+            raw = bytes((0x1B,)) + b"Lua\\x53" + bytes((0xEF, 0xBF, 0xBD)) * 3
+            src.write_bytes(raw)
+            report = probe_lua_header(src)
+            self.assertEqual(report["utf8_replacement_markers"], 3)
+            self.assertEqual(src.read_bytes(), raw)
 
 class TestLargeInputDoesNotCrash(unittest.TestCase):
     def test_large_input_routes_to_streaming(self):
