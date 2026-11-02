@@ -78,17 +78,37 @@ def _xor_candidate(data: bytes, key: bytes, offset: int):
     return bytes(body), score
 
 def _normalized_input(path: Path, out: Path):
-    """Normalize a wrapped Lua container into a real .luac/.lj input."""
+    """Normalize known wrappers without ever modifying the original input."""
     raw = path.read_bytes()
-    # Accept any valid zlib header: CMF=0x78, (CMF*256+FLG)%31==0
     def _is_zlib_header(d: bytes) -> bool:
         return len(d) >= 2 and d[0] == 0x78 and (d[0] * 256 + d[1]) % 31 == 0
-    if not _is_zlib_header(raw):
-        return path, None
-    payload, ci = unwrap_lua_container(raw)
-    if not payload.startswith((b"\x1bLua", b"\x1bLJ")):
-        raise ValueError("compressed container recovered, but payload is not Lua/LuaJIT")
-    norm = out / (path.stem + "_unwrapped.luac")
+
+    payload = raw
+    ci = None
+    if _is_zlib_header(raw):
+        payload, ci = unwrap_lua_container(raw)
+        if not payload.startswith((b"\x1bLua", b"\x1bLJ")):
+            raise ValueError("compressed container recovered, but payload is not Lua/LuaJIT")
+    else:
+        info = detect_lua(path)
+        offset = None
+        for note in info.notes:
+            if note.startswith("comment_prefix_offset="):
+                try:
+                    offset = int(note.split("=", 1)[1])
+                except ValueError:
+                    offset = None
+                break
+        if offset is None:
+            return path, None
+        payload = raw[offset:]
+        if not payload.startswith((b"\x1bLua", b"\x1bLJ")):
+            raise ValueError("comment-prefixed payload does not contain a Lua signature")
+        from .container import ContainerInfo
+        ci = ContainerInfo(True, "comment-prefix", 1, len(payload),
+                           (f"comment prefix removed at offset {offset}",))
+
+    norm = out / (path.stem + "_normalized.luac")
     norm.write_bytes(payload)
     return norm, ci
 
@@ -149,7 +169,10 @@ def decompile_lua(path, out_dir, jars_dir=None, timeout=120):
     info=detect_lua(p)
     normalized=p; container=None
     try:
-        if p.read_bytes().startswith(b"\x78\xda"):
+        raw_head = p.read_bytes()[:2]
+        is_zlib = len(raw_head) == 2 and raw_head[0] == 0x78 and (raw_head[0] * 256 + raw_head[1]) % 31 == 0
+        has_comment_prefix = any(note.startswith("comment_prefix_offset=") for note in info.notes)
+        if is_zlib or has_comment_prefix:
             normalized, container = _normalized_input(p, out)
             info=detect_lua(normalized)
     except Exception as exc:
