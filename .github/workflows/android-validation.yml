@@ -215,7 +215,7 @@ jobs:
               if len(indexes) != 1:
                   raise SystemExit("ERROR: unexpected Xop native Gradle layout; refusing blind NDK patch")
               lines.insert(indexes[0] + 1, '    ndkVersion = "27.0.12077973"')
-              p.write_text("\\n".join(lines) + "\\n")
+              p.write_text("\n".join(lines) + "\n")
           if 'ndkVersion = "27.0.12077973"' not in p.read_text():
               raise SystemExit("ERROR: Xop native NDK pin was not applied")
           print("PASS: Xop native module pinned to NDK 27.0.12077973")
