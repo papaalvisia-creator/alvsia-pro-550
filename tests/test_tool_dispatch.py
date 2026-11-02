@@ -399,6 +399,15 @@ def test_reference_inspectors_format_and_archive_fixtures():
         assert limited_report["crc_coverage_complete"] is False
         assert limited_report["skipped_crc"]
 
+
+def test_xor_known_vector_selftest_is_registered():
+    bridge = BRIDGE_IMPL.read_text(encoding="utf-8")
+    menus = MENUS.read_text(encoding="utf-8")
+    assert "xor_selftest" in bridge
+    assert "xor_selftest" in menus
+    assert "9fe1e8bc97ec9eb791ff9e8ab0cad781bb8dcd8ab2cb939bbbdecacfa89c" in bridge
+    assert 'sid not in ("xor_batch", "xor_selftest")' in bridge
+
 if __name__ == "__main__":
     tests = (
         test_python_auth_normalizes_java_string_and_lua_avoids_art_oom,
@@ -419,6 +428,7 @@ if __name__ == "__main__":
         test_pak_integrity_audit_is_registered_and_read_only,
         test_obb_integrity_audit_is_registered_and_read_only,
         test_reference_inspectors_format_and_archive_fixtures,
+        test_xor_known_vector_selftest_is_registered,
     )
     for test in tests:
         test()
