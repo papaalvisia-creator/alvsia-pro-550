@@ -373,6 +373,36 @@ def stream_unluac_jar(input_path: Path, out_path: Path, jars_dir: Optional[str] 
     return True, f"unluac_ok size={len(text)}"
 
 
+def probe_lua_header(path: Path) -> Dict[str, Any]:
+    """Return bounded, non-destructive diagnostics for a failed Lua parse."""
+    p = Path(path)
+    result: Dict[str, Any] = {"size": p.stat().st_size if p.is_file() else 0}
+    if not p.is_file():
+        result["error"] = "input_not_found"
+        return result
+    with p.open("rb") as src:
+        head = src.read(4096)
+        src.seek(0)
+        replacement_count = 0
+        while True:
+            block = src.read(STREAM_CHUNK_SIZE)
+            if not block:
+                break
+            replacement_count += block.count(bytes((0xEF, 0xBF, 0xBD)))
+    magic_offset = head.find(bytes((0x1B,)) + b"Lua")
+    result["magic_offset"] = magic_offset if magic_offset >= 0 else None
+    result["luajit_offset"] = head.find(bytes((0x1B,)) + b"LJ")
+    result["first_48_hex"] = head[:48].hex()
+    result["utf8_replacement_markers"] = replacement_count
+    if magic_offset >= 0:
+        chunk = head[magic_offset:]
+        result["version"] = chunk[4] if len(chunk) > 4 else None
+        result["format_byte"] = chunk[5] if len(chunk) > 5 else None
+        result["luac_data_ok"] = len(chunk) >= 12 and chunk[6:12] == bytes((0x19,0x93,0x0D,0x0A,0x1A,0x0A))
+        result["field_sizes"] = list(chunk[12:17]) if len(chunk) >= 17 else []
+        result["header_complete"] = len(chunk) >= 33
+    return result
+
 def decompile_large(path: Path, out_dir: Path, jars_dir: Optional[str] = None) -> Dict[str, Any]:
     """Top-level entry for streaming decompilation of large Lua inputs.
 
@@ -570,6 +600,11 @@ def decompile_large(path: Path, out_dir: Path, jars_dir: Optional[str] = None) -
             _cleanup_embedded()
             return result
         result["error"] = msg
+        # Preserve byte-level evidence for custom headers or lossy text conversion.
+        try:
+            result["header_probe"] = probe_lua_header(work_file)
+        except Exception as probe_exc:
+            result["header_probe_error"] = str(probe_exc)[:160]
     else:
         result["error"] = "no decompiler path matched input format"
 
