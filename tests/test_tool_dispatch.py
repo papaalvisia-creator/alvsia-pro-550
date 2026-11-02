@@ -325,3 +325,20 @@ if __name__ == "__main__":
         test()
         print("PASS", test.__name__)
     print(f"TOOL DISPATCH TEST: PASS ({len(tests)}/{len(tests)})")
+
+
+def test_reference_inspection_subtools_are_registered_and_read_only():
+    menus = MENUS.read_text(encoding="utf-8")
+    bridge = BRIDGE_IMPL.read_text(encoding="utf-8")
+    helper = (ROOT / "app/src/main/python/alvsia_reference_tools.py").read_text(encoding="utf-8")
+    for sid in ("priv_lua_probe", "priv_source_triage", "priv_dump_audit"):
+        assert sid in menus
+        assert sid in bridge
+    assert "probe_lua_file" in helper
+    assert "scan_source_file" in helper
+    assert "inspect_dump_file" in helper
+    assert "execution_performed" in helper
+    assert "memory_acquisition" in helper
+    assert "subprocess" not in helper
+    assert "ptrace(" not in helper
+    assert "process_vm_readv" not in helper
