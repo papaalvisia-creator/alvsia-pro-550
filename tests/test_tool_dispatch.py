@@ -368,3 +368,15 @@ if __name__ == "__main__":
 
 
 
+
+def test_pak_integrity_audit_is_registered_and_read_only():
+    bridge = BRIDGE_IMPL.read_text(encoding="utf-8")
+    menus = MENUS.read_text(encoding="utf-8")
+    core = (ROOT / "app/src/main/python/alvsia_core.py").read_text(encoding="utf-8")
+    assert "pak_deep_integrity_audit" in bridge
+    assert "pak_deep_integrity_audit" in menus
+    assert "def run_pak_integrity_audit(" in core
+    assert "slot_fingerprint_sha256" in core
+    assert "invalid_ranges" in core
+    assert "overlaps" in core
+    assert "Original PAK was not modified" in bridge
