@@ -200,6 +200,8 @@ object SubMenus {
                 "sm4_config.txt required. Select .pak → OUT/PAKD/*_sm4/"),
             SubTool("pak_deep_auto",   "Deep Auto-Probe",   "Try all encryption combos",
                 "Select .pak → OUT/PAKD/probe_report.txt + first successful extract"),
+            SubTool("pak_deep_integrity_audit", "PAK Integrity & Slot Fingerprint", "Read-only validation of payload/block ranges, overlapping slots, duplicate content hashes and SHA-256 fingerprints",
+                "Select .pak → OUT/PAKD/*.integrity_audit.json; source PAK is never modified"),
             SubTool("sm4_keyfind",     "SM4 Key Finder",    "Scan .so files for embedded SM4_SECRET_NEW candidates (aA0-pattern)",
                 "Select a folder containing arm64-v8a/*.so → OUT/SM4/sm4_keys.txt"),
         )
