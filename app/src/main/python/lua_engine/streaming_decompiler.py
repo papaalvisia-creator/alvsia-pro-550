@@ -155,10 +155,10 @@ def stream_inflate_zlib(input_path: Path, out_path: Path) -> Tuple[bool, str]:
 def stream_inflate_deflate_container(input_path: Path, out_path: Path) -> Tuple[bool, str]:
     """Stream-inflate concatenated 0x78DA/raw-DEFLATE members.
 
-    A 0x78DA byte pair can also occur inside compressed payload data. Therefore
-    it is only a candidate marker: a member boundary is accepted after the raw
-    DEFLATE decoder reaches EOF. Bytes between members are tolerated, and
-    false marker candidates are skipped without discarding later valid members.
+    A 0x78DA byte pair can also occur inside compressed payload data. It is
+    therefore only a candidate marker: a member boundary is accepted only
+    after the raw DEFLATE decoder reaches EOF. Inter-member separator bytes
+    and false marker candidates are skipped without losing later valid data.
     """
     if not input_path.is_file():
         return False, "input not found"
@@ -185,8 +185,6 @@ def stream_inflate_deflate_container(input_path: Path, out_path: Path) -> Tuple[
             absolute += len(block)
 
     out_path.unlink(missing_ok=True)
-    candidate = find_marker(input_path.open("rb"), 0)
-    # Keep the input handle open for bounded scanning and decoder reads.
     try:
         with input_path.open("rb") as fin, out_path.open("wb") as fout:
             candidate = find_marker(fin, 0)
@@ -194,6 +192,8 @@ def stream_inflate_deflate_container(input_path: Path, out_path: Path) -> Tuple[
                 candidate_out = 0
                 stream_end = -1
                 valid = False
+                failed = False
+                dec = zlib.decompressobj(-15)
                 with tempfile.TemporaryFile() as spool:
                     fin.seek(candidate + 2)
                     while True:
@@ -201,21 +201,24 @@ def stream_inflate_deflate_container(input_path: Path, out_path: Path) -> Tuple[
                         chunk = fin.read(STREAM_CHUNK_SIZE)
                         if not chunk:
                             break
-                        dec = getattr(stream_inflate_deflate_container, "_active_decoder", None)
-                        if dec is None:
-                            dec = zlib.decompressobj(-15)
                         pending = chunk
                         try:
                             while pending:
                                 remaining = MAX_INFLATED_BYTES - total_out - candidate_out
                                 if remaining < 0:
-                                    raise ValueError(f"inflated payload exceeds cap {MAX_INFLATED_BYTES}")
-                                part = dec.decompress(pending, min(STREAM_CHUNK_SIZE, remaining + 1))
+                                    raise ValueError(
+                                        f"inflated payload exceeds cap {MAX_INFLATED_BYTES}"
+                                    )
+                                part = dec.decompress(
+                                    pending, min(STREAM_CHUNK_SIZE, remaining + 1)
+                                )
                                 pending = dec.unconsumed_tail
                                 if part:
                                     candidate_out += len(part)
                                     if candidate_out + total_out > MAX_INFLATED_BYTES:
-                                        raise ValueError(f"inflated payload exceeds cap {MAX_INFLATED_BYTES}")
+                                        raise ValueError(
+                                            f"inflated payload exceeds cap {MAX_INFLATED_BYTES}"
+                                        )
                                     spool.write(part)
                                 if dec.eof:
                                     stream_end = chunk_start + len(chunk) - len(dec.unused_data)
@@ -224,10 +227,8 @@ def stream_inflate_deflate_container(input_path: Path, out_path: Path) -> Tuple[
                                 if not pending:
                                     break
                         except zlib.error:
-                            valid = False
-                        if valid or stream_end >= 0:
-                            break
-                        if not chunk:
+                            failed = True
+                        if valid or failed:
                             break
                     if valid and stream_end >= 0:
                         spool.seek(0)
