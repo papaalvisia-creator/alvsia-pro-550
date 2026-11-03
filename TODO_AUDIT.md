@@ -27,8 +27,8 @@
 
 ## Fase 4 — Build & PR
 - [x] Jalankan seluruh test (204 passed, 5 skipped, 25 subtests)
-- [ ] Build/validasi APK — MENUNGGU GitHub Actions (sandbox tanpa JDK/Android SDK)
-- [ ] Validasi perangkat Android — belum dilakukan
+- [x] Build/validasi APK — GitHub Actions PASS (run 41698323483): APK 23.217.410 byte, SHA-256 6ae21603…, v2+v3 terverifikasi, cert pin 99b33815… cocok, validator RESULT=PASS
+- [ ] Validasi perangkat Android — belum dilakukan (di luar CI)
 - [x] Branch baru + PR + laporan
 
 ## Catatan / Belum Terselesaikan
