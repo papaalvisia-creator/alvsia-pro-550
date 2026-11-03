@@ -282,7 +282,7 @@ class ToolEngine(private val context: Context) {
                         if (!bridgeOk) {
                             lines.add("X DECOMPILE FAILED: ART unluac + Python streaming both produced no validated Lua source")
                             lines.add("Input preserved under IN/; no fake .lua output was created")
-                            lines.add("Check unluac class/JAR compatibility and Chaquopy startup diagnostics")
+                            lines.add("Inspect the input-format/header diagnostic above; no source bytes were guessed or patched.")
                             return lines
                         }
                     } catch (e: Exception) {
@@ -336,7 +336,7 @@ class ToolEngine(private val context: Context) {
         if (subId == "lua_decompile" || subId.contains("unluac")) {
             lines.add("X DECOMPILE FAILED: no decompiler produced validated Lua source")
             lines.add("Input preserved under IN/; no fake .lua output was created")
-            lines.add("Check unluac class/JAR compatibility and Chaquopy startup diagnostics")
+            lines.add("Inspect the input-format/header diagnostic above; no source bytes were guessed or patched.")
             return lines
         }
 
