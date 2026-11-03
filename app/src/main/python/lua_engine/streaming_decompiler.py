@@ -462,21 +462,55 @@ def decompile_large(path: Path, out_dir: Path, jars_dir: Optional[str] = None) -
                 deob_result = pattern.deobfuscator(p, out)
             except Exception as pattern_exc:
                 deob_result = {"ok": False, "error": str(pattern_exc)}
-            if deob_result.get("ok"):
-                # A matching protection handler is not proof it can recover
-                # this exact variant. Keep trying lower-ranked handlers until
-                # one produces a validated artifact.
+            # "ok" can mean that a protection structure was inspected, not
+            # that original source was recovered (BGMI_VM is intentionally
+            # partial). Accept only an explicitly recovered, existing .lua
+            # artifact that passes the common source validator.
+            artifact = Path(str(deob_result.get("out") or ""))
+            artifact_error = None
+            if deob_result.get("ok") and deob_result.get("recovered") is True:
+                try:
+                    resolved_out = out.resolve()
+                    resolved_artifact = artifact.resolve()
+                    if resolved_out not in resolved_artifact.parents:
+                        artifact_error = "recovered artifact is outside output directory"
+                    elif not artifact.is_file() or artifact.suffix.lower() != ".lua":
+                        artifact_error = "handler did not produce a .lua source artifact"
+                    else:
+                        valid, validation_message = validate_lua_source(artifact)
+                        if not valid:
+                            artifact_error = "source validation failed: " + validation_message
+                except Exception as validation_exc:
+                    artifact_error = "artifact validation exception: " + str(validation_exc)[:240]
+            elif deob_result.get("ok"):
+                artifact_error = "handler reported partial analysis, not full source recovery"
+            else:
+                artifact_error = str(deob_result.get("error", "unknown"))
+
+            if deob_result.get("ok") and deob_result.get("recovered") is True and artifact_error is None:
                 deob_result["pattern_id"] = pattern.id
                 deob_result["pattern_label"] = pattern.label
                 deob_result["input_format"] = fmt
                 deob_result["pattern_attempts"] = pattern_attempts + [
-                    {"id": pattern.id, "ok": True}
+                    {"id": pattern.id, "ok": True, "recovered": True}
                 ]
                 return deob_result
+
+            # Never surface a partial structure/constants dump as a successful
+            # decompile. Remove an invalid .lua artifact so it cannot be
+            # mistaken for recovered source; diagnostic reports remain intact.
+            if artifact_error and artifact.suffix.lower() == ".lua":
+                try:
+                    resolved_out = out.resolve()
+                    resolved_artifact = artifact.resolve()
+                    if resolved_out in resolved_artifact.parents and artifact.is_file():
+                        artifact.unlink()
+                except Exception:
+                    pass
             pattern_attempts.append({
                 "id": pattern.id,
                 "ok": False,
-                "error": str(deob_result.get("error", "unknown"))[:500],
+                "error": (artifact_error or "source recovery not validated")[:500],
             })
         if pattern_attempts:
             result["pattern_ids_attempted"] = [item["id"] for item in pattern_attempts]
