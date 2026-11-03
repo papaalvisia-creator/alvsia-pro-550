@@ -96,13 +96,13 @@ class TestVersionSpecificFallbacks(unittest.TestCase):
         for version in (0x51, 0x52, 0x54):
             with self.subTest(version=version), tempfile.TemporaryDirectory() as td:
                 src = Path(td) / "version.luac"
-                src.write_bytes(b"\\x1bLua" + bytes((version, 0)) + b"\\x00" * 64)
+                src.write_bytes(b"\x1bLua" + bytes((version, 0)) + b"\x00" * 64)
                 out = Path(td) / "out"
                 with patch("lua_engine.pattern_registry.get_registry",
-                           return_value=EmptyRegistry()), \\
-                     patch("lua_engine.streaming_decompiler.stream_decompile_lua53",
-                           side_effect=AssertionError("Lua 5.3 parser called for another version")) as parser:
-                    result = decompile_large(src, out, jars_dir=None)
+                           return_value=EmptyRegistry()):
+                    with patch("lua_engine.streaming_decompiler.stream_decompile_lua53",
+                               side_effect=AssertionError("wrong Lua version")) as parser:
+                        result = decompile_large(src, out, jars_dir=None)
                 self.assertFalse(result["ok"], result)
                 self.assertIn("no Python decompiler", result.get("error", ""))
                 parser.assert_not_called()
@@ -114,13 +114,13 @@ class TestVersionSpecificFallbacks(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as td:
             src = Path(td) / "sample.lj"
-            src.write_bytes(b"\\x1bLJ\\x02" + b"\\x00" * 16)
+            src.write_bytes(b"\x1bLJ\x02" + b"\x00" * 16)
             out = Path(td) / "out"
             with patch("lua_engine.pattern_registry.get_registry",
-                       return_value=EmptyRegistry()), \\
-                 patch("lua_engine.streaming_decompiler.stream_decompile_luajit",
-                       return_value=(True, "fixture disassembly")):
-                result = decompile_large(src, out, jars_dir=None)
+                       return_value=EmptyRegistry()):
+                with patch("lua_engine.streaming_decompiler.stream_decompile_luajit",
+                           return_value=(True, "fixture disassembly")):
+                    result = decompile_large(src, out, jars_dir=None)
             self.assertFalse(result["ok"], result)
             self.assertTrue(result["analysis_ok"], result)
             self.assertFalse(result["source_recovered"], result)
