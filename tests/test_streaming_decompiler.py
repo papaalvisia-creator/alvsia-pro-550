@@ -211,17 +211,18 @@ class TestProtectionPatternFallback(unittest.TestCase):
             with patch("lua_engine.pattern_registry.get_registry", return_value=FakeRegistry()):
                 result = decompile_large(src, out, jars_dir=None)
 
-        self.assertTrue(result["ok"])
-        self.assertEqual(result["pattern_id"], "compatible_fallback")
-        self.assertEqual(calls, [
+
+            self.assertTrue(result["ok"])
+            self.assertEqual(result["pattern_id"], "compatible_fallback")
+            self.assertEqual(calls, [
             "partial_vm_report", "invalid_source_claim", "compatible_fallback"
         ])
-        self.assertEqual(
+            self.assertEqual(
             [item["id"] for item in result["pattern_attempts"]],
             ["partial_vm_report", "invalid_source_claim", "compatible_fallback"],
         )
-        self.assertFalse((out / "invalid_source_claim.lua").exists())
-        self.assertTrue(Path(result["out"]).is_file())
+            self.assertFalse((out / "invalid_source_claim.lua").exists())
+            self.assertTrue(Path(result["out"]).is_file())
 
 
 class TestLuaHeaderDiagnostics(unittest.TestCase):
