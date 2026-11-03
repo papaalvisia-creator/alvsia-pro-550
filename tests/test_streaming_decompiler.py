@@ -132,7 +132,7 @@ class TestVersionSpecificFallbacks(unittest.TestCase):
 
 class TestLuaCandidateDeduplication(unittest.TestCase):
     def test_candidates_with_same_prefix_but_different_payload_are_all_tried(self):
-        base = b"\\x1bLua\\x53" + b"A" * 4091
+        base = b"\x1bLua\x53" + b"A" * 4091
         source = base + b"0"
         bgmi = base + b"B"
         heping = base + b"C"
