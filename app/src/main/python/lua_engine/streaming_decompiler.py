@@ -451,20 +451,41 @@ def decompile_large(path: Path, out_dir: Path, jars_dir: Optional[str] = None) -
     try:
         from .pattern_registry import get_registry
         registry = get_registry()
-        matches = registry.detect(p)
-        if matches:
-            best = max(matches, key=lambda pat: pat.confidence_boost)
-            deob_result = best.deobfuscator(p, out)
+        matches = sorted(
+            registry.detect(p),
+            key=lambda pat: pat.confidence_boost,
+            reverse=True,
+        )
+        pattern_attempts = []
+        for pattern in matches:
+            try:
+                deob_result = pattern.deobfuscator(p, out)
+            except Exception as pattern_exc:
+                deob_result = {"ok": False, "error": str(pattern_exc)}
             if deob_result.get("ok"):
-                # Forward the result with pattern metadata
-                deob_result["pattern_id"] = best.id
-                deob_result["pattern_label"] = best.label
+                # A matching protection handler is not proof it can recover
+                # this exact variant. Keep trying lower-ranked handlers until
+                # one produces a validated artifact.
+                deob_result["pattern_id"] = pattern.id
+                deob_result["pattern_label"] = pattern.label
                 deob_result["input_format"] = fmt
+                deob_result["pattern_attempts"] = pattern_attempts + [
+                    {"id": pattern.id, "ok": True}
+                ]
                 return deob_result
-            # If pattern matched but deobfuscator failed, fall through to
-            # standard decompile paths — but keep the pattern ID for diagnostics
-            result["pattern_id_attempted"] = best.id
-            result["pattern_error"] = deob_result.get("error", "unknown")
+            pattern_attempts.append({
+                "id": pattern.id,
+                "ok": False,
+                "error": str(deob_result.get("error", "unknown"))[:500],
+            })
+        if pattern_attempts:
+            result["pattern_ids_attempted"] = [item["id"] for item in pattern_attempts]
+            # Retain the legacy singular diagnostic fields for the bridge/UI.
+            result["pattern_id_attempted"] = pattern_attempts[0]["id"]
+            result["pattern_error"] = " | ".join(
+                "%s: %s" % (item["id"], item["error"])
+                for item in pattern_attempts
+            )[:1000]
     except Exception as exc:
         result["pattern_registry_exception"] = str(exc)[:200]
 
