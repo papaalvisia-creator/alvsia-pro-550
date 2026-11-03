@@ -81,6 +81,15 @@ def detect_bytes(data: bytes) -> LuaInfo:
     stripped = head.lstrip("\ufeff \t\r\n")
     if re.search(r"^(?:#!.*\n\s*)?(?:local|return|function|if|for|while|repeat|do)\b", stripped):
         return LuaInfo("source", None, "lua-source", size, magic, 0.85)
+    # Short scripts commonly begin with a call or assignment rather than
+    # a block keyword. Require a printable prefix to avoid binary false hits.
+    printable = all(b in (9, 10, 13) or 32 <= b < 127 for b in data[:4096])
+    if printable and re.search(
+        r"^(?:#!.*\\n\\s*)?(?:[A-Za-z_][A-Za-z0-9_.]*\\s*\\(|"
+        r"[A-Za-z_][A-Za-z0-9_]*\\s*=|--)",
+        stripped,
+    ):
+        return LuaInfo("source", None, "lua-source", size, magic, 0.78)
     if b"function" in data[:4096] and all((b in (9,10,13) or 32 <= b < 127) for b in data[:4096]):
         return LuaInfo("source", None, "lua-source", size, magic, 0.70)
     return LuaInfo("unknown", None, "unknown", size, magic, 0.0)
