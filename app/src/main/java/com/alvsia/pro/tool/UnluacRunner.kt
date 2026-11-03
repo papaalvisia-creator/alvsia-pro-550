@@ -96,8 +96,14 @@ object UnluacRunner {
                 var mapStart = 0L
                 while (mapStart < fileSize) {
                     val mapSize = minOf(fileSize - mapStart, STREAM_CHUNK_SIZE.toLong())
+                    // Include one look-ahead byte so a 0x78DA marker split
+                    // across two mapping windows is not silently missed.
+                    val mapLength = minOf(
+                        fileSize - mapStart,
+                        mapSize + if (mapStart + mapSize < fileSize) 1L else 0L
+                    )
                     val mbb: MappedByteBuffer = channel.map(
-                        FileChannel.MapMode.READ_ONLY, mapStart, mapSize
+                        FileChannel.MapMode.READ_ONLY, mapStart, mapLength
                     )
                     scanForDeflateMarkers(mbb, mapStart) { markerOffset ->
                         val remaining = UNWRAP_OUTPUT_LIMIT - totalBytes
@@ -203,7 +209,10 @@ object UnluacRunner {
             val inputBuffer = ByteArray(STREAM_CHUNK_SIZE)
             val outputBuffer = ByteArray(STREAM_CHUNK_SIZE)
             RandomAccessFile(file, "r").use { raf ->
-                raf.seek(offset)
+                // The marker is the two-byte zlib-style 0x78DA tag;
+                // this payload is raw DEFLATE, so the inflater must start
+                // immediately after those marker bytes.
+                raf.seek(offset + 2L)
                 FileOutputStream(output, false).use { out ->
                     while (!inflater.finished()) {
                         if (inflater.needsInput()) {
