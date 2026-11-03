@@ -83,18 +83,21 @@ class TestPermissionMatrix(unittest.TestCase):
             self.assertIn("android.permission.WRITE_EXTERNAL_STORAGE", perm_names,
                           f"Tool {tid} should request WRITE_EXTERNAL_STORAGE")
 
-    def test_frida_tracer_has_query_packages(self):
-        # Frida Tracer (11) needs QUERY_ALL_PACKAGES to enumerate hook targets
+    def test_frida_tracer_has_no_query_all_packages(self):
+        # QUERY_ALL_PACKAGES was removed for Play policy compliance; Frida
+        # Tracer (11) must work with storage access only.
         perms = self.branches.get(11, [])
         perm_names = [p[0] for p in perms]
-        self.assertIn("android.permission.QUERY_ALL_PACKAGES", perm_names)
+        self.assertNotIn("android.permission.QUERY_ALL_PACKAGES", perm_names)
+        self.assertIn("android.permission.READ_EXTERNAL_STORAGE", perm_names)
 
-    def test_anti_re_audit_has_query_and_install(self):
-        # Anti-RE Audit (17) needs QUERY_ALL_PACKAGES and REQUEST_INSTALL_PACKAGES
+    def test_anti_re_audit_has_no_query_all_packages(self):
+        # Anti-RE Audit (17) uses storage access; QUERY_ALL_PACKAGES was
+        # deliberately removed for Play policy compliance.
         perms = self.branches.get(17, [])
         perm_names = [p[0] for p in perms]
-        self.assertIn("android.permission.QUERY_ALL_PACKAGES", perm_names)
-        self.assertIn("android.permission.REQUEST_INSTALL_PACKAGES", perm_names)
+        self.assertNotIn("android.permission.QUERY_ALL_PACKAGES", perm_names)
+        self.assertIn("android.permission.MANAGE_EXTERNAL_STORAGE", perm_names)
 
     def test_workspace_tool_has_fewer_perms(self):
         # Workspace clear (7) should not require QUERY_ALL_PACKAGES
@@ -102,13 +105,14 @@ class TestPermissionMatrix(unittest.TestCase):
         perm_names = [p[0] for p in perms]
         self.assertNotIn("android.permission.QUERY_ALL_PACKAGES", perm_names)
 
-    def test_install_time_flows_declared(self):
-        # install_time permissions are normal perms — auto-granted, no dialog
-        install_time_count = sum(1 for perms in self.branches.values()
-                                  for (_, flow, _) in perms
-                                  if flow == "install_time")
-        self.assertGreater(install_time_count, 0,
-                           "Matrix must include at least one install-time perm")
+    def test_no_install_time_only_permissions(self):
+        # All install-time-only perms (e.g. QUERY_ALL_PACKAGES) were removed.
+        # Every declared permission must use a real runtime/settings flow.
+        allowed = {"runtime_auto", "settings_intent", "fallback", "install_time"}
+        for tool, perms in self.branches.items():
+            for (perm, flow, _) in perms:
+                self.assertIn(flow, allowed, f"tool {tool} has unknown flow {flow}")
+                self.assertNotEqual(perm, "android.permission.QUERY_ALL_PACKAGES")
 
     def test_runtime_auto_flows_declared(self):
         runtime_auto_count = sum(1 for perms in self.branches.values()

@@ -1,5 +1,5 @@
 from __future__ import annotations
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass, asdict, replace
 from pathlib import Path
 import re
 from .container import unwrap_lua_container
@@ -50,7 +50,39 @@ def _find_comment_prefixed_magic(data: bytes):
     return None
 
 
+_UTF8_REPLACEMENT = b"\xef\xbf\xbd"
+
+
+def _corruption_notes(data: bytes) -> tuple[str, ...]:
+    """Report U+FFFD markers that prove a binary was decoded as UTF-8 text.
+
+    We only *report* the evidence. Missing bytes are never guessed: exact
+    recovery requires the original binary artifact.
+    """
+    count = data.count(_UTF8_REPLACEMENT)
+    if not count:
+        return ()
+    ratio = count / max(1, len(data))
+    return (
+        f"utf8_replacement_markers={count}",
+        f"utf8_replacement_ratio={ratio:.4f}",
+        "binary decoded as UTF-8 text: U+FFFD replaced original bytes; "
+        "exact recovery requires the original binary",
+    )
+
+
 def detect_bytes(data: bytes) -> LuaInfo:
+    info = _classify_bytes(data)
+    extra = _corruption_notes(data)
+    if not extra:
+        return info
+    # A bytecode chunk containing U+FFFD markers is corrupt; never present it
+    # as a confidently valid chunk.
+    confidence = min(info.confidence, 0.30) if info.kind == "bytecode" else info.confidence
+    return replace(info, notes=tuple(info.notes) + extra, confidence=confidence)
+
+
+def _classify_bytes(data: bytes) -> LuaInfo:
     size = len(data)
     magic = data[:8].hex()
     if data.startswith(b"\x1bLJ"):

@@ -29,6 +29,68 @@ from functools import lru_cache
 from dataclasses import dataclass
 import os, sys
 import uuid
+
+
+def _verify_pinned_git_blob(data: bytes, expected_sha1: str) -> bool:
+    """Verify a GitHub raw download against its git blob SHA-1.
+    Git blob SHA: sha1('blob ' + str(len(data)) + chr(0) + data)
+    """
+    import hashlib
+    header = ("blob " + str(len(data)) + chr(0)).encode()
+    actual = hashlib.sha1(header + data).hexdigest()
+    return actual == expected_sha1
+
+
+def _safe_captcha_integer(expression):
+    """Evaluate only bounded integer arithmetic; never execute Python code."""
+    import ast
+    import operator
+    if not isinstance(expression, str) or len(expression) > 256:
+        raise ValueError("invalid captcha expression")
+    tree = ast.parse(expression, mode="eval")
+    allowed_bin = {
+        ast.Add: operator.add, ast.Sub: operator.sub, ast.Mult: operator.mul,
+        ast.FloorDiv: operator.floordiv, ast.Mod: operator.mod,
+    }
+    nodes = list(ast.walk(tree))
+    if len(nodes) > 64:
+        raise ValueError("captcha expression too complex")
+
+    def visit(node, depth=0):
+        if depth > 16:
+            raise ValueError("captcha expression too deep")
+        if isinstance(node, ast.Expression):
+            return visit(node.body, depth + 1)
+        if isinstance(node, ast.Constant) and type(node.value) is int:
+            value = node.value
+        elif isinstance(node, ast.UnaryOp) and isinstance(node.op, (ast.UAdd, ast.USub)):
+            operand = visit(node.operand, depth + 1)
+            value = operand if isinstance(node.op, ast.UAdd) else -operand
+        elif isinstance(node, ast.BinOp) and type(node.op) in allowed_bin:
+            left = visit(node.left, depth + 1)
+            right = visit(node.right, depth + 1)
+            if isinstance(node.op, (ast.FloorDiv, ast.Mod)) and right == 0:
+                raise ValueError("division by zero")
+            value = allowed_bin[type(node.op)](left, right)
+        else:
+            raise ValueError("unsupported captcha expression")
+        if not isinstance(value, int) or abs(value) > 1000000000:
+            raise ValueError("captcha result out of range")
+        return value
+
+    return visit(tree)
+
+
+def _alvsia_safe_extract_zip(zip_file, destination):
+    """Extract ZIP entries only when their resolved path stays under destination."""
+    root = Path(destination).resolve()
+    root.mkdir(parents=True, exist_ok=True)
+    for member in zip_file.infolist():
+        target = (root / member.filename).resolve()
+        if target != root and root not in target.parents:
+            raise ValueError("Unsafe ZIP entry path rejected")
+        zip_file.extract(member, root)
+
 import urllib.request
 try:
     import select, tty, termios
@@ -3676,7 +3738,10 @@ def download_skin_tool():
     """GitHub se download + extract (Sirf download dikhe, extract background mein)"""
     
     # Download pinned to specific commit hash — not /main/ (unpinned)
-    GITHUB_URL = "https://raw.githubusercontent.com/sellacountvinay-creator/SKIN_TOOL/cbd3d0e257963b54f34a908b6864040c7f96fbb1/SKIN_TOOL.zip"
+    # URL is pinned to an immutable commit; the downloaded bytes are then
+    # verified against the git blob SHA-1 of SKIN_TOOL.zip at that commit.
+    GITHUB_URL = "https://raw.githubusercontent.com/sellacountvinay-creator/SKIN_TOOL/5c7ad2b4996fcd468bf245be43580d1fe131423e/SKIN_TOOL.zip"
+    SKIN_TOOL_BLOB_SHA1 = "cbd3d0e257963b54f34a908b6864040c7f96fbb1"
     
     base_dir = Path("ALVSIA_PRO_DATA")
     skin_tool_dir = base_dir / "SKIN_TOOL"
@@ -3743,12 +3808,17 @@ def download_skin_tool():
         console.print("[bold {get_banner_color()}]✔ Download complete![/]")
         
         # ============================================================
+        # Integrity gate: refuse to unpack a tampered or truncated download.
+        if not _verify_pinned_git_blob(zip_path.read_bytes(), SKIN_TOOL_BLOB_SHA1):
+            zip_path.unlink(missing_ok=True)
+            raise RuntimeError("SKIN_TOOL.zip failed pinned git-blob integrity check")
+
         # 🔥 EXTRACT (BACKGROUND MEIN - KUCH DIKHAO MAT)
         # ============================================================
        # console.print("[dim]📦 Extracting... (Please wait)[/]")
         
         with zipfile.ZipFile(zip_path, 'r') as zip_ref:
-            zip_ref.extractall(base_dir)
+            _alvsia_safe_extract_zip(zip_ref, base_dir)
         
         # 🔥 ZIP DELETE (CHUP CHAP)
         if zip_path.exists():
@@ -7952,15 +8022,18 @@ def run_lua_tool():
                 ))
                 
                 # --- GITHUB RAW URLS ---
+                _csv_commit = "d013eca408f85d073c195e42a363b49076babd1d"
                 csv_urls = {
-                    "PUBG.csv": "https://raw.githubusercontent.com/sellacountvinay-creator/BGMI_CSV/a3f7c9d14e28b65042f1893c47a56d0e5f8b2c31/PUBG.csv",
-                    "BGMI.csv": "https://raw.githubusercontent.com/sellacountvinay-creator/BGMI_CSV/a3f7c9d14e28b65042f1893c47a56d0e5f8b2c31/BGMI.csv"
+                    "PUBG.csv": ("https://raw.githubusercontent.com/sellacountvinay-creator/BGMI_CSV/" + _csv_commit + "/PUBG.csv",
+                                 "2601457787bd2d793880fb1a8c485d0e76144942"),
+                    "BGMI.csv": ("https://raw.githubusercontent.com/sellacountvinay-creator/BGMI_CSV/" + _csv_commit + "/BGMI.csv",
+                                 "ac72bf1d3ca5f0ae72b65c1845c9c471e4a4a6af"),
                 }
                 
                 try:
                     BGMI_CSV_folder.mkdir(parents=True, exist_ok=True)
                     
-                    for filename, url in csv_urls.items():
+                    for filename, (url, expected_blob) in csv_urls.items():
                         with Progress(
                             TextColumn("[bold cyan]⬇️ {task.description}"),
                             BarColumn(bar_width=50, complete_style=f"bold {get_banner_color()}", finished_style="bold green"),
@@ -7996,6 +8069,10 @@ def run_lua_tool():
                                                     file_size=f"{file_size_mb:.2f} MB"
                                                 )
                                 
+                                if not _verify_pinned_git_blob(file_path.read_bytes(), expected_blob):
+                                    file_path.unlink(missing_ok=True)
+                                    console.print(f"[bold red]❌ Integrity check failed:[/] {filename}")
+                                    continue
                                 console.print(f"[bold green]✔ Downloaded:[/] [cyan]{filename}[/]")
                             else:
                                 console.print(f"[bold red]❌ Failed:[/] {filename} (Status: {response.status_code})")
@@ -8305,13 +8382,16 @@ def run_lua_tool():
                     title="[bold black on bright_yellow] 📥 DOWNLOADING 📥 [/]",
                     border_style="bright_yellow", box=box.HEAVY
                 ))
+                _csv_commit = "d013eca408f85d073c195e42a363b49076babd1d"
                 csv_urls = {
-                    "PUBG.csv": "https://raw.githubusercontent.com/sellacountvinay-creator/BGMI_CSV/a3f7c9d14e28b65042f1893c47a56d0e5f8b2c31/PUBG.csv",
-                    "BGMI.csv": "https://raw.githubusercontent.com/sellacountvinay-creator/BGMI_CSV/a3f7c9d14e28b65042f1893c47a56d0e5f8b2c31/BGMI.csv"
+                    "PUBG.csv": ("https://raw.githubusercontent.com/sellacountvinay-creator/BGMI_CSV/" + _csv_commit + "/PUBG.csv",
+                                 "2601457787bd2d793880fb1a8c485d0e76144942"),
+                    "BGMI.csv": ("https://raw.githubusercontent.com/sellacountvinay-creator/BGMI_CSV/" + _csv_commit + "/BGMI.csv",
+                                 "ac72bf1d3ca5f0ae72b65c1845c9c471e4a4a6af"),
                 }
                 try:
                     BGMI_CSV_folder.mkdir(parents=True, exist_ok=True)
-                    for filename, url in csv_urls.items():
+                    for filename, (url, expected_blob) in csv_urls.items():
                         with Progress(
                             TextColumn("[bold cyan]⬇️ {task.description}"),
                             BarColumn(bar_width=50, complete_style=f"bold {get_banner_color()}", finished_style="bold green"),
@@ -8333,6 +8413,10 @@ def run_lua_tool():
                                             if total_size > 0:
                                                 percent = int((downloaded / total_size) * 100)
                                                 progress.update(task, completed=percent, file_size=f"{downloaded/(1024*1024):.2f} MB")
+                                if not _verify_pinned_git_blob(file_path.read_bytes(), expected_blob):
+                                    file_path.unlink(missing_ok=True)
+                                    console.print(f"[bold red]❌ Integrity check failed:[/] {filename}")
+                                    continue
                                 console.print(f"[bold green]✔ Downloaded:[/] [cyan]{filename}[/]")
                             else:
                                 console.print(f"[bold red]❌ Failed:[/] {filename} (Status: {response.status_code})")
@@ -11050,7 +11134,9 @@ DEVICE_FILE = SECURITY_DIR / "device.json"
 
 # ==================== AUTHOR LICENSE SYSTEM ====================
 
-AUTHOR_PASSWORD = "ALVSIA_MASTER_20277"
+# Master password is never stored in source. Provide it via the environment
+# variable ALVSIA_AUTHOR_PASSWORD for local author tooling; empty = fail-closed.
+AUTHOR_PASSWORD = os.environ.get("ALVSIA_AUTHOR_PASSWORD", "")
 
 LICENSE_TYPES = {
     "1DAY": {"duration": 1, "label": "1 Day Trial", "prefix": "ALVSIA-1DAY-", "price": "Free"},
@@ -11319,7 +11405,11 @@ def is_author():
     console.print(f"[bold cyan]║  [bold white]Enter master password to continue[bold cyan]                     [bold cyan]║[/bold cyan]")
     console.print(f"[bold cyan]╚{'═' * 56}╝[/bold cyan]")
     password = safe_input(f"\n[bold red]🔑 Master Password: [/bold red]").strip()
-    if password == AUTHOR_PASSWORD:
+    import hmac as _hmac
+    if not AUTHOR_PASSWORD:
+        console.print("\n[bold red]❌ Author password not configured (set ALVSIA_AUTHOR_PASSWORD).[/bold red]")
+        return False
+    if _hmac.compare_digest(password, AUTHOR_PASSWORD):
         console.print(f"\n[bold green]✅ Author Verified![/bold green]")
         return True
     else:
@@ -11912,7 +12002,7 @@ def show_license_info():
 # ==================== RESET LICENSE ====================
 
 def reset_license():
-    admin_password = "ALVSIA_2027"
+    admin_password = os.environ.get("ALVSIA_ADMIN_PASSWORD", "")
     console.print(f"\n[bold red]╔{'═' * 56}╗[/bold red]")
     console.print(f"[bold red]║  [bold white on red] 🔐 ADMIN LICENSE RESET [/bold white on red]                      [bold red]║[/bold red]")
     console.print(f"[bold red]║  [bold yellow]⚠ This will reset ALL license data![/bold red]    [bold red]║[/bold red]")
@@ -11920,7 +12010,11 @@ def reset_license():
     console.print(f"[bold red]║  [bold yellow]⚠ Re-activation will be required![/bold red]      [bold red]║[/bold red]")
     console.print(f"[bold red]╚{'═' * 56}╝[/bold red]")
     password = safe_input(f"[bold red]🔐 Enter Admin Password: [/bold red]").strip()
-    if password != admin_password:
+    import hmac as _hmac
+    if not admin_password:
+        console.print("[bold red]❌ Admin reset disabled: set ALVSIA_ADMIN_PASSWORD.[/bold red]")
+        return False
+    if not _hmac.compare_digest(password, admin_password):
         console.print(f"[bold red]❌ Wrong admin password![/bold red]")
         return False
     console.print(f"[bold cyan]🔄 Resetting license data...[/bold cyan]")
@@ -12308,17 +12402,6 @@ if __name__ == '__main__':
 # ALVSIA ULTIMATE — Module 10-17 real implementations
 # ══════════════════════════════════════════════════════════════════════════════
 import re as _re, hashlib as _hashlib
-
-def _verify_pinned_git_blob(data: bytes, expected_sha1: str) -> bool:
-    """Verify a GitHub raw download against its git blob SHA-1.
-    Git blob SHA: sha1('blob ' + str(len(data)) + chr(0) + data)
-    """
-    import hashlib
-    header = ("blob " + str(len(data)) + chr(0)).encode()
-    actual = hashlib.sha1(header + data).hexdigest()
-    return actual == expected_sha1
-
-
 
 # ── Module 10: SO Analyzer ────────────────────────────────────────────────────
 
@@ -12939,7 +13022,7 @@ def pak_deep_aes(input_path, out_dir, key_hex="", iv_hex=""):
     dec_file = result["out"]
     try:
         with zipfile.ZipFile(dec_file) as zf:
-            zf.extractall(out_dir)
+            _alvsia_safe_extract_zip(zf, out_dir)
             result["extracted"] = len(zf.namelist())
     except Exception:
         result["note"] = "decrypted but not a valid ZIP/PAK"
@@ -12982,7 +13065,7 @@ def pak_deep_zuc(input_path, out_dir, key_hex="", iv_hex=""):
     import zipfile
     try:
         with zipfile.ZipFile(result["out"]) as zf:
-            zf.extractall(out_dir)
+            _alvsia_safe_extract_zip(zf, out_dir)
             result["extracted"] = len(zf.namelist())
     except Exception:
         result["note"] = "decrypted but not ZIP"
@@ -12997,7 +13080,7 @@ def pak_deep_sm4(input_path, out_dir, key_hex="", mode="ECB", iv_hex=""):
     import zipfile
     try:
         with zipfile.ZipFile(result["out"]) as zf:
-            zf.extractall(out_dir)
+            _alvsia_safe_extract_zip(zf, out_dir)
             result["extracted"] = len(zf.namelist())
     except Exception:
         result["note"] = "decrypted but not ZIP"
@@ -13014,7 +13097,7 @@ def pak_deep_auto(input_path, out_dir):
     if raw[:2] == b"PK":
         try:
             with zipfile.ZipFile(str(p)) as zf:
-                zf.extractall(str(out_dir))
+                _alvsia_safe_extract_zip(zf, str(out_dir))
                 return {"ok": True, "method": "plain_zip", "extracted": len(zf.namelist()), "out": str(out_dir)}
         except Exception: pass
     # Try zlib
