@@ -108,6 +108,31 @@ class TestStreamInflate(unittest.TestCase):
             self.assertTrue(recovered.startswith(b"\x1bLua\x53\x00"))
             self.assertIn(b"PAYLOAD", recovered)
 
+    def test_embedded_78da_inside_raw_deflate_is_not_a_member_boundary(self):
+        # Level-0 raw DEFLATE stores payload bytes verbatim, including this
+        # marker-like pair. A parser must follow decoder EOF, not split on
+        # every occurrence of 78 DA.
+        payload1 = (
+            b"\x1bLua\x53\x00" + b"\x19\x93\x0d\x0a\x1a\x0a"
+            + b"A" * 4096 + b"\x78\xda" + b"B" * 4096
+        )
+        payload2 = b"SECOND_MEMBER"
+        def raw_deflate(payload):
+            co = zlib.compressobj(0, zlib.DEFLATED, -15)
+            return co.compress(payload) + co.flush()
+        first = raw_deflate(payload1)
+        second = raw_deflate(payload2)
+        # Real-world chunk containers may include a short separator between
+        # the end of one raw stream and the next 78DA header.
+        container = b"\x78\xda" + first + b"CLMM" + (b"\x0d" * 13) + b"\x78\xda" + second
+        with tempfile.TemporaryDirectory() as td:
+            src = Path(td) / "false-marker.bin"
+            dst = Path(td) / "out.luac"
+            src.write_bytes(container)
+            ok, msg = stream_inflate_deflate_container(src, dst)
+            self.assertTrue(ok, msg)
+            self.assertEqual(dst.read_bytes(), payload1 + payload2)
+
     def test_reject_non_lua_payload(self):
         payload = b"NOT-LUA" * 100
         co = zlib.compressobj(9, zlib.DEFLATED, -15)
