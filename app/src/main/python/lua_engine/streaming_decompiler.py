@@ -623,13 +623,18 @@ def decompile_large(path: Path, out_dir: Path, jars_dir: Optional[str] = None) -
 
     # ── Stage 3: LuaJIT disassembly ─────────────────────────────────────────
     if fmt == "luajit":
-        dest = out / (p.stem + "_luajit_asm.lua")
+        # Disassembly is useful recovery evidence, but it is not reconstructed
+        # Lua source. Never give an ASM listing a .lua extension or let callers
+        # mistake it for a successful source decompilation.
+        dest = out / (p.stem + "_luajit_disassembly.asm.txt")
         ok, msg = stream_decompile_luajit(work_file, dest)
         if ok:
             result["ok"] = True
             result["mode"] = "luajit_disasm"
             result["out"] = str(dest)
-            result["note"] = "LuaJIT disassembly (proto-level ASM, not full source)"
+            result["artifact_kind"] = "disassembly"
+            result["source_recovered"] = False
+            result["note"] = "LuaJIT disassembly only; original Lua source was not reconstructed"
             result.update(container_info)
             _cleanup_embedded()
             return result
