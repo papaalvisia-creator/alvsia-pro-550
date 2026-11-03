@@ -166,28 +166,42 @@ class TestStandardZlib(unittest.TestCase):
                 self.assertEqual(preflight_magic(src), "zlib")
 
 class TestProtectionPatternFallback(unittest.TestCase):
-    def test_tries_lower_ranked_pattern_after_best_match_fails(self):
-        """A false-positive high-confidence match must not block another handler."""
+    def test_partial_or_invalid_pattern_results_do_not_stop_fallback(self):
+        """Only a validated full source artifact may count as recovery."""
         calls = []
 
         class FakePattern:
-            def __init__(self, pattern_id, confidence, succeeds):
+            def __init__(self, pattern_id, confidence, outcome):
                 self.id = pattern_id
                 self.label = pattern_id
                 self.confidence_boost = confidence
-                self.succeeds = succeeds
+                self.outcome = outcome
 
             def deobfuscator(self, src, out):
                 calls.append(self.id)
-                if self.succeeds:
-                    return {"ok": True, "mode": "fixture_recovery", "out": str(out / "recovered.lua")}
-                return {"ok": False, "error": "variant mismatch"}
+                if self.outcome == "partial":
+                    report = out / "partial_structure.json"
+                    report.write_text("{}", encoding="utf-8")
+                    return {
+                        "ok": True, "recovered": False, "mode": "partial_analysis",
+                        "out": str(report),
+                    }
+                artifact = out / (self.id + ".lua")
+                if self.outcome == "invalid":
+                    artifact.write_text("this is not Lua source", encoding="utf-8")
+                else:
+                    artifact.write_text("return 42\\n", encoding="utf-8")
+                return {
+                    "ok": True, "recovered": True, "mode": "fixture_recovery",
+                    "out": str(artifact),
+                }
 
         class FakeRegistry:
             def detect(self, src):
                 return [
-                    FakePattern("high_confidence_false_positive", 0.99, False),
-                    FakePattern("compatible_fallback", 0.60, True),
+                    FakePattern("partial_vm_report", 0.99, "partial"),
+                    FakePattern("invalid_source_claim", 0.80, "invalid"),
+                    FakePattern("compatible_fallback", 0.60, "valid"),
                 ]
 
         with tempfile.TemporaryDirectory() as td:
@@ -199,11 +213,15 @@ class TestProtectionPatternFallback(unittest.TestCase):
 
         self.assertTrue(result["ok"])
         self.assertEqual(result["pattern_id"], "compatible_fallback")
-        self.assertEqual(calls, ["high_confidence_false_positive", "compatible_fallback"])
+        self.assertEqual(calls, [
+            "partial_vm_report", "invalid_source_claim", "compatible_fallback"
+        ])
         self.assertEqual(
             [item["id"] for item in result["pattern_attempts"]],
-            ["high_confidence_false_positive", "compatible_fallback"],
+            ["partial_vm_report", "invalid_source_claim", "compatible_fallback"],
         )
+        self.assertFalse((out / "invalid_source_claim.lua").exists())
+        self.assertTrue(Path(result["out"]).is_file())
 
 
 class TestLuaHeaderDiagnostics(unittest.TestCase):
