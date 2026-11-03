@@ -94,7 +94,7 @@ class ToolEngine(private val context: Context) {
                 digest.update(buffer, 0, count)
             }
         }
-        return digest.digest().joinToString("") { "%02x".format(it) }
+        return digest.digest().joinToString("") { byte -> "%02x".format(byte.toInt() and 0xff) }
     }
 
     private fun copyUri(uri: Uri, dest: File): String? {
@@ -115,7 +115,7 @@ class ToolEngine(private val context: Context) {
                 }
             }
             if (dest.isFile && dest.length() > 0) {
-                digest.digest().joinToString("") { "%02x".format(it) }
+                digest.digest().joinToString("") { byte -> "%02x".format(byte.toInt() and 0xff) }
             } else null
         } catch (_: Exception) {
             try { dest.delete() } catch (_: Exception) { }
