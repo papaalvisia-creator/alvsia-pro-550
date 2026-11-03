@@ -87,6 +87,47 @@ class TestPreflightMagic(unittest.TestCase):
             self.assertEqual(preflight_magic(p), "too_small")
 
 
+class TestVersionSpecificFallbacks(unittest.TestCase):
+    def test_non_53_luac_never_uses_lua53_python_parser(self):
+        class EmptyRegistry:
+            def detect(self, src):
+                return []
+
+        for version in (0x51, 0x52, 0x54):
+            with self.subTest(version=version), tempfile.TemporaryDirectory() as td:
+                src = Path(td) / "version.luac"
+                src.write_bytes(b"\\x1bLua" + bytes((version, 0)) + b"\\x00" * 64)
+                out = Path(td) / "out"
+                with patch("lua_engine.pattern_registry.get_registry",
+                           return_value=EmptyRegistry()), \\
+                     patch("lua_engine.streaming_decompiler.stream_decompile_lua53",
+                           side_effect=AssertionError("Lua 5.3 parser called for another version")) as parser:
+                    result = decompile_large(src, out, jars_dir=None)
+                self.assertFalse(result["ok"], result)
+                self.assertIn("no Python decompiler", result.get("error", ""))
+                parser.assert_not_called()
+
+    def test_luajit_disassembly_is_not_reported_as_source_decompile(self):
+        class EmptyRegistry:
+            def detect(self, src):
+                return []
+
+        with tempfile.TemporaryDirectory() as td:
+            src = Path(td) / "sample.lj"
+            src.write_bytes(b"\\x1bLJ\\x02" + b"\\x00" * 16)
+            out = Path(td) / "out"
+            with patch("lua_engine.pattern_registry.get_registry",
+                       return_value=EmptyRegistry()), \\
+                 patch("lua_engine.streaming_decompiler.stream_decompile_luajit",
+                       return_value=(True, "fixture disassembly")):
+                result = decompile_large(src, out, jars_dir=None)
+            self.assertFalse(result["ok"], result)
+            self.assertTrue(result["analysis_ok"], result)
+            self.assertFalse(result["source_recovered"], result)
+            self.assertEqual(result["artifact_kind"], "disassembly")
+            self.assertTrue(result["out"].endswith(".asm.txt"))
+
+
 class TestStreamInflate(unittest.TestCase):
     def test_recover_lua_payload_from_deflate(self):
         """Build a synthetic chunked-raw-DEFLATE container whose payload
