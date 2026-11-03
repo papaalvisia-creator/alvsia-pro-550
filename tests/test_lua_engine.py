@@ -63,6 +63,10 @@ def main():
         lj=td/"sample.lj"; lj.write_bytes(bytes.fromhex("1b4c4a02") + bytes(20))
         ji=detect_lua(lj)
         assert ji.format=="luajit"
+        assert ji.version=="LuaJIT 2.1", ji
+        lj20=td/"sample_lj20.lj"; lj20.write_bytes(bytes.fromhex("1b4c4a01") + bytes(20))
+        ji20=detect_lua(lj20)
+        assert ji20.version=="LuaJIT 2.0", ji20
 
         # Comment-prefixed bytecode must be identified and normalized for
         # Smart Decompile instead of being mistaken for an unknown text file.
