@@ -43,8 +43,8 @@ object FileMagic {
     )
 
     /**
-     * Detect file type from first 8 bytes.
-     * Does not load the whole file into memory — reads only the header.
+     * Detect file type from magic bytes and a bounded 64 KiB prefix scan.
+     * Never loads the whole selected file into memory.
      */
     fun detect(ctx: Context, uri: Uri): DetectionResult {
         val header = ByteArray(16)
@@ -183,6 +183,7 @@ object FileMagic {
             for ((magic, kind, markerLength) in candidates) {
                 val offset = bytes.indexOfSequence(magic)
                 if (offset <= 0 || offset + markerLength >= bytes.size) continue
+                if (kind == "luac" && bytes[offset + markerLength] != 0x53.toByte()) continue
                 val prefix = try {
                     Charsets.UTF_8.newDecoder()
                         .onMalformedInput(java.nio.charset.CodingErrorAction.REPORT)
@@ -194,7 +195,7 @@ object FileMagic {
                 val lines = prefix.split(Regex("\\r?\\n"))
                 if (lines.isNotEmpty() && lines.all {
                     it.isBlank() || it.trimStart().startsWith("--") || it.trimStart().startsWith("#!")
-                } && prefix.none { it.code < 32 && it !in "\\t\\r\\n" }) {
+                } && prefix.none { it.code < 32 && it !in "\t\r\n" }) {
                     return kind
                 }
             }
