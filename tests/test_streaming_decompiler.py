@@ -12,6 +12,7 @@ import struct
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 import zlib
 from pathlib import Path
 
@@ -163,6 +164,47 @@ class TestStandardZlib(unittest.TestCase):
                 self.assertTrue(ok, msg)
                 self.assertEqual(dst.read_bytes(), payload)
                 self.assertEqual(preflight_magic(src), "zlib")
+
+class TestProtectionPatternFallback(unittest.TestCase):
+    def test_tries_lower_ranked_pattern_after_best_match_fails(self):
+        """A false-positive high-confidence match must not block another handler."""
+        calls = []
+
+        class FakePattern:
+            def __init__(self, pattern_id, confidence, succeeds):
+                self.id = pattern_id
+                self.label = pattern_id
+                self.confidence_boost = confidence
+                self.succeeds = succeeds
+
+            def deobfuscator(self, src, out):
+                calls.append(self.id)
+                if self.succeeds:
+                    return {"ok": True, "mode": "fixture_recovery", "out": str(out / "recovered.lua")}
+                return {"ok": False, "error": "variant mismatch"}
+
+        class FakeRegistry:
+            def detect(self, src):
+                return [
+                    FakePattern("high_confidence_false_positive", 0.99, False),
+                    FakePattern("compatible_fallback", 0.60, True),
+                ]
+
+        with tempfile.TemporaryDirectory() as td:
+            src = Path(td) / "protected.bin"
+            src.write_bytes(b"not-a-standard-lua-header")
+            out = Path(td) / "out"
+            with patch("lua_engine.pattern_registry.get_registry", return_value=FakeRegistry()):
+                result = decompile_large(src, out, jars_dir=None)
+
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["pattern_id"], "compatible_fallback")
+        self.assertEqual(calls, ["high_confidence_false_positive", "compatible_fallback"])
+        self.assertEqual(
+            [item["id"] for item in result["pattern_attempts"]],
+            ["high_confidence_false_positive", "compatible_fallback"],
+        )
+
 
 class TestLuaHeaderDiagnostics(unittest.TestCase):
     def test_reports_bad_lua53_check_bytes_and_preserves_input(self):
