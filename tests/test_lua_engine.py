@@ -2,7 +2,7 @@ import json, tempfile, zlib
 from pathlib import Path
 import sys
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "app/src/main/python"))
-from lua_engine import detect_lua, analyze_lua, validate_lua_source, unwrap_lua_container
+from lua_engine import detect_lua, analyze_lua, validate_lua_source, unwrap_lua_container, decompile_lua
 from lua_engine.bgmi import transform_bgmi_lua
 
 def main():
@@ -48,6 +48,18 @@ def main():
         luac=td/"sample.luac"; luac.write_bytes(bytes.fromhex("1b4c756153") + bytes(32))
         li=detect_lua(luac)
         assert li.format=="luac" and li.version=="Lua 5.3"
+
+        # Decompile dispatch must initialize its output/backend state for
+        # bytecode inputs even when no external unluac JAR is configured.
+        decompile_report = decompile_lua(luac, td / "decompile_out", jars_dir=td / "missing_jars")
+        assert isinstance(decompile_report, dict) and "ok" in decompile_report, decompile_report
+        assert "UnboundLocalError" not in str(decompile_report), decompile_report
+        assert "NameError" not in str(decompile_report), decompile_report
+
+        short_source = td / "short.lua"
+        short_source.write_text("print(1)\\n", encoding="utf-8")
+        source_report = decompile_lua(short_source, td / "source_out")
+        assert source_report.get("ok") and source_report.get("mode") == "source_passthrough", source_report
         lj=td/"sample.lj"; lj.write_bytes(bytes.fromhex("1b4c4a02") + bytes(20))
         ji=detect_lua(lj)
         assert ji.format=="luajit"
