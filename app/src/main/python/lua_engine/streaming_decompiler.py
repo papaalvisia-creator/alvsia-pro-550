@@ -299,7 +299,7 @@ def stream_decompile_lua53(input_path: Path, out_path: Path) -> Tuple[bool, str]
 
     seen = set()
     for variant, candidate in candidates:
-        digest = __import__("hashlib").sha256(candidate[:4096]).digest()
+        digest = __import__("hashlib").sha256(candidate).digest()
         if digest in seen:
             continue
         seen.add(digest)
