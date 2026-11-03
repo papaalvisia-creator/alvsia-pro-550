@@ -84,14 +84,42 @@ class ToolEngine(private val context: Context) {
         }
     }
 
-    private fun copyUri(uri: Uri, dest: File): Boolean {
-        return try {
-            context.contentResolver.openInputStream(uri)?.use { ins ->
-                FileOutputStream(dest).use { outs -> ins.copyTo(outs) }
+    private fun sha256(file: File): String {
+        val digest = MessageDigest.getInstance("SHA-256")
+        FileInputStream(file).use { input ->
+            val buffer = ByteArray(1024 * 1024)
+            while (true) {
+                val count = input.read(buffer)
+                if (count < 0) break
+                digest.update(buffer, 0, count)
             }
-            dest.exists() && dest.length() > 0
+        }
+        return digest.digest().joinToString("") { "%02x".format(it) }
+    }
+
+    private fun copyUri(uri: Uri, dest: File): String? {
+        return try {
+            val digest = MessageDigest.getInstance("SHA-256")
+            val source = context.contentResolver.openInputStream(uri) ?: return null
+            source.use { ins ->
+                val buffer = ByteArray(1024 * 1024)
+                FileOutputStream(dest).use { outs ->
+                    while (true) {
+                        val count = ins.read(buffer)
+                        if (count < 0) break
+                        digest.update(buffer, 0, count)
+                        outs.write(buffer, 0, count)
+                    }
+                    outs.flush()
+                    outs.fd.sync()
+                }
+            }
+            if (dest.isFile && dest.length() > 0) {
+                digest.digest().joinToString("") { "%02x".format(it) }
+            } else null
         } catch (_: Exception) {
-            false
+            try { dest.delete() } catch (_: Exception) { }
+            null
         }
     }
 
@@ -101,19 +129,34 @@ class ToolEngine(private val context: Context) {
         val nameHint = uri.lastPathSegment?.substringAfterLast('/') ?: "input.bin"
         val safe = nameHint.replace(Regex("[^A-Za-z0-9._-]"), "_").ifBlank { "input.bin" }
         val staged = File(WorkPaths.moduleWork(moduleId), "in_${System.currentTimeMillis()}_$safe")
-        if (!copyUri(uri, staged)) {
+        val sourceHash = copyUri(uri, staged)
+        if (sourceHash == null) {
             notes.add("X Failed to read selected file")
             return "" to notes
         }
-        // also copy snapshot under IN/
+        val stagedHash = try { sha256(staged) } catch (_: Exception) { "" }
+        if (stagedHash.isBlank() || stagedHash != sourceHash) {
+            try { staged.delete() } catch (_: Exception) { }
+            notes.add("X INPUT integrity check failed; staged bytes do not match source stream")
+            return "" to notes
+        }
+        // Also copy a snapshot under IN/ and verify it byte-for-byte.
         try {
             val snap = File(WorkPaths.moduleIn(moduleId), safe)
             staged.copyTo(snap, overwrite = true)
+            val snapshotHash = sha256(snap)
+            if (snapshotHash != sourceHash) {
+                try { snap.delete() } catch (_: Exception) { }
+                notes.add("X INPUT snapshot integrity check failed")
+                return "" to notes
+            }
             notes.add("OK INPUT staged -> ${snap.absolutePath}")
         } catch (_: Exception) {
             notes.add("OK INPUT staged (work only) -> ${staged.absolutePath}")
         }
         notes.add("size ${staged.length()} bytes")
+        notes.add("SHA-256 ${sourceHash}")
+        notes.add("OK INPUT source/staged bytes verified identical")
         return staged.absolutePath to notes
     }
 
