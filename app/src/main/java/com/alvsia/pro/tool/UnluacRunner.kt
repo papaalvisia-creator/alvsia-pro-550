@@ -51,6 +51,8 @@ object UnluacRunner {
     private val LUAJIT_MAGIC = byteArrayOf(0x1B, 0x4C, 0x4A)     // \x1bLJ
     private val DEFLATE_HEADER = byteArrayOf(0x78, 0xDA.toByte())
 
+    private data class InflatedMember(val bytesWritten: Long, val endOffset: Long)
+
     private fun hasPrefix(data: ByteArray, prefix: ByteArray): Boolean {
         if (data.size < prefix.size) return false
         for (i in prefix.indices) {
@@ -94,6 +96,10 @@ object UnluacRunner {
                 val fileSize = raf.length()
                 val channel = raf.channel
                 var mapStart = 0L
+                // Ignore marker-like bytes inside a member already decoded;
+                // the inflater's exact end offset is more reliable than
+                // searching compressed payload bytes for another 0x78DA.
+                var skipMarkersBefore = 0L
                 while (mapStart < fileSize) {
                     val mapSize = minOf(fileSize - mapStart, STREAM_CHUNK_SIZE.toLong())
                     // Include one look-ahead byte so a 0x78DA marker split
@@ -106,6 +112,7 @@ object UnluacRunner {
                         FileChannel.MapMode.READ_ONLY, mapStart, mapLength
                     )
                     scanForDeflateMarkers(mbb, mapStart) { markerOffset ->
+                        if (markerOffset < skipMarkersBefore) return@scanForDeflateMarkers
                         val remaining = UNWRAP_OUTPUT_LIMIT - totalBytes
                         if (remaining <= 0L) {
                             throw IllegalStateException(
@@ -114,16 +121,17 @@ object UnluacRunner {
                         }
                         val partFile = File(outDir, "${outFile.name}.$markerOffset.part")
                         try {
-                            val written = inflateFromOffset(input, markerOffset, partFile, remaining)
-                            if (written != null && written > 0L) {
+                            val member = inflateFromOffset(input, markerOffset, partFile, remaining)
+                            if (member != null && member.bytesWritten > 0L) {
                                 FileOutputStream(outFile, true).use { fos ->
                                     FileInputStream(partFile).use { fis ->
                                         fis.copyTo(fos, STREAM_CHUNK_SIZE)
                                     }
                                     fos.fd.sync()
                                 }
-                                totalBytes += written
+                                totalBytes += member.bytesWritten
                                 chunkCount++
+                                skipMarkersBefore = member.endOffset
                             }
                         } finally {
                             try { partFile.delete() } catch (_: Exception) { }
@@ -199,10 +207,11 @@ object UnluacRunner {
         offset: Long,
         output: File,
         maxOutputBytes: Long
-    ): Long? {
+    ): InflatedMember? {
         val inflater = Inflater(true)
         var totalOut = 0L
         var finished = false
+        var memberEndOffset = -1L
         try {
             val inputBuffer = ByteArray(STREAM_CHUNK_SIZE)
             val outputBuffer = ByteArray(STREAM_CHUNK_SIZE)
@@ -236,9 +245,17 @@ object UnluacRunner {
                     out.flush()
                     out.fd.sync()
                     finished = inflater.finished()
+                    if (finished) {
+                        // getRemaining() is the unconsumed tail of the last
+                        // input buffer; subtract it from the file position to
+                        // find the exact end of this DEFLATE member.
+                        memberEndOffset = raf.filePointer - inflater.remaining().toLong()
+                    }
                 }
             }
-            return if (finished && totalOut > 0L) totalOut else null
+            return if (finished && totalOut > 0L && memberEndOffset > offset) {
+                InflatedMember(totalOut, memberEndOffset)
+            } else null
         } catch (_: Throwable) {
             return null
         } finally {
