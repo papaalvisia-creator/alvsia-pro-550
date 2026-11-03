@@ -19,27 +19,27 @@ def main():
         # loop block and ignore Lua keywords inside strings and comments.
         loop_source = td / "loop_valid.lua"
         loop_source.write_text(
-            'local function work(items)\\n'
-            '  for i = 1, #items do\\n'
-            '    while items[i] do\\n'
-            '      do local marker = "end function if" end\\n'
-            '      items[i] = nil\\n'
-            '    end\\n'
-            '  end\\n'
-            '  repeat local done = true until done\\n'
-            '  -- end end end (comment only)\\n'
-            '  local text = [=[function fake() end]=]\\n'
-            '  return text\\n'
-            'end\\n'
-            'return work\\n',
+            'local function work(items)\n'
+            '  for i = 1, #items do\n'
+            '    while items[i] do\n'
+            '      do local marker = "end function if" end\n'
+            '      items[i] = nil\n'
+            '    end\n'
+            '  end\n'
+            '  repeat local done = true until done\n'
+            '  -- end end end (comment only)\n'
+            '  local text = [=[function fake() end]=]\n'
+            '  return text\n'
+            'end\n'
+            'return work\n',
             encoding="utf-8",
         )
         loop_ok, loop_msg = validate_lua_source(loop_source)
         assert loop_ok, loop_msg
         malformed_source = (
-            'local function broken()\\n'
-            '  for i = 1, 3 do return i\\n'
-            'end\\n'
+            'local function broken()\n'
+            '  for i = 1, 3 do return i\n'
+            'end\n'
         )
         malformed_ok, malformed_msg = validate_lua_source(malformed_source)
         assert not malformed_ok and "unclosed" in malformed_msg, malformed_msg
