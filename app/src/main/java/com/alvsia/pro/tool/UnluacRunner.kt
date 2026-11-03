@@ -70,7 +70,6 @@ object UnluacRunner {
         input: File,
         outDir: File
     ): Pair<File?, String?> {
-        // Quick sniff of first 2 bytes — only proceed on raw-DEFLATE header.
         val head = ByteArray(2)
         try {
             RandomAccessFile(input, "r").use { raf ->
@@ -86,12 +85,13 @@ object UnluacRunner {
 
         val outFile = File(outDir, input.nameWithoutExtension + "_unwrapped.luac")
         outFile.parentFile?.mkdirs()
+        // Never append a new run to a stale output from an earlier attempt.
+        try { outFile.delete() } catch (_: Exception) { }
         var chunkCount = 0
         var totalBytes = 0L
         try {
             RandomAccessFile(input, "r").use { raf ->
                 val fileSize = raf.length()
-                // Memory-map the input in pieces so we never allocate the full file.
                 val channel = raf.channel
                 var mapStart = 0L
                 while (mapStart < fileSize) {
@@ -99,34 +99,34 @@ object UnluacRunner {
                     val mbb: MappedByteBuffer = channel.map(
                         FileChannel.MapMode.READ_ONLY, mapStart, mapSize
                     )
-                    mbb.order(ByteOrder.BIG_ENDIAN)
                     scanForDeflateMarkers(mbb, mapStart) { markerOffset ->
-                        // Try to inflate from this marker to end of file (streaming).
-                        // Because the mapped region may be smaller than the actual
-                        // DEFLATE stream, we use a RandomAccessFile-backed input
-                        // stream for the inflater so it can read past the mapped
-                        // region if necessary.
-                        val inflated = inflateFromOffset(input, markerOffset)
-                        if (inflated != null && inflated.first > 0) {
-                            FileOutputStream(outFile, true).use { fos ->
-                                fos.write(inflated.second)
+                        val remaining = UNWRAP_OUTPUT_LIMIT - totalBytes
+                        if (remaining <= 0L) {
+                            throw IllegalStateException(
+                                "decompressed Lua container exceeds $UNWRAP_OUTPUT_LIMIT bytes"
+                            )
+                        }
+                        val partFile = File(outDir, "${outFile.name}.$markerOffset.part")
+                        try {
+                            val written = inflateFromOffset(input, markerOffset, partFile, remaining)
+                            if (written != null && written > 0L) {
+                                FileOutputStream(outFile, true).use { fos ->
+                                    FileInputStream(partFile).use { fis ->
+                                        fis.copyTo(fos, STREAM_CHUNK_SIZE)
+                                    }
+                                    fos.fd.sync()
+                                }
+                                totalBytes += written
+                                chunkCount++
                             }
-                            totalBytes += inflated.first
-                            chunkCount++
-                            if (totalBytes > UNWRAP_OUTPUT_LIMIT) {
-                                throw IllegalStateException(
-                                    "decompressed Lua container exceeds $UNWRAP_OUTPUT_LIMIT bytes"
-                                )
-                            }
+                        } finally {
+                            try { partFile.delete() } catch (_: Exception) { }
                         }
                     }
                     mapStart += mapSize
-                    // Release mapping hint
-                    // (JVM GC handles this; explicit unmap not portable in Kotlin.)
                 }
             }
         } catch (t: Throwable) {
-            // Partial output may still be usable as LuaS input — keep it.
             if (outFile.exists() && outFile.length() == 0L) outFile.delete()
             return outFile.takeIf { it.exists() && it.length() > 0 } to
                 "container=chunked-raw-deflate chunks=$chunkCount bytes=$totalBytes partial=true err=${t.message}"
@@ -137,7 +137,6 @@ object UnluacRunner {
             return input to null
         }
 
-        // Validate the unwrapped payload starts with Lua / LuaJIT magic.
         val sniff = ByteArray(4)
         try {
             FileInputStream(outFile).use { fis ->
@@ -151,7 +150,6 @@ object UnluacRunner {
                 }
             }
         } catch (_: Exception) {
-            // keep outFile if we couldn't even sniff — let unluac decide
         }
 
         return outFile to
@@ -187,43 +185,60 @@ object UnluacRunner {
      * bounded cap; oversized payloads are written directly to the output
      * file by the caller via the returned bytes.
      */
-    private fun inflateFromOffset(file: File, offset: Long): Pair<Long, ByteArray>? {
-        val inflater = Inflater(true)  // raw inflate, no zlib wrapper
+    /**
+     * Inflate one raw-DEFLATE member to a temporary file. Memory stays
+     * bounded to two fixed-size buffers regardless of decompressed size.
+     * A candidate is accepted only when the inflater reaches its end marker.
+     */
+    private fun inflateFromOffset(
+        file: File,
+        offset: Long,
+        output: File,
+        maxOutputBytes: Long
+    ): Long? {
+        val inflater = Inflater(true)
+        var totalOut = 0L
+        var finished = false
         try {
-            val input = ByteArray(STREAM_CHUNK_SIZE)
-            val out = ByteArrayOutputStream(STREAM_CHUNK_SIZE)
-            var totalIn = 0L
-            var totalOut = 0L
+            val inputBuffer = ByteArray(STREAM_CHUNK_SIZE)
+            val outputBuffer = ByteArray(STREAM_CHUNK_SIZE)
             RandomAccessFile(file, "r").use { raf ->
                 raf.seek(offset)
-                var reading = true
-                while (reading) {
-                    val n = raf.read(input)
-                    if (n <= 0) break
-                    totalIn += n
-                    inflater.setInput(input, 0, n)
-                    val buf = ByteArray(STREAM_CHUNK_SIZE)
-                    while (!inflater.needsInput() && !inflater.finished()) {
-                        val written = inflater.inflate(buf)
+                FileOutputStream(output, false).use { out ->
+                    while (!inflater.finished()) {
+                        if (inflater.needsInput()) {
+                            val count = raf.read(inputBuffer)
+                            if (count <= 0) break
+                            inflater.setInput(inputBuffer, 0, count)
+                        }
+                        val written = inflater.inflate(outputBuffer)
                         if (written > 0) {
-                            out.write(buf, 0, written)
                             totalOut += written.toLong()
-                            if (totalOut > UNWRAP_OUTPUT_LIMIT) {
-                                return totalOut to out.toByteArray()
+                            if (totalOut > maxOutputBytes) {
+                                throw IllegalStateException(
+                                    "inflated member exceeds remaining output limit $maxOutputBytes"
+                                )
                             }
-                        } else if (inflater.needsDictionary() || inflater.needsInput()) {
-                            reading = false
+                            out.write(outputBuffer, 0, written)
+                        } else if (inflater.needsDictionary()) {
+                            break
+                        } else if (!inflater.needsInput() && !inflater.finished()) {
                             break
                         }
                     }
-                    if (inflater.finished()) break
+                    out.flush()
+                    out.fd.sync()
+                    finished = inflater.finished()
                 }
             }
-            return if (totalOut > 0) totalOut to out.toByteArray() else null
-        } catch (t: Throwable) {
+            return if (finished && totalOut > 0L) totalOut else null
+        } catch (_: Throwable) {
             return null
         } finally {
             inflater.end()
+            if (!finished || totalOut == 0L) {
+                try { output.delete() } catch (_: Exception) { }
+            }
         }
     }
 
