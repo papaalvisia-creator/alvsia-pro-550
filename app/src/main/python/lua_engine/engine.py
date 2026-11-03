@@ -286,14 +286,12 @@ def decompile_lua(path, out_dir, jars_dir=None, timeout=120):
     except Exception as exc:
         return {"ok":False,"error":str(exc),"format":"container-unknown"}
     if info.kind == "source":
+        # Preserve source inputs byte-for-byte at the text layer; this path is
+        # not a bytecode decompilation and must not reject short valid scripts.
         source_text = normalized.read_text(encoding="utf-8", errors="replace")
-        valid, validation = validate_lua_source(source_text)
-        if not valid:
-            return {"ok": False, "error": "source input failed validation: " + validation,
-                    "format": info.format}
         dest.write_text(source_text, encoding="utf-8")
         return {"ok": True, "mode": "source_passthrough", "out": str(dest),
-                "format": info.format, "validation": validation}
+                "format": info.format}
 
     if info.kind != "bytecode":
         return {"ok": False, "error": "input is not recognized Lua bytecode",
