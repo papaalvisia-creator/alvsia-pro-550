@@ -55,8 +55,10 @@ def detect_bytes(data: bytes) -> LuaInfo:
     magic = data[:8].hex()
     if data.startswith(b"\x1bLJ"):
         ver = "LuaJIT 2.0/2.1"
-        if len(data) >= 3 and data[2] == 2:
+        if len(data) >= 4 and data[3] == 0x02:
             ver = "LuaJIT 2.1"
+        elif len(data) >= 4 and data[3] == 0x01:
+            ver = "LuaJIT 2.0"
         return LuaInfo("bytecode", ver, "luajit", size, magic, 0.99)
     if data.startswith(b"\x1bLua"):
         vb = data[4] if len(data) > 4 else 0
