@@ -215,12 +215,12 @@ class TestProtectionPatternFallback(unittest.TestCase):
             self.assertTrue(result["ok"])
             self.assertEqual(result["pattern_id"], "compatible_fallback")
             self.assertEqual(calls, [
-            "partial_vm_report", "invalid_source_claim", "compatible_fallback"
-        ])
+                "partial_vm_report", "invalid_source_claim", "compatible_fallback"
+            ])
             self.assertEqual(
-            [item["id"] for item in result["pattern_attempts"]],
-            ["partial_vm_report", "invalid_source_claim", "compatible_fallback"],
-        )
+                [item["id"] for item in result["pattern_attempts"]],
+                ["partial_vm_report", "invalid_source_claim", "compatible_fallback"],
+            )
             self.assertFalse((out / "invalid_source_claim.lua").exists())
             self.assertTrue(Path(result["out"]).is_file())
 
