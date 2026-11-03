@@ -438,6 +438,17 @@ def run_tool(module_id, sub_id, input_path, out_root, engine_dir, jars_dir):
                                probe.get("utf8_replacement_markers"))
                         )
                         lines.append("DIAGNOSTIC: first_48_bytes=%s" % probe.get("first_48_hex", ""))
+                        try:
+                            replacement_markers = int(probe.get("utf8_replacement_markers") or 0)
+                        except (TypeError, ValueError):
+                            replacement_markers = 0
+                        if replacement_markers > 0:
+                            lines.append(
+                                "WARNING: input contains %s UTF-8 replacement sequences (EF BF BD); "
+                                "the binary may have been decoded as text before reaching the decompiler. "
+                                "Original bytes cannot be reconstructed by guessing a Lua header."
+                                % replacement_markers
+                            )
                     if stream_result.get("unluac_jar_error"):
                         lines.append("DIAGNOSTIC: unluac_jar=%s" % str(stream_result.get("unluac_jar_error"))[:220])
                     if stream_result.get("pattern_id_attempted"):
