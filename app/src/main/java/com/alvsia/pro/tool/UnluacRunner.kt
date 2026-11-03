@@ -132,10 +132,12 @@ object UnluacRunner {
                     mapStart += mapSize
                 }
             }
-        } catch (t: Throwable) {
-            if (outFile.exists() && outFile.length() == 0L) outFile.delete()
-            return outFile.takeIf { it.exists() && it.length() > 0 } to
-                "container=chunked-raw-deflate chunks=$chunkCount bytes=$totalBytes partial=true err=${t.message}"
+        } catch (_: Throwable) {
+            // Never pass a truncated multi-member payload to a decompiler.
+            // Keep the original input intact so the Python normalizer can
+            // retry with its EOF-aware stream parser and emit diagnostics.
+            try { outFile.delete() } catch (_: Exception) { }
+            return input to null
         }
 
         if (chunkCount == 0) {
@@ -145,17 +147,20 @@ object UnluacRunner {
 
         val sniff = ByteArray(4)
         try {
-            FileInputStream(outFile).use { fis ->
-                if (fis.read(sniff) >= 4) {
-                    val isLua = hasPrefix(sniff, LUA_MAGIC)
-                    val isLuaJit = hasPrefix(sniff, LUAJIT_MAGIC)
-                    if (!isLua && !isLuaJit) {
-                        outFile.delete()
-                        return input to null
-                    }
-                }
+            if (outFile.length() < sniff.size.toLong()) {
+                outFile.delete()
+                return input to null
+            }
+            RandomAccessFile(outFile, "r").use { raf -> raf.readFully(sniff) }
+            val isLua = hasPrefix(sniff, LUA_MAGIC)
+            val isLuaJit = hasPrefix(sniff, LUAJIT_MAGIC)
+            if (!isLua && !isLuaJit) {
+                outFile.delete()
+                return input to null
             }
         } catch (_: Exception) {
+            try { outFile.delete() } catch (_: Exception) { }
+            return input to null
         }
 
         return outFile to
@@ -184,13 +189,6 @@ object UnluacRunner {
         }
     }
 
-    /**
-     * Inflates a raw-DEFLATE stream starting at [offset] in [file], reading
-     * up to end-of-file. Returns (bytesWritten, rawInflatedBytes). The
-     * inflated output is streamed into a ByteArrayOutputStream up to a
-     * bounded cap; oversized payloads are written directly to the output
-     * file by the caller via the returned bytes.
-     */
     /**
      * Inflate one raw-DEFLATE member to a temporary file. Memory stays
      * bounded to two fixed-size buffers regardless of decompressed size.
