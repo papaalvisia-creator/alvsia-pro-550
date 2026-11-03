@@ -629,7 +629,8 @@ def decompile_large(path: Path, out_dir: Path, jars_dir: Optional[str] = None) -
         dest = out / (p.stem + "_luajit_disassembly.asm.txt")
         ok, msg = stream_decompile_luajit(work_file, dest)
         if ok:
-            result["ok"] = True
+            result["ok"] = False
+            result["analysis_ok"] = True
             result["mode"] = "luajit_disasm"
             result["out"] = str(dest)
             result["artifact_kind"] = "disassembly"
@@ -658,7 +659,7 @@ def decompile_large(path: Path, out_dir: Path, jars_dir: Optional[str] = None) -
         result["unluac_jar_error"] = "jars_dir_unavailable"
 
     # ── Stage 5: pure-Python decompiler53 — works without Java ─────────────
-    if fmt.startswith("luac_"):
+    if fmt == "luac_53":
         dest = out / (p.stem + "_decompiled.lua")
         ok, msg = stream_decompile_lua53(work_file, dest)
         if ok:
@@ -674,6 +675,11 @@ def decompile_large(path: Path, out_dir: Path, jars_dir: Optional[str] = None) -
             result["header_probe"] = probe_lua_header(work_file)
         except Exception as probe_exc:
             result["header_probe_error"] = str(probe_exc)[:160]
+    elif fmt.startswith("luac_"):
+        result["error"] = (
+            "no Python decompiler for this Lua bytecode version; "
+            "the compatible Unluac JAR backend was unavailable or failed"
+        )
     else:
         result["error"] = "no decompiler path matched input format"
 
