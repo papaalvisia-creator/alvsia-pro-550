@@ -153,103 +153,111 @@ def stream_inflate_zlib(input_path: Path, out_path: Path) -> Tuple[bool, str]:
 
 
 def stream_inflate_deflate_container(input_path: Path, out_path: Path) -> Tuple[bool, str]:
-    """Stream-inflate a 0x78DA-chunked raw-DEFLATE Lua container.
+    """Stream-inflate concatenated 0x78DA/raw-DEFLATE members.
 
-    Reads STREAM_CHUNK_SIZE pieces from input, feeds them to a raw Inflater,
-    writes inflated bytes to out_path incrementally. Memory usage is
-    bounded by STREAM_CHUNK_SIZE.
-
-    The 0x78 0xDA marker is the zlib wrapper header. Each marker starts
-    a new raw-DEFLATE stream; we skip the 2 header bytes and inflate
-    the rest as raw deflate (wbits=-15).
+    A 0x78DA byte pair can also occur inside compressed payload data. Therefore
+    it is only a candidate marker: a member boundary is accepted after the raw
+    DEFLATE decoder reaches EOF. Bytes between members are tolerated, and
+    false marker candidates are skipped without discarding later valid members.
     """
     if not input_path.is_file():
         return False, "input not found"
     out_path.parent.mkdir(parents=True, exist_ok=True)
     total_out = 0
-    total_in = 0
+    total_in = input_path.stat().st_size
+    members = 0
+    false_candidates = 0
+    marker = b"\x78\xDA"
+
+    def find_marker(fin, start_at: int) -> int:
+        fin.seek(max(0, start_at))
+        overlap = b""
+        absolute = fin.tell()
+        while True:
+            block = fin.read(STREAM_CHUNK_SIZE)
+            if not block:
+                return -1
+            data = overlap + block
+            found = data.find(marker)
+            if found >= 0:
+                return absolute - len(overlap) + found
+            overlap = data[-1:]
+            absolute += len(block)
+
+    out_path.unlink(missing_ok=True)
+    candidate = find_marker(input_path.open("rb"), 0)
+    # Keep the input handle open for bounded scanning and decoder reads.
     try:
         with input_path.open("rb") as fin, out_path.open("wb") as fout:
-            # Read whole file in chunks; we need to find 0x78 0xDA markers
-            # which can span chunk boundaries, so we keep a small overlap
-            # buffer.
-            dec = None  # active decompressor for current chunk
-            buf = b""
-            carry_over = b""
-            while True:
-                chunk = fin.read(STREAM_CHUNK_SIZE)
-                if not chunk:
-                    # flush any pending tail of current decompressor
-                    if dec is not None:
+            candidate = find_marker(fin, 0)
+            while candidate >= 0:
+                candidate_out = 0
+                stream_end = -1
+                valid = False
+                with tempfile.TemporaryFile() as spool:
+                    fin.seek(candidate + 2)
+                    while True:
+                        chunk_start = fin.tell()
+                        chunk = fin.read(STREAM_CHUNK_SIZE)
+                        if not chunk:
+                            break
+                        dec = getattr(stream_inflate_deflate_container, "_active_decoder", None)
+                        if dec is None:
+                            dec = zlib.decompressobj(-15)
+                        pending = chunk
                         try:
-                            tail = dec.flush()
-                            if tail:
-                                fout.write(tail)
-                                total_out += len(tail)
+                            while pending:
+                                remaining = MAX_INFLATED_BYTES - total_out - candidate_out
+                                if remaining < 0:
+                                    raise ValueError(f"inflated payload exceeds cap {MAX_INFLATED_BYTES}")
+                                part = dec.decompress(pending, min(STREAM_CHUNK_SIZE, remaining + 1))
+                                pending = dec.unconsumed_tail
+                                if part:
+                                    candidate_out += len(part)
+                                    if candidate_out + total_out > MAX_INFLATED_BYTES:
+                                        raise ValueError(f"inflated payload exceeds cap {MAX_INFLATED_BYTES}")
+                                    spool.write(part)
+                                if dec.eof:
+                                    stream_end = chunk_start + len(chunk) - len(dec.unused_data)
+                                    valid = candidate_out > 0
+                                    break
+                                if not pending:
+                                    break
                         except zlib.error:
-                            pass
-                    break
-                total_in += len(chunk)
-                buf = carry_over + chunk
-                # Find all 0x78 0xDA markers in buf
-                markers = []
-                i = 0
-                while i < len(buf) - 1:
-                    if buf[i] == 0x78 and buf[i + 1] == 0xDA:
-                        markers.append(i)
-                        i += 2
+                            valid = False
+                        if valid or stream_end >= 0:
+                            break
+                        if not chunk:
+                            break
+                    if valid and stream_end >= 0:
+                        spool.seek(0)
+                        while True:
+                            part = spool.read(STREAM_CHUNK_SIZE)
+                            if not part:
+                                break
+                            fout.write(part)
+                        total_out += candidate_out
+                        members += 1
+                        candidate = find_marker(fin, stream_end)
                     else:
-                        i += 1
-                # Process markers
-                for m in markers:
-                    # Start a fresh decompressor for this marker
-                    if dec is not None:
-                        try:
-                            tail = dec.flush()
-                            if tail:
-                                fout.write(tail)
-                                total_out += len(tail)
-                        except zlib.error:
-                            pass
-                    dec = zlib.decompressobj(-15)  # raw deflate
-                    # Feed from after the 2-byte marker to end of buf
-                    try:
-                        inflated = dec.decompress(buf[m + 2:])
-                    except zlib.error as exc:
-                        return False, f"inflate_error at offset {total_in - len(buf) + m}: {exc}"
-                    if inflated:
-                        fout.write(inflated)
-                        total_out += len(inflated)
-                        if total_out > MAX_INFLATED_BYTES:
-                            return False, f"inflated payload exceeds cap {MAX_INFLATED_BYTES}"
-                    if dec.eof:
-                        # this stream is done; reset
-                        try:
-                            tail = dec.flush()
-                            if tail:
-                                fout.write(tail)
-                                total_out += len(tail)
-                        except zlib.error:
-                            pass
-                        dec = None
-                # Carry over the last few bytes to catch a marker that
-                # might span the chunk boundary
-                carry_over = buf[-2:] if len(buf) >= 2 else buf
+                        false_candidates += 1
+                        candidate = find_marker(fin, candidate + 2)
+            fout.flush()
         if total_out == 0:
             out_path.unlink(missing_ok=True)
-            return False, "no payload recovered from chunked-deflate container"
-        # Validate payload magic
+            return False, "no valid raw-DEFLATE members recovered"
         with out_path.open("rb") as f:
             head = f.read(4)
         if not (head.startswith(b"\x1bLua") or head.startswith(b"\x1bLJ")):
             out_path.unlink(missing_ok=True)
             return False, "inflated payload is not Lua/LuaJIT bytecode"
-        return True, f"stream_inflated bytes_in={total_in} bytes_out={total_out}"
+        return True, (
+            f"stream_inflated bytes_in={total_in} bytes_out={total_out} "
+            f"members={members} skipped_marker_candidates={false_candidates}"
+        )
     except Exception as exc:
-        if out_path.exists():
-            out_path.unlink(missing_ok=True)
+        out_path.unlink(missing_ok=True)
         return False, f"stream_inflate_failed: {exc}"
-
 
 def stream_decompile_lua53(input_path: Path, out_path: Path) -> Tuple[bool, str]:
     """Try the pure-Python Lua 5.3 decompiler against the given file.
