@@ -84,10 +84,10 @@ def detect_bytes(data: bytes) -> LuaInfo:
     # Short scripts commonly begin with a call or assignment rather than
     # a block keyword. Require a printable prefix to avoid binary false hits.
     printable = all(b in (9, 10, 13) or 32 <= b < 127 for b in data[:4096])
-    if printable and re.search(
-        r"^(?:#!.*\\n\\s*)?(?:[A-Za-z_][A-Za-z0-9_.]*\\s*\\(|"
-        r"[A-Za-z_][A-Za-z0-9_]*\\s*=|--)",
-        stripped,
+    if printable and (
+        re.match(r"^[A-Za-z_][A-Za-z0-9_.]*\s*\(", stripped)
+        or re.match(r"^[A-Za-z_][A-Za-z0-9_]*\s*=", stripped)
+        or stripped.startswith("--")
     ):
         return LuaInfo("source", None, "lua-source", size, magic, 0.78)
     if b"function" in data[:4096] and all((b in (9,10,13) or 32 <= b < 127) for b in data[:4096]):
