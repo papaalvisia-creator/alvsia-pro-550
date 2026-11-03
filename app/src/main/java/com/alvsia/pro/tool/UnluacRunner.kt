@@ -249,7 +249,7 @@ object UnluacRunner {
                         // getRemaining() is the unconsumed tail of the last
                         // input buffer; subtract it from the file position to
                         // find the exact end of this DEFLATE member.
-                        memberEndOffset = raf.filePointer - inflater.remaining().toLong()
+                        memberEndOffset = raf.filePointer - inflater.remaining.toLong()
                     }
                 }
             }
