@@ -128,6 +128,44 @@ class TestVersionSpecificFallbacks(unittest.TestCase):
             self.assertTrue(result["out"].endswith(".asm.txt"))
 
 
+
+class TestLuaCandidateDeduplication(unittest.TestCase):
+    def test_candidates_with_same_prefix_but_different_payload_are_all_tried(self):
+        base = b"\\x1bLua\\x53" + b"A" * 4091
+        source = base + b"0"
+        bgmi = base + b"B"
+        heping = base + b"C"
+
+        class FakeConverter:
+            def __init__(self, variant="bgmi"):
+                self.variant = variant
+
+            def convert_bytes(self, _data):
+                return bgmi if self.variant == "bgmi" else heping
+
+        def accept_only_heping(candidate):
+            if bytes(candidate)[-1:] != b"C":
+                raise ValueError("fixture rejects this candidate")
+            return object()
+
+        with tempfile.TemporaryDirectory() as td:
+            src = Path(td) / "candidate.luac"
+            dst = Path(td) / "candidate.lua"
+            src.write_bytes(source)
+            with patch("alvsia_private.LuaOpcodeConverter", FakeConverter):
+                with patch("lua_engine.decompiler53.load_chunk",
+                           side_effect=accept_only_heping):
+                    with patch("lua_engine.decompiler53.decompile_bytes",
+                               return_value="return 7"):
+                        with patch("lua_engine.streaming_decompiler.validate_lua_source",
+                                   return_value=(True, "fixture source accepted")):
+                            from lua_engine.streaming_decompiler import stream_decompile_lua53
+                            ok, message = stream_decompile_lua53(src, dst)
+
+            self.assertTrue(ok, message)
+            self.assertIn("variant=heping", message)
+            self.assertEqual(dst.read_text(encoding="utf-8"), "return 7")
+
 class TestStreamInflate(unittest.TestCase):
     def test_recover_lua_payload_from_deflate(self):
         """Build a synthetic chunked-raw-DEFLATE container whose payload
