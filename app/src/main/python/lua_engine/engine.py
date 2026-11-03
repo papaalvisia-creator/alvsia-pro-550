@@ -245,10 +245,37 @@ def analyze_lua(path, out_dir=None, keys=None):
         result["xor_candidates"]=sorted(candidates,key=lambda x:-x["score"])[:8]
     return result
 
+def _pick_unluac_jar(jars_dir):
+    """Find a supported unluac JAR without assuming a host-specific path."""
+    if not jars_dir:
+        return None
+    root = Path(jars_dir)
+    if not root.is_dir():
+        return None
+    preferred = ("unluac_2025_12_23.jar", "unluac_pro.jar",
+                 "unluac_patched.jar", "unluac.jar")
+    for name in preferred:
+        candidate = root / name
+        if candidate.is_file() and candidate.stat().st_size > 1000:
+            return candidate
+    for candidate in sorted(root.glob("unluac*.jar")):
+        if candidate.is_file() and candidate.stat().st_size > 1000:
+            return candidate
+    return None
+
+
 def decompile_lua(path, out_dir, jars_dir=None, timeout=120):
     p=Path(path); out=Path(out_dir); out.mkdir(parents=True,exist_ok=True)
+    if not p.is_file():
+        return {"ok": False, "error": "input file not found", "file": str(p)}
+    # Always initialize the destination: the bytecode fallback path must not
+    # depend on the input being detected as source first.
+    dest=out/(p.stem+"_decompiled.lua")
     info=detect_lua(p)
     normalized=p; container=None
+    jar = _pick_unluac_jar(jars_dir)
+    java = _find_java()
+    jar_error = None if jar is not None else "unluac JAR not found in configured jars directory"
     try:
         raw_head = p.read_bytes()[:2]
         is_zlib = len(raw_head) == 2 and raw_head[0] == 0x78 and (raw_head[0] * 256 + raw_head[1]) % 31 == 0
@@ -258,8 +285,19 @@ def decompile_lua(path, out_dir, jars_dir=None, timeout=120):
             info=detect_lua(normalized)
     except Exception as exc:
         return {"ok":False,"error":str(exc),"format":"container-unknown"}
-    if info.kind=="source":
-        dest=out/(p.stem+"_decompiled.lua")
+    if info.kind == "source":
+        source_text = normalized.read_text(encoding="utf-8", errors="replace")
+        valid, validation = validate_lua_source(source_text)
+        if not valid:
+            return {"ok": False, "error": "source input failed validation: " + validation,
+                    "format": info.format}
+        dest.write_text(source_text, encoding="utf-8")
+        return {"ok": True, "mode": "source_passthrough", "out": str(dest),
+                "format": info.format, "validation": validation}
+
+    if info.kind != "bytecode":
+        return {"ok": False, "error": "input is not recognized Lua bytecode",
+                "format": info.format, "version": info.version}
 
     def _try_streaming_fallback(reason):
         if info.format != "luac" or info.version != "Lua 5.3":
