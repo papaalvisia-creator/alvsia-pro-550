@@ -3,8 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 import zlib
 
-LUA_MAGIC = b"\\x1bLua"
-LJ_MAGIC = b"\\x1bLJ"
+LUA_MAGIC = b"\x1bLua"
+LJ_MAGIC = b"\x1bLJ"
 _DEFLATE_INPUT_CHUNK = 64 * 1024
 
 
@@ -97,7 +97,7 @@ def unwrap_lua_container(data: bytes, max_output: int = 256 * 1024 * 1024):
                 lines = prefix.splitlines()
                 if lines and all(not line.strip() or line.lstrip().startswith(("--", "#!"))
                                  for line in lines) and not any(
-                    ord(ch) < 32 and ch not in "\\t\\r\\n" for ch in prefix
+                    ord(ch) < 32 and ch not in "\t\r\n" for ch in prefix
                 ):
                     has_lua = True
                     break
@@ -113,7 +113,7 @@ def unwrap_lua_container(data: bytes, max_output: int = 256 * 1024 * 1024):
     pos = 0
     total = 0
     skipped_candidates = 0
-    marker_bytes = b"\\x78\\xda"
+    marker_bytes = b"\x78\xda"
 
     while True:
         marker = data.find(marker_bytes, pos)
