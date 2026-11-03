@@ -11,6 +11,7 @@ import os
 import struct
 import sys
 import tempfile
+import types
 import unittest
 from unittest.mock import patch
 import zlib
@@ -152,7 +153,8 @@ class TestLuaCandidateDeduplication(unittest.TestCase):
             src = Path(td) / "candidate.luac"
             dst = Path(td) / "candidate.lua"
             src.write_bytes(source)
-            with patch("alvsia_private.LuaOpcodeConverter", FakeConverter):
+            fake_private = types.SimpleNamespace(LuaOpcodeConverter=FakeConverter)
+            with patch.dict(sys.modules, {"alvsia_private": fake_private}):
                 with patch("lua_engine.decompiler53.load_chunk",
                            side_effect=accept_only_heping):
                     with patch("lua_engine.decompiler53.decompile_bytes",
