@@ -290,7 +290,7 @@ object UnluacRunner {
         }
         output.parentFile?.mkdirs()
 
-        val size = input.length()
+        val inputSize = input.length()
         val lines = mutableListOf<String>()
 
         // Stage 1: Try streaming container unwrap (works for any size).
@@ -305,26 +305,30 @@ object UnluacRunner {
             lines.add("OK LUA container -> $containerNote")
         }
 
-        // Stage 2: Decide path based on size.
-        if (size > ART_HARD_LIMIT) {
+        // Stage 2: Decide path using the actual bytes passed to ART.
+        // A small compressed wrapper can expand dramatically; checking only
+        // the original file size could send a huge normalized chunk into the
+        // in-process parser and cause an Android OOM.
+        val normalizedSize = normalized.length()
+        if (normalizedSize > ART_HARD_LIMIT) {
             // Too large for in-process unluac; mark and let caller fall through
             // to the Python streaming fallback in alvsia_bridge_impl.
             lines.add(
-                "... ART unluac skipped: input $size bytes exceeds ART_HARD_LIMIT ($ART_HARD_LIMIT)"
+                "... ART unluac skipped: normalized payload $normalizedSize bytes exceeds ART_HARD_LIMIT ($ART_HARD_LIMIT)"
             )
             lines.add("diagnostic: switching to streaming Python decompiler fallback")
-            // Ensure normalized file is preserved if it exists; caller will
-            // route to the Python path.
+            lines.add("diagnostic: original input=$inputSize bytes; normalized payload=$normalizedSize bytes")
             if (normalized != input && normalized.isFile) {
                 lines.add("OK normalized container -> ${normalized.absolutePath}")
             }
             return lines
         }
 
-        if (size > ART_SAFE_LIMIT) {
+        if (normalizedSize > ART_SAFE_LIMIT) {
             lines.add(
-                "... ART unluac skipped: input $size bytes exceeds ART_SAFE_LIMIT ($ART_SAFE_LIMIT)"
+                "... ART unluac skipped: normalized payload $normalizedSize bytes exceeds ART_SAFE_LIMIT ($ART_SAFE_LIMIT)"
             )
+            lines.add("diagnostic: original input=$inputSize bytes; normalized payload=$normalizedSize bytes")
             lines.add("diagnostic: Python fallback will handle this input")
             if (normalized != input && normalized.isFile) {
                 lines.add("OK normalized container -> ${normalized.absolutePath}")
