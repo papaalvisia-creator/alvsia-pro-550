@@ -14,15 +14,77 @@ def _find_java():
             return name
     return None
 
+def _lua_code_without_literals(text: str) -> str:
+    """Blank Lua strings/comments before structural keyword checks."""
+    out = list(text)
+    i = 0
+    n = len(text)
+
+    def blank(a: int, b: int) -> None:
+        for pos in range(a, b):
+            if out[pos] not in "\r\n":
+                out[pos] = " "
+
+    def long_bracket_end(pos: int):
+        if pos >= n or text[pos] != "[":
+            return None
+        j = pos + 1
+        while j < n and text[j] == "=":
+            j += 1
+        if j < n and text[j] == "[":
+            return j - pos - 1, j + 1
+        return None
+
+    while i < n:
+        if text[i] in ("'", '"'):
+            quote, start = text[i], i
+            i += 1
+            while i < n:
+                if text[i] == "\\":
+                    i += 2
+                elif text[i] == quote:
+                    i += 1
+                    break
+                else:
+                    i += 1
+            blank(start, min(i, n))
+            continue
+        if text.startswith("--", i):
+            start = i
+            long = long_bracket_end(i + 2)
+            if long:
+                eq_count, body_start = long
+                close = "]" + ("=" * eq_count) + "]"
+                end = text.find(close, body_start)
+                i = n if end < 0 else end + len(close)
+            else:
+                end = text.find("\n", i + 2)
+                i = n if end < 0 else end
+            blank(start, i)
+            continue
+        long = long_bracket_end(i)
+        if long:
+            eq_count, body_start = long
+            close = "]" + ("=" * eq_count) + "]"
+            end = text.find(close, body_start)
+            stop = n if end < 0 else end + len(close)
+            blank(i, stop)
+            i = stop
+            continue
+        i += 1
+    return "".join(out)
+
+
 def _looks_like_lua_source(text: str) -> bool:
     if not text.strip():
         return False
-    # Reject obvious binary garbage while allowing UTF-8 source/comments.
     sample = text[:8192]
     bad = sum(1 for c in sample if ord(c) < 9 or (13 < ord(c) < 32))
     if bad > max(2, len(sample)//100):
         return False
-    return bool(re.search(r"\b(?:local|function|return|if|for|while|repeat|do|end)\b", sample))
+    code = _lua_code_without_literals(sample)
+    return bool(re.search(r"\b(?:local|function|return|if|for|while|repeat|do|end)\b", code))
+
 
 def validate_lua_source(path_or_text) -> tuple[bool, str]:
     if isinstance(path_or_text, (str, Path)) and Path(str(path_or_text)).is_file():
@@ -31,15 +93,23 @@ def validate_lua_source(path_or_text) -> tuple[bool, str]:
         text = str(path_or_text)
     if not _looks_like_lua_source(text):
         return False, "output does not look like Lua source"
-    # Lightweight structural validation; Lua grammar is not Python grammar.
-    pairs = {"end": 0, "function": 0, "if": 0, "for": 0, "while": 0, "do": 0}
-    tokens = re.findall(r'(?<![%\w_])(function|if|for|while|repeat|do|end|until)(?![\w_])', text)
+    code = _lua_code_without_literals(text)
+    tokens = re.findall(r'(?<![%\w_])(function|if|for|while|repeat|do|end|until)(?![\w_])', code)
     stack = []
     for tok in tokens:
-        if tok in ("function", "if", "for", "while", "do", "repeat"):
-            stack.append(tok)
+        if tok in ("function", "if", "repeat"):
+            stack.append({"kind": tok, "awaiting_do": False})
+        elif tok in ("for", "while"):
+            stack.append({"kind": tok, "awaiting_do": True})
+        elif tok == "do":
+            pending = next((entry for entry in reversed(stack)
+                            if entry["kind"] in ("for", "while") and entry["awaiting_do"]), None)
+            if pending is not None:
+                pending["awaiting_do"] = False
+            else:
+                stack.append({"kind": "do", "awaiting_do": False})
         elif tok == "until":
-            if not stack or stack[-1] != "repeat":
+            if not stack or stack[-1]["kind"] != "repeat":
                 return False, "unmatched until"
             stack.pop()
         elif tok == "end":
@@ -47,8 +117,11 @@ def validate_lua_source(path_or_text) -> tuple[bool, str]:
                 return False, "unmatched end"
             stack.pop()
     if stack:
-        return False, "unclosed Lua block(s): " + ",".join(stack[-8:])
+        return False, "unclosed Lua block(s): " + ",".join(
+            entry["kind"] for entry in stack[-8:]
+        )
     return True, "syntax structure looks consistent"
+
 
 def _extract_strings(data: bytes, minimum=4):
     out=[]; cur=bytearray()
