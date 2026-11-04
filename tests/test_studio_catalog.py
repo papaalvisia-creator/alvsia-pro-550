@@ -31,7 +31,7 @@ class StudioCatalogTests(unittest.TestCase):
 
     def test_declared_subtool_inventory_has_unique_ids(self):
         menus = (ROOT / "app/src/main/java/com/alvsia/pro/tool/SubMenus.kt").read_text(encoding="utf-8")
-        subtool_ids = re.findall(r'SubTool\\(\\s*"([^"]+)"', menus)
+        subtool_ids = re.findall(r'SubTool\(\s*"([^"]+)"', menus)
         self.assertEqual(len(subtool_ids), 85, "Update the documented sub-tool inventory when tools change")
         self.assertEqual(len(set(subtool_ids)), 85, "Sub-tool IDs must be unique")
 
