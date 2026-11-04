@@ -15,6 +15,15 @@ class UnifiedProcessPageTests(unittest.TestCase):
         self.assertIn('if (logMode == "advanced")', source)
         self.assertIn("LinearProgressIndicator(", source)
 
+
+    def test_destructive_workspace_clear_requires_explicit_confirmation(self):
+        source = SCREEN.read_text(encoding="utf-8")
+        self.assertIn('var confirmClearWorkspace by remember(sub.id) { mutableStateOf(false) }', source)
+        self.assertIn('if (sub.id == "clear_work")', source)
+        self.assertIn('if (confirmClearWorkspace)', source)
+        self.assertIn('This action permanently removes files in WORK and OUT', source)
+        self.assertIn('Text("CANCEL"', source)
+
     def test_existing_run_config_and_log_export_paths_remain(self):
         source = SCREEN.read_text(encoding="utf-8")
         self.assertIn("onRun(uri, null)", source)
