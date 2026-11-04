@@ -443,6 +443,7 @@ if __name__ == "__main__":
         test_reference_inspectors_format_and_archive_fixtures,
         test_xor_known_vector_selftest_is_registered,
         test_decrypt_known_answer_selftest_is_registered,
+        test_private_module_19_uses_dedicated_workspace_paths,
     )
     for test in tests:
         test()
