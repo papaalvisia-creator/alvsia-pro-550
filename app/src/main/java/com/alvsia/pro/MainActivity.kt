@@ -38,6 +38,8 @@ import com.alvsia.pro.tool.ToolCatalog
 import com.alvsia.pro.tool.CoreSession
 import com.alvsia.pro.tool.ToolEngine
 import com.alvsia.pro.ui.home.HomeScreen
+import com.alvsia.pro.ui.home.StudioItem
+import com.alvsia.pro.ui.home.StudioScreen
 import com.alvsia.pro.ui.loading.LoadingScreen
 import com.alvsia.pro.ui.login.LoginScreen
 import com.alvsia.pro.ui.splash.SplashScreen
@@ -83,6 +85,8 @@ class MainActivity : ComponentActivity() {
                 var loadMsg by remember { mutableStateOf("Decrypting secure core...") }
                 var loadProgress by remember { mutableStateOf(0f) }
                 var moduleId by remember { mutableStateOf(0) }
+                var selectedStudio by remember { mutableStateOf<StudioItem?>(null) }
+                var moduleReturnScreen by remember { mutableStateOf("home") }
                 var activeSub by remember { mutableStateOf<SubTool?>(null) }
                 var logs by remember { mutableStateOf(listOf<String>()) }
                 var running by remember { mutableStateOf(false) }
@@ -145,6 +149,10 @@ class MainActivity : ComponentActivity() {
                         }
                         "submenu" -> {
                             moduleId = 0
+                            screen = moduleReturnScreen
+                        }
+                        "studio" -> {
+                            selectedStudio = null
                             screen = "home"
                         }
                         "profile" -> screen = "home"
@@ -299,18 +307,42 @@ class MainActivity : ComponentActivity() {
                             }
                         },
                         onProfile = { screen = "profile" },
+                        onStudio = { studio ->
+                            selectedStudio = studio
+                            screen = "studio"
+                        },
                         onTool = { t ->
+                            moduleReturnScreen = "home"
                             moduleId = t.id
                             activeSub = null
                             logs = emptyList()
                             screen = "submenu"
                         }
                     )
+                    "studio" -> {
+                        val studio = selectedStudio
+                        if (studio == null) {
+                            LaunchedEffect(Unit) { screen = "home" }
+                        } else {
+                            StudioScreen(
+                                studio = studio,
+                                tools = tools,
+                                onBack = { selectedStudio = null; screen = "home" },
+                                onTool = { t ->
+                                    moduleReturnScreen = "studio"
+                                    moduleId = t.id
+                                    activeSub = null
+                                    logs = emptyList()
+                                    screen = "submenu"
+                                }
+                            )
+                        }
+                    }
                     "submenu" -> SubMenuScreen(
                         moduleTitle = SubMenus.title(moduleId),
                         moduleId = moduleId,
                         items = SubMenus.forModule(moduleId),
-                        onBack = { screen = "home" },
+                        onBack = { screen = moduleReturnScreen },
                         onSelect = { sub ->
                             activeSub = sub
                             logs = emptyList()
