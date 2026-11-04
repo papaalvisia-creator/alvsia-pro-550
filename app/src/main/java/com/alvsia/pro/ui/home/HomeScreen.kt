@@ -79,6 +79,7 @@ fun HomeScreen(
     messages: List<LiveMessage> = emptyList(),
     onMessageRead: (LiveMessage) -> Unit = {},
     onProfile: () -> Unit,
+    onStudio: (StudioItem) -> Unit,
     onTool: (ToolItem) -> Unit
 ) {
     val ctx = LocalContext.current
@@ -275,25 +276,72 @@ fun HomeScreen(
                 textStyle = androidx.compose.ui.text.TextStyle(fontSize = 13.sp)
             )
 
-            Text("TOOL ARSENAL  /  ${filteredTools.size} MODULES", color = AlvisiaCyan.copy(alpha = 0.9f), fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.2.sp)
+            Text(
+                if (searchQuery.isBlank()) "SEVEN STUDIOS  /  19 MODULES"
+                else "SEARCH RESULTS  /  ${filteredTools.size} MODULES",
+                color = AlvisiaCyan.copy(alpha = 0.9f),
+                fontSize = 10.sp,
+                fontWeight = FontWeight.Bold,
+                letterSpacing = 1.2.sp
+            )
             Spacer(Modifier.height(8.dp))
-            LazyVerticalGrid(
-                columns = GridCells.Fixed(3),
-                contentPadding = PaddingValues(2.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp),
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
-                modifier = Modifier.fillMaxSize()
-            ) {
-                items(filteredTools, key = { it.id }) { tool ->
-                    val colors = chipColors[(tool.id - 1) % chipColors.size]
-                    NeonModuleChip(
-                        id = tool.id,
-                        title = tool.title,
-                        colors = colors,
-                        onClick = { onTool(tool) }
-                    )
+            if (searchQuery.isBlank()) {
+                LazyVerticalGrid(
+                    columns = GridCells.Fixed(2),
+                    contentPadding = PaddingValues(2.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    modifier = Modifier.fillMaxSize()
+                ) {
+                    items(StudioCatalog.all, key = { it.id }) { studio ->
+                        StudioChip(studio = studio, onClick = { onStudio(studio) })
+                    }
+                }
+            } else {
+                LazyVerticalGrid(
+                    columns = GridCells.Fixed(2),
+                    contentPadding = PaddingValues(2.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    modifier = Modifier.fillMaxSize()
+                ) {
+                    items(filteredTools, key = { it.id }) { tool ->
+                        val colors = chipColors[(tool.id - 1) % chipColors.size]
+                        NeonModuleChip(
+                            id = tool.id,
+                            title = tool.title,
+                            colors = colors,
+                            onClick = { onTool(tool) }
+                        )
+                    }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun StudioChip(
+    studio: StudioItem,
+    onClick: () -> Unit
+) {
+    Box(
+        Modifier
+            .height(118.dp)
+            .fillMaxWidth()
+            .shadow(10.dp, RoundedCornerShape(16.dp), ambientColor = AlvisiaBlue.copy(alpha = 0.35f), spotColor = AlvisiaCyan)
+            .clip(RoundedCornerShape(16.dp))
+            .background(Brush.linearGradient(listOf(Color(0xFF14283B), Color(0xFF1B2B31))))
+            .border(1.dp, AlvisiaCyan.copy(alpha = 0.24f), RoundedCornerShape(16.dp))
+            .clickable(onClick = onClick)
+            .padding(11.dp)
+    ) {
+        Column {
+            Text(studio.icon, fontSize = 22.sp)
+            Spacer(Modifier.height(4.dp))
+            Text(studio.title, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+            Text("${studio.moduleIds.size} MODULES", color = AlvisiaCyan, fontWeight = FontWeight.Bold, fontSize = 9.sp)
+            Text(studio.description, color = AlvisiaSilver.copy(alpha = 0.62f), fontSize = 9.sp, maxLines = 2, lineHeight = 11.sp)
         }
     }
 }
