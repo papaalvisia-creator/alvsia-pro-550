@@ -34,3 +34,25 @@
 ## Catatan / Belum Terselesaikan
 - Zoul.lua (1.004.870 byte, SHA-256 d129479b…ce53f, 159.411 `EF BF BD`): sampel tidak ada di repo; kerusakan terbukti akibat binary→text, pemulihan byte mustahil tanpa binary asli (tidak memfabrikasi data).
 - Verifikasi fungsional end-to-end Lua Reconstruction/Extractor/Protector/Inject pada perangkat nyata belum dijalankan.
+
+## APK installability fix (build 1168, run 41760231457)
+
+Device reported `INSTALL_FAILED_INVALID_APK` ("paket tidak valid"). Root cause: the manifest uses
+`android:extractNativeLibs="false"`, which requires every `lib/<abi>/*.so` to be ZIP_STORED and
+page-aligned. XopProtector re-injected `libprotector.so`, `libc++_shared.so` and `libshadowhook.so`
+with DEFLATE, producing a mixed-compression APK that PackageManager rejects.
+
+Fix: `tools/normalize_apk_packaging.py` rewrites only the compression method of `lib/**/*.so`;
+the validation workflow now runs normalize -> `zipalign -p -f 4` -> `apksigner sign` ->
+`apksigner verify` -> `normalize --check` -> `zipalign -c -p 4`.
+
+Verified on build 1168:
+- `PASS: normalised 3 native librar(y/ies) to STORED`
+- `PASS: every lib/**/*.so entry is stored uncompressed`
+- 9/9 native libraries STORED, data offsets page-aligned (4096)
+- `zipalign -c -p -v 4`: Verification successful
+- APK Signature Scheme v2 block present; cert pin `99b33815...f295c` matched
+- `AndroidManifest.xml` and `resources.arsc` byte-identical to the previous build
+  (package identity, permissions, version, extractNativeLibs untouched)
+- 43/43 release audit checks PASS, `RESULT=PASS`
+- APK 25.736.732 bytes, SHA-256 `610c3dbfd5123d680bdb0ec420da02d9ea882e341c16b3bcf4e8ebc75b4ac744`
