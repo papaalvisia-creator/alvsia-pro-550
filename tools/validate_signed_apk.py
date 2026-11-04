@@ -37,6 +37,10 @@ def certificate_sha256(signature_output: str) -> str:
     return digest
 
 
+def alignment_check_args(aligner: Path, apk: Path) -> list[str]:
+    """Require 16 KiB page alignment for every uncompressed native library."""
+    return [str(aligner), "-c", "-P", "16", "-v", "4", str(apk)]
+
 def main():
     if len(sys.argv) != 5:
         raise SystemExit("usage: validate_apk.py APK APKSIGNER ZIPALIGN AAPT")
@@ -60,7 +64,7 @@ def main():
         missing = [name for name in required if name not in names]
         if missing:
             raise SystemExit("Required APK entries missing: " + ", ".join(missing))
-    alignment = command([str(aligner), "-c", "-v", "4", str(apk)])
+    alignment = command(alignment_check_args(aligner, apk))
     if "Verification successful" not in alignment:
         raise SystemExit("APK alignment verification did not pass")
     signature = command([str(signer), "verify", "--verbose", "--print-certs", str(apk)])
