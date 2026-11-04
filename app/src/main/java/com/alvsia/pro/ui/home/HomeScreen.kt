@@ -79,6 +79,7 @@ fun HomeScreen(
     messages: List<LiveMessage> = emptyList(),
     onMessageRead: (LiveMessage) -> Unit = {},
     onProfile: () -> Unit,
+    onWorkspace: () -> Unit,
     onStudio: (StudioItem) -> Unit,
     onTool: (ToolItem) -> Unit
 ) {
@@ -248,7 +249,7 @@ fun HomeScreen(
                 QuickAction("VM Deobf", AlvisiaBlue) { onTool(ToolItem(5, "LUA Tools", "VM Deobfuscate")) }
                 QuickAction("Strings", AlvisiaBlue) { onTool(ToolItem(6, "File Scan", "String scan")) }
                 QuickAction("Rebrand", AlvisiaBlue) { onTool(ToolItem(9, "Rebrand", "Auto")) }
-                QuickAction("Workspace", AlvisiaBlue) { onTool(ToolItem(7, "Workspace", "Clear")) }
+                QuickAction("Outputs", AlvisiaBlue, onWorkspace)
                 QuickAction("Protect", AlvisiaBlue) { onTool(ToolItem(18, "Lua Protector", "VM Protect")) }
             }
             Spacer(Modifier.height(6.dp))
