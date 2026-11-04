@@ -110,6 +110,7 @@ fun ToolWorkspaceScreen(
     val configValues = remember(sub.id) {
         mutableStateOf(configSchema.associate { it.field to (it.default ?: "") })
     }
+    var recentFiles by remember { mutableStateOf(UXStore.getRecentDisplayNames(ctx)) }
 
     LaunchedEffect(initialUri) {
         if (initialUri != null) {
@@ -165,7 +166,6 @@ fun ToolWorkspaceScreen(
         Spacer(Modifier.height(8.dp))
 
         // ── Recent Files carousel ───────────────────────────────────────
-        var recentFiles by remember { mutableStateOf(UXStore.getRecentDisplayNames(ctx)) }
         if (recentFiles.isNotEmpty()) {
             Text("RECENT", color = AlvisiaSilver.copy(alpha = 0.4f), fontSize = 9.sp)
             Spacer(Modifier.height(4.dp))
