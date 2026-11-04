@@ -116,6 +116,7 @@ fun ToolWorkspaceScreen(
             uri = initialUri
             detectionResult = FileMagic.detect(ctx, initialUri)
             UXStore.addRecent(ctx, initialUri)
+            recentFiles = UXStore.getRecentDisplayNames(ctx)
         }
     }
 
@@ -125,6 +126,7 @@ fun ToolWorkspaceScreen(
         uri = u
         if (u != null) {
             UXStore.addRecent(ctx, u)
+            recentFiles = UXStore.getRecentDisplayNames(ctx)
             detectionResult = FileMagic.detect(ctx, u)
         }
     }
@@ -146,13 +148,14 @@ fun ToolWorkspaceScreen(
                 Text("← BACK", color = AlvisiaCyan, fontWeight = FontWeight.Bold, fontSize = 12.sp)
             }
             // Favorites star
-            val isFav = remember(sub.id) { UXStore.isFavorite(ctx, sub.id) }
+            var isFav by remember(sub.id) { mutableStateOf(UXStore.isFavorite(ctx, sub.id)) }
             Text(
                 text = if (isFav) "★" else "☆",
                 color = if (isFav) Color(0xFFFFD700) else AlvisiaSilver.copy(alpha = 0.4f),
                 fontSize = 18.sp,
                 modifier = Modifier.clickable {
                     UXStore.toggleFavorite(ctx, sub.id)
+                    isFav = UXStore.isFavorite(ctx, sub.id)
                 }
             )
         }
@@ -162,7 +165,7 @@ fun ToolWorkspaceScreen(
         Spacer(Modifier.height(8.dp))
 
         // ── Recent Files carousel ───────────────────────────────────────
-        val recentFiles = remember { UXStore.getRecentDisplayNames(ctx) }
+        var recentFiles by remember { mutableStateOf(UXStore.getRecentDisplayNames(ctx)) }
         if (recentFiles.isNotEmpty()) {
             Text("RECENT", color = AlvisiaSilver.copy(alpha = 0.4f), fontSize = 9.sp)
             Spacer(Modifier.height(4.dp))
