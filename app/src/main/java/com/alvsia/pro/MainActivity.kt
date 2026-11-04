@@ -1,6 +1,7 @@
 package com.alvsia.pro
 
 import android.os.Bundle
+import android.net.Uri
 import android.Manifest
 import android.content.pm.PackageManager
 import android.os.Build
@@ -40,6 +41,7 @@ import com.alvsia.pro.tool.ToolEngine
 import com.alvsia.pro.ui.home.HomeScreen
 import com.alvsia.pro.ui.home.StudioItem
 import com.alvsia.pro.ui.home.StudioScreen
+import com.alvsia.pro.ui.output.OutputBrowserScreen
 import com.alvsia.pro.ui.loading.LoadingScreen
 import com.alvsia.pro.ui.login.LoginScreen
 import com.alvsia.pro.ui.splash.SplashScreen
@@ -86,6 +88,7 @@ class MainActivity : ComponentActivity() {
                 var loadProgress by remember { mutableStateOf(0f) }
                 var moduleId by remember { mutableStateOf(0) }
                 var selectedStudio by remember { mutableStateOf<StudioItem?>(null) }
+                var pendingInputUri by remember { mutableStateOf<Uri?>(null) }
                 var moduleReturnScreen by remember { mutableStateOf("home") }
                 var activeSub by remember { mutableStateOf<SubTool?>(null) }
                 var logs by remember { mutableStateOf(listOf<String>()) }
@@ -97,7 +100,7 @@ class MainActivity : ComponentActivity() {
                 // Login contains a license key; tool/profile contain workspace data.
                 LaunchedEffect(screen) {
                     if (screen == "login" || screen == "loading" ||
-                        screen == "tool" || screen == "profile") {
+                        screen == "tool" || screen == "profile" || screen == "output") {
                         window.setFlags(
                             WindowManager.LayoutParams.FLAG_SECURE,
                             WindowManager.LayoutParams.FLAG_SECURE
@@ -153,8 +156,10 @@ class MainActivity : ComponentActivity() {
                         }
                         "studio" -> {
                             selectedStudio = null
+                            pendingInputUri = null
                             screen = "home"
                         }
+                        "output" -> screen = "home"
                         "profile" -> screen = "home"
                         else -> { }
                     }
@@ -307,12 +312,14 @@ class MainActivity : ComponentActivity() {
                             }
                         },
                         onProfile = { screen = "profile" },
+                        onWorkspace = { screen = "output" },
                         onStudio = { studio ->
                             selectedStudio = studio
                             screen = "studio"
                         },
                         onTool = { t ->
                             moduleReturnScreen = "home"
+                            pendingInputUri = null
                             moduleId = t.id
                             activeSub = null
                             logs = emptyList()
@@ -327,7 +334,7 @@ class MainActivity : ComponentActivity() {
                             StudioScreen(
                                 studio = studio,
                                 tools = tools,
-                                onBack = { selectedStudio = null; screen = "home" },
+                                onBack = { selectedStudio = null; pendingInputUri = null; screen = "home" },
                                 onTool = { t ->
                                     moduleReturnScreen = "studio"
                                     moduleId = t.id
@@ -366,6 +373,7 @@ class MainActivity : ComponentActivity() {
                                     screen = "submenu"
                                 },
                                 onRun = { uri, extra ->
+                                    pendingInputUri = null
                                     running = true
                                     logs = listOf("> preparing ${sub.id}...")
                                     lifecycleScope.launch {
@@ -397,10 +405,19 @@ class MainActivity : ComponentActivity() {
                                         )
                                         running = false
                                     }
-                                }
+                                },
+                                initialUri = pendingInputUri
                             )
                         }
                     }
+                    "output" -> OutputBrowserScreen(
+                        onBack = { screen = "home" },
+                        onUseWithStudio = { studio, uri ->
+                            selectedStudio = studio
+                            pendingInputUri = uri
+                            screen = "studio"
+                        }
+                    )
                     "profile" -> ProfileScreen(
                         product = product,
                         expiry = expiry,
