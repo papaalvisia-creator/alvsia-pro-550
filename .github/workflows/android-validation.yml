@@ -313,6 +313,7 @@ jobs:
           "$APKSIGNER" verify --verbose --print-certs "$SIGNED"
           python3 tools/normalize_apk_packaging.py --check "$SIGNED"
           "$ZIPALIGN" -c -p -v 4 "$SIGNED"
+          python3 -m unittest tests.test_signed_apk_validator
           python3 tools/validate_signed_apk.py "$SIGNED" "$APKSIGNER" "$ZIPALIGN" "$AAPT"
           python3 tools/audit_release_apk.py "$SIGNED"
           cp release_security_audit.txt validation-artifacts/xop_candidate_security_audit.txt
