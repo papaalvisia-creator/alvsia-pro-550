@@ -453,3 +453,11 @@ if __name__ == "__main__":
 
 
 
+
+
+def test_private_module_19_uses_dedicated_workspace_paths():
+    paths = (ROOT / "app/src/main/java/com/alvsia/pro/tool/WorkPaths.kt").read_text(encoding="utf-8")
+    bridge = BRIDGE_IMPL.read_text(encoding="utf-8")
+    assert '19 -> "ALVSIA_PRIVATE"' in paths
+    assert "for (id in 1..19)" in paths
+    assert 'dest = out_dir("ALVSIA_PRIVATE")' in bridge
