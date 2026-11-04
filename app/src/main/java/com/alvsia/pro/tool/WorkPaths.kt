@@ -79,12 +79,13 @@ object WorkPaths {
         16 -> "LINJ"
         17 -> "AUDIT"
         18 -> "LPROTECT"
+        19 -> "ALVSIA_PRIVATE"
         else -> "MISC"
     }
 
     fun ensureTree() {
         dirIn(); dirWork(); dirOut()
-        for (id in 1..18) {
+        for (id in 1..19) {
             moduleIn(id); moduleWork(id); moduleOut(id)
         }
     }
@@ -104,7 +105,7 @@ object WorkPaths {
                   WORK/<MODULE>/  temp / intermediate
                   OUT/<MODULE>/   final results (always check here)
 
-                Modules: PAK OBB LUA SCAN ASSET REPORT REBRAND SO FRIDA XOR DEC PAKD STR LINJ AUDIT LPROTECT
+                Modules: PAK OBB LUA SCAN ASSET REPORT REBRAND SO FRIDA XOR DEC PAKD STR LINJ AUDIT LPROTECT ALVSIA_PRIVATE
 
                 Key:  @ALVSIA_PRO
                 Owner: @OriginalOnwerALV
