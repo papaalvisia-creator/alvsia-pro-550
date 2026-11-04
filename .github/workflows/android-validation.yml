@@ -63,6 +63,7 @@ jobs:
           PY
           python3 tests/test_tool_dispatch.py
           python3 tests/test_studio_catalog.py
+          python3 tests/test_process_page.py
           python3 -m unittest tests.test_private_tool_engine
 
       - name: Run sealed payload cryptographic tests
