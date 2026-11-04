@@ -29,6 +29,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
@@ -84,6 +85,22 @@ fun ToolWorkspaceScreen(
     val ctx = LocalContext.current
     var uri by remember { mutableStateOf<Uri?>(null) }
     var detectionResult by remember { mutableStateOf<FileMagic.DetectionResult?>(null) }
+    var logMode by remember(sub.id) { mutableStateOf("simple") }
+    val errorLine = logs.firstOrNull { it.startsWith("X ") }
+    val successLine = logs.firstOrNull { it.startsWith("OK ") }
+    val simpleSummary = when {
+        running -> "ALVSIA sedang memproses pekerjaan ini. Tunggu sampai status selesai."
+        errorLine != null -> errorLine.removePrefix("X ").trim()
+        successLine != null -> "Proses selesai. ${successLine.removePrefix("OK ").trim()}"
+        logs.isNotEmpty() -> "Pekerjaan belum memiliki hasil final. Periksa log lanjutan jika diperlukan."
+        else -> "Pilih input dan tekan RUN untuk memulai pekerjaan."
+    }
+    val summaryColor = when {
+        running -> AlvisiaCyan
+        errorLine != null -> AlvisiaRed
+        successLine != null -> Color(0xFF00E676)
+        else -> AlvisiaSilver
+    }
 
     // Inline config form state: map of field name → user input value
     val configSchema = remember(sub.id) { subToolConfig(sub.id) }
@@ -278,7 +295,23 @@ fun ToolWorkspaceScreen(
         }
         Spacer(Modifier.height(6.dp))
 
-        // ── Log toolbar: COPY / SAVE ────────────────────────────────────
+        // ── Unified process result: Simple by default, Advanced on demand ──
+        Row(
+            Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text("PROCESS LOG", color = AlvisiaSilver.copy(alpha = 0.55f),
+                fontSize = 9.sp, fontWeight = FontWeight.Bold)
+            Spacer(Modifier.weight(1f))
+            TextButton(onClick = { logMode = "simple" }) {
+                Text("SIMPLE", color = if (logMode == "simple") AlvisiaCyan else AlvisiaSilver.copy(alpha = 0.45f),
+                    fontSize = 10.sp, fontWeight = FontWeight.Bold)
+            }
+            TextButton(onClick = { logMode = "advanced" }) {
+                Text("ADVANCED", color = if (logMode == "advanced") AlvisiaCyan else AlvisiaSilver.copy(alpha = 0.45f),
+                    fontSize = 10.sp, fontWeight = FontWeight.Bold)
+            }
+        }
         Row(
             Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(4.dp)
@@ -306,23 +339,56 @@ fun ToolWorkspaceScreen(
             }
         }
 
-        // ── Color-coded console ─────────────────────────────────────────
         Spacer(Modifier.height(4.dp))
-        LazyColumn(
-            Modifier
-                .weight(1f)
-                .background(Color(0xFF070D14), RoundedCornerShape(10.dp))
-                .padding(8.dp)
-        ) {
-            items(logs) { line ->
-                val color = when {
-                    line.startsWith("OK ") -> Color(0xFF00E676)  // green
-                    line.startsWith("X ") -> AlvisiaRed             // red
-                    line.startsWith("... ") -> Color(0xFFFFAA00)   // yellow
-                    line.startsWith("> ") -> AlvisiaCyan           // blue header
-                    else -> AlvisiaSilver                            // white/gray
+        if (logMode == "advanced") {
+            LazyColumn(
+                Modifier
+                    .weight(1f)
+                    .background(Color(0xFF070D14), RoundedCornerShape(10.dp))
+                    .padding(8.dp)
+            ) {
+                items(logs) { line ->
+                    val color = when {
+                        line.startsWith("OK ") -> Color(0xFF00E676)
+                        line.startsWith("X ") -> AlvisiaRed
+                        line.startsWith("... ") -> Color(0xFFFFAA00)
+                        line.startsWith("> ") -> AlvisiaCyan
+                        else -> AlvisiaSilver
+                    }
+                    Text(line, color = color, fontFamily = FontFamily.Monospace, fontSize = 10.sp)
                 }
-                Text(line, color = color, fontFamily = FontFamily.Monospace, fontSize = 10.sp)
+            }
+        } else {
+            Column(
+                Modifier
+                    .weight(1f)
+                    .fillMaxWidth()
+                    .background(Color(0xFF070D14), RoundedCornerShape(10.dp))
+                    .padding(14.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text(
+                    when {
+                        running -> "PROCESSING"
+                        errorLine != null -> "NEEDS ATTENTION"
+                        successLine != null -> "COMPLETED"
+                        else -> "READY"
+                    },
+                    color = summaryColor,
+                    fontWeight = FontWeight.Black,
+                    fontSize = 12.sp
+                )
+                if (running) {
+                    LinearProgressIndicator(
+                        modifier = Modifier.fillMaxWidth(),
+                        color = AlvisiaCyan
+                    )
+                }
+                Text(simpleSummary, color = Color.White, fontSize = 12.sp)
+                if (successLine != null && errorLine == null) {
+                    Text("Lihat folder OUT untuk membuka hasil pekerjaan.",
+                        color = AlvisiaSilver.copy(alpha = 0.65f), fontSize = 10.sp)
+                }
             }
         }
 
