@@ -56,3 +56,21 @@ Verified on build 1168:
   (package identity, permissions, version, extractNativeLibs untouched)
 - 43/43 release audit checks PASS, `RESULT=PASS`
 - APK 25.736.732 bytes, SHA-256 `610c3dbfd5123d680bdb0ec420da02d9ea882e341c16b3bcf4e8ebc75b4ac744`
+
+## Third-party channel credits in recovered Lua reports (build 1170)
+
+Imported scripts embed their author's watermark in the string table, e.g.
+`-- Dump By @SRC_HUB / Dev : @XTHrlen`. `run_lua_bytecode_strings()` and
+`extract_lua_constants()` wrote that text verbatim into `OUT/`, so ALVSIA
+output displayed another channel even though the app itself only references
+`t.me/ALVSIA_PRO`, `t.me/OriginalOnwerALV` and `alvsiapanel.unaux.com`.
+
+`alvsia_features.scrub_foreign_branding()` now rewrites known third-party
+brand/channel tokens to the owner's brand in generated report files only.
+Staged input and decompiled source are never modified; the replacement count
+is surfaced as `watermarks_scrubbed`.
+
+Verified on build 1170 (run 41768295623): native libraries STORED and
+page-aligned, `zipalign -c -p 4` Verification successful, `RESULT=PASS`,
+`JOB_STATUS: success`, 224 tests passing.
+APK SHA-256 `911d9e3c3d233870700fbe4c108c6de4b3f2c7443c08f3ecc077a46241828f30`.
