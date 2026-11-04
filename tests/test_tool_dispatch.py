@@ -421,6 +421,14 @@ def test_decrypt_known_answer_selftest_is_registered():
     assert "7649abac8119b246cee98e9b12e9197d" in bridge
     assert "NIST AES known-answer tests" in bridge
 
+
+def test_private_module_19_uses_dedicated_workspace_paths():
+    paths = (ROOT / "app/src/main/java/com/alvsia/pro/tool/WorkPaths.kt").read_text(encoding="utf-8")
+    bridge = BRIDGE_IMPL.read_text(encoding="utf-8")
+    assert '19 -> "ALVSIA_PRIVATE"' in paths
+    assert "for (id in 1..19)" in paths
+    assert 'dest = out_dir("ALVSIA_PRIVATE")' in bridge
+
 if __name__ == "__main__":
     tests = (
         test_python_auth_normalizes_java_string_and_lua_avoids_art_oom,
@@ -449,16 +457,3 @@ if __name__ == "__main__":
         test()
         print("PASS", test.__name__)
     print(f"TOOL DISPATCH TEST: PASS ({len(tests)}/{len(tests)})")
-
-
-
-
-
-
-
-def test_private_module_19_uses_dedicated_workspace_paths():
-    paths = (ROOT / "app/src/main/java/com/alvsia/pro/tool/WorkPaths.kt").read_text(encoding="utf-8")
-    bridge = BRIDGE_IMPL.read_text(encoding="utf-8")
-    assert '19 -> "ALVSIA_PRIVATE"' in paths
-    assert "for (id in 1..19)" in paths
-    assert 'dest = out_dir("ALVSIA_PRIVATE")' in bridge
