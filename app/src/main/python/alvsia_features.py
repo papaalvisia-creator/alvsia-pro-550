@@ -209,9 +209,10 @@ def run_lua_bytecode_strings(input_path, out_dir):
     for value in strings:
         if value not in seen: seen.add(value); uniq.append(value)
     dest=out_dir/(input_path.stem+"_strings.txt")
-    dest.write_text("\n".join(uniq[:8000]),encoding="utf-8")
+    payload, scrubbed = scrub_foreign_branding("\n".join(uniq[:8000]))
+    dest.write_text(payload,encoding="utf-8")
     return {"ok":True,"mode":"strings_fallback","lua_header":data[:4]==b"\x1bLua",
-            "count":len(uniq),"out":str(dest),
+            "count":len(uniq),"out":str(dest),"watermarks_scrubbed":scrubbed,
             "note":"Full decompile requires a compatible Lua decompiler; strings were extracted from normalized payload",
             **({"container":ci.format,"container_chunks":ci.chunks,"normalized":str(normalized)} if ci else {})}
 
@@ -254,8 +255,11 @@ def extract_lua_constants(input_path, out_dir, max_strings=5000):
     seen=set(); uniq=[]
     for value in strings:
         if value not in seen: seen.add(value); uniq.append(value)
-    dest=out_dir/(input_path.stem+"_constants.txt"); dest.write_text("\n".join(uniq[:max_strings]),encoding="utf-8")
+    dest=out_dir/(input_path.stem+"_constants.txt")
+    payload, scrubbed = scrub_foreign_branding("\n".join(uniq[:max_strings]))
+    dest.write_text(payload,encoding="utf-8")
     return {"ok":True,"mode":"lua_constants","count":len(uniq),"out":str(dest),"header":data[:16].hex(),
+            "watermarks_scrubbed":scrubbed,
             **({"container":ci.format,"container_chunks":ci.chunks,"normalized":str(normalized)} if ci else {})}
 
 
@@ -576,6 +580,57 @@ KNOWN_BRANDS = [
 DEFAULT_BRAND = "ALVSIA PRO"
 DEFAULT_CHANNEL = "t.me/ALVSIA_PRO"
 DEFAULT_WATERMARK = "ALVSIA PRO | t.me/ALVSIA_PRO"
+
+# Third-party credit lines that ship inside imported scripts. ALVSIA never
+# re-publishes another channel's branding, so recovered report text is
+# rewritten to the owner's brand before it is written to OUT/.
+FOREIGN_BRAND_TOKENS = (
+    "SRC_HUB",
+    "SRC HUB",
+    "SRCHUB",
+    "XTHrlen",
+    "XThrlen",
+    "XTHRLEN",
+    "ALECTO",
+    "Alecto",
+)
+FOREIGN_CHANNEL_TOKENS = (
+    "t.me/SRC_HUB",
+    "t.me/XTHrlen",
+    "t.me/XThrlen",
+    "t.me/ALECTO",
+    "https://t.me/SRC_HUB",
+    "https://t.me/XTHrlen",
+    "https://t.me/XThrlen",
+    "https://t.me/ALECTO",
+)
+
+
+def scrub_foreign_branding(text, brand=DEFAULT_BRAND, channel=DEFAULT_CHANNEL):
+    """Replace third-party channel/credit tokens with the owner's branding.
+
+    Only report text (strings/constants dumps) is rewritten; the staged input
+    is never modified. Returns ``(cleaned_text, replacements)``.
+    """
+    if not text:
+        return text, 0
+    channel_at = "@" + channel.split("/")[-1].lstrip("@")
+    replacements = 0
+    # Longest / most specific forms first so "@SRC_HUB" never degrades into
+    # "@ALVSIA PRO" via the bare-token pass below.
+    for token in sorted(FOREIGN_CHANNEL_TOKENS, key=len, reverse=True):
+        if token in text:
+            replacements += text.count(token)
+            text = text.replace(token, "https://" + channel)
+    for token in ("@SRC_HUB", "@XTHrlen", "@XThrlen", "@ALECTO"):
+        if token in text:
+            replacements += text.count(token)
+            text = text.replace(token, channel_at)
+    for token in FOREIGN_BRAND_TOKENS:
+        if token in text:
+            replacements += text.count(token)
+            text = text.replace(token, brand)
+    return text, replacements
 
 
 def _load_rebrand_config(out_root):
