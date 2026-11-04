@@ -80,7 +80,8 @@ fun ToolWorkspaceScreen(
     running: Boolean,
     logs: List<String>,
     onBack: () -> Unit,
-    onRun: (Uri?, String?) -> Unit
+    onRun: (Uri?, String?) -> Unit,
+    initialUri: Uri? = null
 ) {
     val ctx = LocalContext.current
     var uri by remember { mutableStateOf<Uri?>(null) }
@@ -106,6 +107,14 @@ fun ToolWorkspaceScreen(
     val configSchema = remember(sub.id) { subToolConfig(sub.id) }
     val configValues = remember(sub.id) {
         mutableStateOf(configSchema.associate { it.field to (it.default ?: "") })
+    }
+
+    LaunchedEffect(initialUri) {
+        if (initialUri != null) {
+            uri = initialUri
+            detectionResult = FileMagic.detect(ctx, initialUri)
+            UXStore.addRecent(ctx, initialUri)
+        }
     }
 
     val picker = rememberLauncherForActivityResult(
