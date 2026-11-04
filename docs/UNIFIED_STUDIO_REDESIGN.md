@@ -31,7 +31,8 @@ The catalog must cover IDs 1 through 19 exactly once. The private module remains
 
 - Quick Tools Mode: launch a module directly without creating a project.
 - Project Mode: create a named project and associate inputs, outputs, reports and task history.
-- Shared Workspace: pass an explicit output artifact to another compatible Studio without re-selecting or silently rewriting it.
+- Shared Workspace: Output Browser can pass an explicit output artifact to another Studio using the app FileProvider URI; the next ToolWorkspaceScreen preselects it without reopening the picker.
+- Cleanup safety: the Output Browser has Refresh rather than a one-tap recursive delete; the legacy Clear WORK + OUT action requires an explicit confirmation.
 - Workflow handoff: each step records source hash, output hash, tool ID, parameters (excluding secrets), status and validation result.
 - Safety: never mutate the original input by default; stage work in a dedicated output/work area; reject unsupported formats rather than reporting success.
 
@@ -49,9 +50,10 @@ All tools should share a consistent interaction shell: input selection, format d
 
 ## Acceptance gates
 
-1. Unit/static test proves exactly seven Studios and a unique mapping of all module IDs 1..19.
+1. Unit/static tests prove exactly seven Studios and a unique mapping of all module IDs 1..19.
 2. Android debug unit tests and assembleDebug pass.
 3. Existing Python dispatch, Lua, crypto, PAK/OBB, private-tool and release-safety tests pass.
-4. Each of the 19 modules is smoke-tested with valid and invalid fixtures; expected output, input preservation and error reporting are checked.
-5. Signed release APK passes package/version, signature, ZIP integrity and native-library alignment checks.
-6. Physical-device install and runtime smoke tests pass before calling the redesign production-ready.
+4. Shared output handoff preselects the chosen artifact in the next tool, and destructive cleanup requires confirmation.
+5. Each of the 19 modules and its 86 declared sub-tools is smoke-tested with valid and invalid fixtures; expected output, input preservation and error reporting are checked.
+6. Signed release APK passes package/version, signature, ZIP integrity and native-library alignment checks.
+7. Physical-device install and runtime smoke tests pass before calling the redesign production-ready.
