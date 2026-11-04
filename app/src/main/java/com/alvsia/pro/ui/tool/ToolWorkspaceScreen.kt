@@ -27,6 +27,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.LinearProgressIndicator
@@ -87,6 +88,7 @@ fun ToolWorkspaceScreen(
     var uri by remember { mutableStateOf<Uri?>(null) }
     var detectionResult by remember { mutableStateOf<FileMagic.DetectionResult?>(null) }
     var logMode by remember(sub.id) { mutableStateOf("simple") }
+    var confirmClearWorkspace by remember(sub.id) { mutableStateOf(false) }
     val errorLine = logs.firstOrNull { it.startsWith("X ") }
     val successLine = logs.firstOrNull { it.startsWith("OK ") }
     val simpleSummary = when {
@@ -268,30 +270,34 @@ fun ToolWorkspaceScreen(
         Button(
             onClick = {
                 if (!running) {
-                    // Write inline config values to WORK/ files transparently
-                    if (configSchema.isNotEmpty()) {
-                        // Use the same root as ToolEngine/PythonBridgeRunner.
-                        // Writing under getExternalFilesDir() can silently split configs
-                        // from the public Download/ALVSIA/WORK directory consumed by Python.
-                        WorkPaths.bindApp(ctx)
-                        val workDir = WorkPaths.dirWork()
-                        configSchema.forEach { cfg ->
-                            val value = configValues.value[cfg.field] ?: ""
-                            val fileName = cfg.workFileName
-                            if (fileName != null) {
-                                val configFile = File(workDir, fileName)
-                                try {
-                                    if (value.isBlank()) {
-                                        // Never reuse a stale key/config from a previous run.
-                                        configFile.delete()
-                                    } else {
-                                        configFile.writeText(value)
-                                    }
-                                } catch (_: Exception) {}
+                    if (sub.id == "clear_work") {
+                        confirmClearWorkspace = true
+                    } else {
+                        // Write inline config values to WORK/ files transparently
+                        if (configSchema.isNotEmpty()) {
+                            // Use the same root as ToolEngine/PythonBridgeRunner.
+                            // Writing under getExternalFilesDir() can silently split configs
+                            // from the public Download/ALVSIA/WORK directory consumed by Python.
+                            WorkPaths.bindApp(ctx)
+                            val workDir = WorkPaths.dirWork()
+                            configSchema.forEach { cfg ->
+                                val value = configValues.value[cfg.field] ?: ""
+                                val fileName = cfg.workFileName
+                                if (fileName != null) {
+                                    val configFile = File(workDir, fileName)
+                                    try {
+                                        if (value.isBlank()) {
+                                            // Never reuse a stale key/config from a previous run.
+                                            configFile.delete()
+                                        } else {
+                                            configFile.writeText(value)
+                                        }
+                                    } catch (_: Exception) {}
+                                }
                             }
                         }
+                        onRun(uri, null)
                     }
-                    onRun(uri, null)
                 }
             },
             enabled = !running && (!sub.needsFile || uri != null),
@@ -439,6 +445,28 @@ fun ToolWorkspaceScreen(
                     Text("📂 OPEN FOLDER", color = AlvisiaCyan, fontSize = 10.sp, fontWeight = FontWeight.Bold)
                 }
             }
+        }
+        if (confirmClearWorkspace) {
+            AlertDialog(
+                onDismissRequest = { confirmClearWorkspace = false },
+                title = { Text("Clear workspace files?") },
+                text = {
+                    Text("This action permanently removes files in WORK and OUT, including generated results. Save anything you want to keep before continuing.")
+                },
+                confirmButton = {
+                    TextButton(onClick = {
+                        confirmClearWorkspace = false
+                        onRun(null, null)
+                    }) {
+                        Text("CLEAR WORK + OUT", color = AlvisiaRed, fontWeight = FontWeight.Bold)
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { confirmClearWorkspace = false }) {
+                        Text("CANCEL", color = AlvisiaCyan)
+                    }
+                }
+            )
         }
     }
 }
