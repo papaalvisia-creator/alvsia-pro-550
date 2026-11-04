@@ -288,17 +288,28 @@ jobs:
           test -s "$RUNNER_TEMP/alvsia-release.jks"
           APKSIGNER="$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -n 1)"
           test -x "$APKSIGNER"
+          ZIPALIGN="$(find "$ANDROID_HOME/build-tools" -type f -name zipalign | sort -V | tail -n 1)"
+          AAPT="$(find "$ANDROID_HOME/build-tools" -type f -name aapt | sort -V | tail -n 1)"
+          test -x "$ZIPALIGN" && test -x "$AAPT"
+          # XopProtector rewrites a subset of lib/*.so with DEFLATE. When the
+          # manifest declares extractNativeLibs="false" the package manager
+          # rejects such a mixed-compression APK (INSTALL_FAILED_INVALID_APK,
+          # shown on device as "paket tidak valid"). Store every native library
+          # uncompressed and page-align it before signing.
+          NORMALIZED="$RUNNER_TEMP/ALVISIA_PRO_5.5.2-xop_candidate_normalized.apk"
+          ALIGNED="$RUNNER_TEMP/ALVISIA_PRO_5.5.2-xop_candidate_aligned.apk"
+          python3 tools/normalize_apk_packaging.py \
+            "$RUNNER_TEMP/ALVISIA_PRO_5.5.2-xop_candidate_unsigned.apk" "$NORMALIZED"
+          "$ZIPALIGN" -p -f 4 "$NORMALIZED" "$ALIGNED"
           "$APKSIGNER" sign \
             --ks "$RUNNER_TEMP/alvsia-release.jks" \
             --ks-key-alias "$ALVSIA_KEY_ALIAS" \
             --ks-pass env:ALVSIA_KEYSTORE_PASSWORD \
             --key-pass env:ALVSIA_KEY_PASSWORD \
-            --out "$SIGNED" "$RUNNER_TEMP/ALVISIA_PRO_5.5.2-xop_candidate_unsigned.apk"
+            --out "$SIGNED" "$ALIGNED"
           "$APKSIGNER" verify --verbose --print-certs "$SIGNED"
-          ZIPALIGN="$(find "$ANDROID_HOME/build-tools" -type f -name zipalign | sort -V | tail -n 1)"
-          AAPT="$(find "$ANDROID_HOME/build-tools" -type f -name aapt | sort -V | tail -n 1)"
-          test -x "$ZIPALIGN" && test -x "$AAPT"
-          "$ZIPALIGN" -c -v 4 "$SIGNED"
+          python3 tools/normalize_apk_packaging.py --check "$SIGNED"
+          "$ZIPALIGN" -c -p -v 4 "$SIGNED"
           python3 tools/validate_signed_apk.py "$SIGNED" "$APKSIGNER" "$ZIPALIGN" "$AAPT"
           python3 tools/audit_release_apk.py "$SIGNED"
           cp release_security_audit.txt validation-artifacts/xop_candidate_security_audit.txt
