@@ -88,7 +88,11 @@ def _looks_like_lua_source(text: str) -> bool:
 
 def validate_lua_source(path_or_text) -> tuple[bool, str]:
     if isinstance(path_or_text, (str, Path)) and Path(str(path_or_text)).is_file():
-        text = Path(path_or_text).read_text(encoding="utf-8", errors="replace")
+        from .detector import read_lua_text_strict
+        try:
+            text = read_lua_text_strict(path_or_text)
+        except ValueError as exc:
+            return False, f"not decodable as Lua source: {exc}"
     else:
         text = str(path_or_text)
     if not _looks_like_lua_source(text):
@@ -217,7 +221,12 @@ def analyze_lua(path, out_dir=None, keys=None):
         result["error"]="not recognized as Lua source or bytecode"
         return result
     if info.kind == "source":
-        text=work.read_text(encoding="utf-8",errors="replace")
+        from .detector import read_lua_text_strict
+        try:
+            text = read_lua_text_strict(work)
+        except ValueError as exc:
+            result["error"] = str(exc)
+            return result
         patterns={
             "loadstring": r"\bloadstring\s*\(",
             "load": r"\bload\s*\(",
@@ -288,8 +297,9 @@ def decompile_lua(path, out_dir, jars_dir=None, timeout=120):
     if info.kind == "source":
         # Preserve source inputs byte-for-byte at the text layer; this path is
         # not a bytecode decompilation and must not reject short valid scripts.
-        source_text = normalized.read_text(encoding="utf-8", errors="replace")
-        dest.write_text(source_text, encoding="utf-8")
+        # Byte-exact copy: a text round-trip here would rewrite line endings
+        # and destroy any non-UTF-8 byte in the payload.
+        dest.write_bytes(normalized.read_bytes())
         return {"ok": True, "mode": "source_passthrough", "out": str(dest),
                 "format": info.format}
 
@@ -379,7 +389,12 @@ def _safe_fold_numeric(text):
     return pat.sub(repl,text)
 
 def clean_lua_source(path, out_path):
-    src=Path(path).read_text(encoding="utf-8",errors="replace")
+    from .detector import read_lua_text_strict
+    try:
+        src = read_lua_text_strict(path)
+    except ValueError as exc:
+        return {"ok": False, "out": "", "validation": str(exc),
+                "error": "refusing lossy text decode of binary input"}
     # Conservative transformations: comments/whitespace are preserved enough
     # for readability; no unsafe control-flow rewriting.
     cleaned=_safe_fold_numeric(src)

@@ -449,6 +449,23 @@ def run_tool(module_id, sub_id, input_path, out_root, engine_dir, jars_dir):
                                 "Original bytes cannot be reconstructed by guessing a Lua header."
                                 % replacement_markers
                             )
+                            try:
+                                from lua_engine.detector import diagnose_text_corruption
+                                _diag = diagnose_text_corruption(
+                                    __import__("pathlib").Path(ip).read_bytes()[:8 * 1024 * 1024])
+                                lines.append(
+                                    "VERDICT: %s — %s byte(s) destroyed, %s CRLF pair(s) injected. "
+                                    "This signature is produced by decoding a binary as UTF-8 text "
+                                    "(errors=replace) and normalising line endings to CRLF."
+                                    % (_diag["verdict"], _diag["lost_bytes"], _diag["crlf_pairs"])
+                                )
+                                lines.append(
+                                    "VERDICT: ALVSIA staging copies bytes verbatim (SHA-256 verified), "
+                                    "so the damage happened before import — re-download the original "
+                                    "binary file instead of a text/chat copy."
+                                )
+                            except Exception:
+                                pass
                     if stream_result.get("unluac_jar_error"):
                         lines.append("DIAGNOSTIC: unluac_jar=%s" % str(stream_result.get("unluac_jar_error"))[:220])
                     if stream_result.get("pattern_id_attempted"):

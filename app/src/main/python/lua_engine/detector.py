@@ -71,6 +71,74 @@ def _corruption_notes(data: bytes) -> tuple[str, ...]:
     )
 
 
+_LUA53_HEADER = {
+    # version byte -> canonical 33-byte header for a 32-bit size_t / 8-byte
+    # lua_Integer+lua_Number build (the layout used by BGMI/HePing chunks).
+    0x53: bytes.fromhex("1b4c7561530019930d0a1a0a0404040808")
+          + b"\x78\x56" + b"\x00" * 6 + b"\x00" * 5 + b"\x28\x77\x40",
+}
+
+
+def diagnose_text_corruption(data: bytes) -> dict:
+    """Classify binary->text transport damage without guessing any byte.
+
+    A file that was decoded as UTF-8 with ``errors="replace"`` and then had its
+    line endings normalised to CRLF shows a signature that can be reproduced
+    byte-for-byte: every invalid byte becomes ``EF BF BD`` and every bare LF
+    becomes ``0D 0A``. Detecting that signature is evidence, not repair.
+    """
+    markers = data.count(_UTF8_REPLACEMENT)
+    crlf = data.count(b"\r\n")
+    bare_lf = data.count(b"\n") - crlf
+    verdict = "clean"
+    if markers:
+        verdict = "text_transport_corruption"
+    elif crlf and crlf > max(4, len(data) // 4096):
+        verdict = "crlf_normalised"
+    return {
+        "utf8_replacement_markers": markers,
+        "crlf_pairs": crlf,
+        "bare_lf": bare_lf,
+        "verdict": verdict,
+        "recoverable_bytes": 0 if markers else len(data),
+        "lost_bytes": markers,
+        "note": (
+            "input was decoded as UTF-8 text and line endings were normalised; "
+            f"{markers} original byte(s) were destroyed and cannot be recovered"
+            if markers else "no text-transport damage detected"
+        ),
+    }
+
+
+def restore_lua_header(data: bytes) -> tuple[bytes, int]:
+    """Restore only the deterministic Lua 5.3 header when it is provably damaged.
+
+    Returns ``(payload, restored_byte_count)``. The body is never touched: any
+    U+FFFD inside it still represents a lost byte, so callers must keep
+    reporting the file as unrecoverable rather than pretending it decompiles.
+    """
+    if len(data) < 12 or not data.startswith(b"\x1bLua"):
+        return data, 0
+    version = data[4]
+    canonical = _LUA53_HEADER.get(version)
+    if canonical is None:
+        return data, 0
+    # Locate the end of the damaged header by scanning for the first position
+    # where the canonical tail (from LUAC_INT onward) is still intact.
+    anchor = canonical[17:25]  # 78 56 00 00 00 00 00 00
+    pos = data.find(anchor, 5, 96)
+    if pos < 0:
+        return data, 0
+    start = pos - 17
+    if start < 0:
+        return data, 0
+    if data[start:pos] == canonical[:17]:
+        return data, 0
+    restored = canonical[:17] + data[pos:]
+    changed = sum(1 for a, b in zip(data[start:pos], canonical[:17]) if a != b)
+    return restored, max(changed, 1)
+
+
 def detect_bytes(data: bytes) -> LuaInfo:
     info = _classify_bytes(data)
     extra = _corruption_notes(data)
@@ -149,3 +217,32 @@ def detect_lua(path) -> LuaInfo:
     except Exception as exc:
         return LuaInfo("unknown", None, "container-unknown", len(data), data[:8].hex(), 0.10,
                        (f"container detection failed: {exc}",), True, "unknown", 0)
+
+
+def read_lua_text_strict(path, *, allow_utf8_bom: bool = True) -> str:
+    """Read a Lua *source* file as text without ever destroying bytes.
+
+    Binary payloads must never pass through ``errors="replace"``: doing so
+    silently rewrites every invalid byte to U+FFFD and turns a recoverable
+    ``.luac`` chunk into an unrecoverable one. Callers that genuinely expect
+    source should use this helper and surface the raised error to the user.
+    """
+    p = Path(path)
+    raw = p.read_bytes()
+    if allow_utf8_bom and raw.startswith(b"\xef\xbb\xbf"):
+        raw = raw[3:]
+    if raw.startswith((b"\x1bLua", b"\x1bLJ")):
+        raise ValueError(
+            f"{p.name} is Lua bytecode, not source; refusing to decode it as text"
+        )
+    if b"\x00" in raw:
+        raise ValueError(
+            f"{p.name} contains NUL bytes; refusing to decode binary data as text"
+        )
+    try:
+        return raw.decode("utf-8")
+    except UnicodeDecodeError as exc:
+        raise ValueError(
+            f"{p.name} is not valid UTF-8 text ({exc.reason} at byte {exc.start}); "
+            "refusing lossy decode that would destroy the original bytes"
+        ) from exc
