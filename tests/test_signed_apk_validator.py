@@ -26,6 +26,12 @@ class SignedApkCertificatePinTests(unittest.TestCase):
         output = f"Signer #1 certificate SHA-256 digest: {colon_pin}\n"
         self.assertEqual(validator.certificate_sha256(output), PIN)
 
+    def test_alignment_check_requires_16k_page_alignment(self):
+        self.assertEqual(
+            validator.alignment_check_args(Path("zipalign"), Path("candidate.apk")),
+            ["zipalign", "-c", "-P", "16", "-v", "4", "candidate.apk"],
+        )
+
     def test_rejects_missing_certificate_fingerprint(self):
         with self.assertRaises(SystemExit):
             validator.certificate_sha256("Verified using v2 scheme: true")
