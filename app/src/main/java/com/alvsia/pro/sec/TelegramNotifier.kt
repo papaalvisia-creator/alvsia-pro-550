@@ -148,7 +148,7 @@ object TelegramNotifier {
     fun notifyModuleStatus(ctx: Context, module: String, status: String, detail: String = "") {
         val safeStatus = sanitize(status).take(48)
         val safeModule = sanitize(module).take(96)
-        notify(ctx, "MODULE_STATUS", "Module: $safeModule\\nStatus: $safeStatus\\n${sanitize(detail).take(500)}")
+        notify(ctx, "MODULE_STATUS", "Module: $safeModule\nStatus: $safeStatus\n${sanitize(detail).take(500)}")
     }
 
     /** Low-volume authenticated-session heartbeat; contains no device or license identifiers. */
