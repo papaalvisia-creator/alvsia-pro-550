@@ -12,18 +12,22 @@ import android.content.Context
  */
 object ThreatReport {
     private val acceptedKinds = setOf("TAMPER", "FRIDA", "ROOT", "DEBUG", "SIG_BLOCK", "THREAT")
+    private val sensitiveField = Regex(
+        "(?i)\\b(token|api[_-]?key|password|license(?:[_-]?key)?|session[_-]?token|hwid|device[_-]?id)\\b\\s*[:=]\\s*[^\\s,;]+"
+    )
+    private val locationField = Regex(
+        "(?i)\\b(latitude|longitude|lat|lon|lng|location)\\s*[:=]\\s*[^\\s,;]+"
+    )
 
     @Suppress("UNUSED_PARAMETER")
     fun emit(ctx: Context, kind: String, detail: String, license: String = "") {
         val event = kind.trim().uppercase().takeIf { it in acceptedKinds } ?: "THREAT"
-        val safeDetail = detail
-            .replace(
-                Regex("(?i)\\b(token|api[_-]?key|password|license(?:[_-]?key)?|session[_-]?token|hwid|device[_-]?id)\\b\\s*[:=]\\s*[^\\s,;]+"),
-                "\\$1=[REDACTED]"
-            )
+        val safeDetail = sensitiveField.replace(detail) { match ->
+            "${match.groupValues[1]}=[REDACTED]"
+        }
             .replace(Regex("(?i)https?://[^\\s]+"), "[URL REDACTED]")
             .replace(Regex("(?i)(/data/[^\\s]+|/storage/[^\\s]+|/sdcard/[^\\s]+)"), "[PATH REDACTED]")
-            .replace(Regex("(?i)\\b(latitude|longitude|lat|lon|lng|location)\\s*[:=]\\s*[^\\s,;]+"), "\\$1=[REDACTED]")
+            .let { locationField.replace(it) { match -> "${match.groupValues[1]}=[REDACTED]" } }
             .take(1200)
 
         // The legacy license argument is retained for source compatibility,
