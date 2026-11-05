@@ -107,6 +107,8 @@ object SubMenus {
                 "Select any file → OUT/SCAN/strings.txt"),
             SubTool("hash_scan",   "Hash File",      "MD5 SHA1 SHA256",
                 "Select file → OUT/SCAN/hash.txt"),
+            SubTool("metadata_v39_decode", "IL2CPP Metadata v39 Decoder", "Decode and validate the offline global-metadata.dat v39 header",
+                "Select authorized global-metadata.dat v39 → OUT/SCAN/*_metadata_decoded.dat + JSON report"),
         )
 
         // ── 7 Workspace ───────────────────────────────────────────────────
