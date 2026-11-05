@@ -68,6 +68,7 @@ jobs:
           python3 tests/test_workspace_handoff.py
           python3 -m unittest tests.test_private_tool_engine
           python3 -m unittest discover -s tests -p 'test_metadata_v39.py'
+          python3 -m unittest discover -s tests -p 'test_foreign_branding.py'
 
       - name: Run sealed payload cryptographic tests
         run: |
