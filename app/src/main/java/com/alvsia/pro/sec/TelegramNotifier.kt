@@ -3,19 +3,12 @@ package com.alvsia.pro.sec
 import android.content.Context
 import android.util.Log
 import com.alvsia.pro.BuildConfig
-import com.alvsia.pro.panel.Vault
-import okhttp3.MediaType.Companion.toMediaType
-import okhttp3.OkHttpClient
-import okhttp3.Request
-import okhttp3.RequestBody.Companion.toRequestBody
-import org.json.JSONObject
 import java.io.File
 import java.net.URI
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import java.util.concurrent.ConcurrentLinkedQueue
-import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.concurrent.thread
 
@@ -33,8 +26,6 @@ import kotlin.concurrent.thread
  */
 object TelegramNotifier {
     private const val TAG = "ALVISIA_Telegram"
-    private const val TG_API = "https://api.telegram.org/bot"
-    private const val MAX_MESSAGE_LEN = 4096
     private const val MAX_QUEUE = 128
 
     enum class Channel { BUILD, RUNTIME, ERROR, FILE_INTEL }
@@ -50,16 +41,6 @@ object TelegramNotifier {
     private val queue = ConcurrentLinkedQueue<Event>()
     private val runnerStarted = AtomicBoolean(false)
     @Volatile private var appContext: Context? = null
-
-    private val http by lazy {
-        OkHttpClient.Builder()
-            .connectTimeout(10, TimeUnit.SECONDS)
-            .readTimeout(15, TimeUnit.SECONDS)
-            .writeTimeout(15, TimeUnit.SECONDS)
-            .callTimeout(25, TimeUnit.SECONDS)
-            .retryOnConnectionFailure(true)
-            .build()
-    }
 
     private val knownEvents = setOf(
         "SESSION_OK", "SESSION_START", "SESSION_END",
