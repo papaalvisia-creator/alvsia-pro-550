@@ -20,9 +20,9 @@ import kotlin.concurrent.thread
  * arbitrary files, uploads file contents, collects IP/GPS, or sends license
  * keys, HWIDs, session tokens, absolute paths, or continuous device telemetry.
  *
- * Bot credentials are read from the protected Vault runtime provider and are
- * never included in source or generated messages. Delivery is skipped when
- * the provider is not configured.
+ * Delivery uses the authenticated Unaux PanelClient session and the panel's
+ * server-side Telegram relay. No bot token or chat ID is read or stored by
+ * this APK component.
  */
 object TelegramNotifier {
     private const val TAG = "ALVISIA_Telegram"
