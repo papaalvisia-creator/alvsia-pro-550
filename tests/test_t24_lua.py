@@ -2,7 +2,7 @@
 import struct
 import sys
 import tempfile
-import pytest
+import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -46,10 +46,11 @@ def _t24_fixture(key):
     return bytes(out)
 
 
-def test_t24_normalizes_opcodes_and_decrypts_strings():
-    key = b"ALVSIA-t24-test-key"
-    source = _t24_fixture(key)
-    output, report = convert_t24_to_standard(source, key)
+class T24LuaTests(unittest.TestCase):
+    def test_t24_normalizes_opcodes_and_decrypts_strings(self):
+        key = b"ALVSIA-t24-test-key"
+        source = _t24_fixture(key)
+        output, report = convert_t24_to_standard(source, key)
     assert output[:4] == b"\x1bLua"
     assert output[4] == 0x53
     assert output[13] == 8
@@ -62,25 +63,25 @@ def test_t24_normalizes_opcodes_and_decrypts_strings():
     assert report["format"] == "T24 Lua 5.3"
 
 
-def test_t24_structure_only_mode_keeps_encrypted_strings():
-    key = b"ALVSIA-t24-test-key"
-    source = _t24_fixture(key)
-    output, report = convert_t24_to_standard(source, b"")
-    encrypted = _enc_string(b"ALVSIA_T24_FIXTURE_2026", key)[1:]
-    assert encrypted in output
-    assert b"ALVSIA_T24_FIXTURE_2026" not in output
-    assert report["ok"] and not report["strings_decoded"]
+    def test_t24_structure_only_mode_keeps_encrypted_strings(self):
+        key = b"ALVSIA-t24-test-key"
+        source = _t24_fixture(key)
+        output, report = convert_t24_to_standard(source, b"")
+        encrypted = _enc_string(b"ALVSIA_T24_FIXTURE_2026", key)[1:]
+        self.assertIn(encrypted, output)
+        self.assertNotIn(b"ALVSIA_T24_FIXTURE_2026", output)
+        self.assertTrue(report["ok"] and not report["strings_decoded"])
 
 
-def test_t24_rejects_wrong_header_and_truncated_chunks():
-    source = _t24_fixture(b"test-key")
-    with pytest.raises(ValueError, match="header"):
-        convert_t24_to_standard(b"not a lua file", b"test-key")
-    with pytest.raises(ValueError, match="truncated|unexpected"):
-        convert_t24_to_standard(source[:-3], b"test-key")
+    def test_t24_rejects_wrong_header_and_truncated_chunks(self):
+        source = _t24_fixture(b"test-key")
+        with self.assertRaisesRegex(ValueError, "header"):
+            convert_t24_to_standard(b"not a lua file", b"test-key")
+        with self.assertRaisesRegex(ValueError, "truncated|unexpected"):
+            convert_t24_to_standard(source[:-3], b"test-key")
 
 
-def test_t24_file_writer_preserves_original_and_writes_separate_output():
+    def test_t24_file_writer_preserves_original_and_writes_separate_output(self):
     key = b"ALVSIA-t24-test-key"
     with tempfile.TemporaryDirectory() as directory:
         source = Path(directory) / "sample.luac"
