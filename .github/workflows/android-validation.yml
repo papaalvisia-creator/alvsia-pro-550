@@ -1,7 +1,7 @@
 name: Android Security Validation
 on:
   push:
-    branches: [ main, fix/chaquopy-python312-ci, release/5.5.2-19-module-redesign ]
+    branches: [ main, feat/full-reference-source-registry-20261106, fix/chaquopy-python312-ci, release/5.5.2-19-module-redesign ]
   pull_request:
     branches: [ main ]
   workflow_dispatch:
@@ -42,6 +42,9 @@ jobs:
 
       - name: Verify active Unaux Python TLS pin policy
         run: python3 -m unittest discover -s tests -p 'test_pinned_http.py'
+
+      - name: Verify Telegram notifier integration contract
+        run: python3 -m unittest tests.test_telegram_notifier_contract
 
       - name: Compile Python tool modules and run dispatch contract tests
         run: |
