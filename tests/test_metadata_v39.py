@@ -1,19 +1,25 @@
 """Tests for the offline IL2CPP metadata v39 decoder."""
 import struct
+import sys
 import unittest
+from pathlib import Path
 
-from app.src.main.python.alvsia_metadata import (
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "app" / "src" / "main" / "python"))
+
+from alvsia_metadata import (  # noqa: E402
     CANONICAL_DESCRIPTOR_ORDER, HEADER_SIZE, MAGIC, VERSION, XOR_KEY,
     decode_metadata_v39_bytes,
 )
 
 
-def make_fixture():
+def make_fixture(bad_first=False):
     count = len(CANONICAL_DESCRIPTOR_ORDER)
     size = HEADER_SIZE + count * 4
     canonical = []
     for index in range(count):
-        canonical.append(struct.pack("<III", HEADER_SIZE + index * 4, 4, 1))
+        offset = size + 4 if bad_first and index == 0 else HEADER_SIZE + index * 4
+        canonical.append(struct.pack("<III", offset, 4, 1))
     protected = [None] * count
     for canonical_index, protected_index in enumerate(CANONICAL_DESCRIPTOR_ORDER):
         protected[protected_index] = canonical[canonical_index]
@@ -55,27 +61,8 @@ class MetadataV39Tests(unittest.TestCase):
             decode_metadata_v39_bytes(b"\x00" * (HEADER_SIZE - 1))
 
     def test_rejects_out_of_range_section(self):
-        fixture = bytearray(make_fixture())
-        # Corrupt a canonical descriptor after constructing a decoded header,
-        # then re-apply the XOR and inverse descriptor permutation.
-        decoded = bytearray(fixture)
-        for offset in range(8, HEADER_SIZE, 4):
-            struct.pack_into("<I", decoded, offset,
-                             struct.unpack_from("<I", decoded, offset)[0] ^ XOR_KEY)
-        canonical = [bytes(decoded[8+i*12:20+i*12]) for i in range(len(CANONICAL_DESCRIPTOR_ORDER))]
-        bad = struct.pack("<III", len(fixture) + 10, 4, 1)
-        canonical[0] = bad
-        protected = [None] * len(canonical)
-        for canonical_index, protected_index in enumerate(CANONICAL_DESCRIPTOR_ORDER):
-            protected[protected_index] = canonical[canonical_index]
-        for index, desc in enumerate(protected):
-            start = 8 + index * 12
-            decoded[start:start+12] = desc
-        for offset in range(8, HEADER_SIZE, 4):
-            struct.pack_into("<I", decoded, offset,
-                             struct.unpack_from("<I", decoded, offset)[0] ^ XOR_KEY)
         with self.assertRaisesRegex(ValueError, "descriptor"):
-            decode_metadata_v39_bytes(decoded)
+            decode_metadata_v39_bytes(make_fixture(bad_first=True))
 
 
 if __name__ == "__main__":
