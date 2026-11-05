@@ -55,6 +55,7 @@ jobs:
               "app/src/main/python/alvsia_features.py",
               "app/src/main/python/alvsia_ultimate.py",
               "app/src/main/python/alvsia_vm_protect.py",
+              "app/src/main/python/archive_engine.py",
               "app/src/main/python/alvsia_private.py",
               "app/src/main/python/sealed_loader.py",
           )
@@ -63,6 +64,7 @@ jobs:
           print("PYTHON SYNTAX CHECK: PASS")
           PY
           python3 tests/test_tool_dispatch.py
+          python3 tests/test_archive_engine.py
           python3 tests/test_studio_catalog.py
           python3 tests/test_process_page.py
           python3 tests/test_workspace_handoff.py
