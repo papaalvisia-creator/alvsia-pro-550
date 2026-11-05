@@ -12474,22 +12474,56 @@ def so_aes_probe(input_path, out_dir):
 
 
 def so_patch_url(input_path, out_dir, old_url="", new_url=""):
-    """Patch a plaintext URL inside a .so binary."""
+    """Patch every exact occurrence of a plaintext URL in a binary copy.
+
+    The source file is never modified. Replacement bytes are NUL-padded to
+    the original URL width so later binary offsets remain stable.
+    """
     from pathlib import Path
-    p = Path(input_path); out_dir = Path(out_dir); out_dir.mkdir(parents=True, exist_ok=True)
+    p = Path(input_path)
+    out_dir = Path(out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
     if not old_url or not new_url:
         return {"ok": False, "error": "old_url and new_url required"}
-    raw = bytearray(p.read_bytes())
-    old_b = old_url.encode(); new_b = new_url.encode()
+    try:
+        old_b = old_url.encode("utf-8")
+        new_b = new_url.encode("utf-8")
+    except UnicodeError:
+        return {"ok": False, "error": "URL encoding must be UTF-8"}
+    if not old_b:
+        return {"ok": False, "error": "old_url must not be empty"}
     if len(new_b) > len(old_b):
         return {"ok": False, "error": "new_url must be <= old_url length"}
-    idx = raw.find(old_b)
-    if idx == -1:
+    try:
+        raw = p.read_bytes()
+    except OSError as exc:
+        return {"ok": False, "error": "input read failed: %s" % type(exc).__name__}
+    count = raw.count(old_b)
+    if count == 0:
         return {"ok": False, "error": "old_url not found in binary"}
-    raw[idx:idx+len(old_b)] = new_b + b"\x00" * (len(old_b) - len(new_b))
+    offsets = []
+    cursor = 0
+    while True:
+        idx = raw.find(old_b, cursor)
+        if idx < 0:
+            break
+        offsets.append("0x%X" % idx)
+        cursor = idx + len(old_b)
+    padded = new_b + b"\\x00" * (len(old_b) - len(new_b))
+    patched = raw.replace(old_b, padded)
     out_file = out_dir / ("patched_%s" % p.name)
-    Path(out_file).write_bytes(bytes(raw))
-    return {"ok": True, "out": str(out_file), "patched_at": "0x%X" % idx}
+    try:
+        out_file.write_bytes(patched)
+    except OSError as exc:
+        return {"ok": False, "error": "output write failed: %s" % type(exc).__name__}
+    return {
+        "ok": True,
+        "out": str(out_file),
+        "patched_count": count,
+        "patched_offsets": offsets,
+        "original_sha256": __import__("hashlib").sha256(raw).hexdigest(),
+        "output_sha256": __import__("hashlib").sha256(patched).hexdigest(),
+    }
 
 
 # ── Module 11: Frida Tracer ───────────────────────────────────────────────────
