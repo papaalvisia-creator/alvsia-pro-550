@@ -6,7 +6,8 @@ import sys
 import unittest
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "app" / "src" / "main" / "python"))
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "app" / "src" / "main" / "python"))
 
 from alvsia_features import (  # noqa: E402
     DEFAULT_BRAND,
