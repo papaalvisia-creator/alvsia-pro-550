@@ -1,6 +1,11 @@
 #!/usr/bin/env python3
 """ALVSIA Termux issue relay: owner-authored, read-only OpenCode tasks only."""
-import json, os, re, subprocess, sys, time
+import json
+import re
+import shutil
+import subprocess
+import sys
+import time
 from pathlib import Path
 
 REPO = "ALVISIA8/alvsia-pro-550"
@@ -10,15 +15,16 @@ MAX_PROMPT = 6000
 STATE = Path.home() / ".alvsia-agent-relay-state.json"
 MARKER = "<!-- ALVSIA_TASK -->"
 
-def run(args, *, timeout=30, input_text=None):
-    return subprocess.run(args, text=True, input=input_text, stdout=subprocess.PIPE,
+def run(args, timeout=30):
+    return subprocess.run(args, text=True, stdout=subprocess.PIPE,
                           stderr=subprocess.PIPE, timeout=timeout)
 
 def gh_json(path):
-    p = run(["gh", "api", path], timeout=45)
+    p = run(["gh", "api", "--paginate", "--slurp", path], timeout=45)
     if p.returncode:
         raise RuntimeError("GitHub API request failed: " + p.stderr[-500:])
-    return json.loads(p.stdout)
+    pages = json.loads(p.stdout)
+    return [item for page in pages for item in page]
 
 def post(body):
     p = run(["gh", "api", "--method", "POST",
@@ -36,9 +42,7 @@ def task_from(body):
         obj = json.loads(match.group(1))
     except Exception:
         return None
-    if not isinstance(obj, dict):
-        return None
-    if obj.get("agent") != "opencode" or obj.get("mode") != "read_only":
+    if not isinstance(obj, dict) or obj.get("agent") != "opencode" or obj.get("mode") != "read_only":
         return None
     task_id, prompt = obj.get("id"), obj.get("prompt")
     if not isinstance(task_id, str) or not re.fullmatch(r"[A-Za-z0-9_-]{1,64}", task_id):
@@ -81,15 +85,15 @@ def main():
                     "or contact external services. Only inspect and report.\n\nTASK:\n" + prompt
                 )
                 try:
-                    result = run(["opencode", "run", "--format", "json", safe_prompt],
-                                 timeout=900)
+                    result = run(["opencode", "run", "--format", "json", safe_prompt], timeout=900)
                     output = (result.stdout or "") + (("\nSTDERR:\n" + result.stderr) if result.stderr else "")
                     status = "completed" if result.returncode == 0 else f"failed (exit {result.returncode})"
                 except subprocess.TimeoutExpired:
                     output, status = "Timed out after 15 minutes.", "timed out"
                 output = output.strip()[-12000:] or "(No textual output.)"
+                output = output.replace("```", "` ` `")
                 post(f"## ALVSIA relay result — {task_id}\n\n**Status:** {status}\n\n"
-                     f"```text\n{output.replace('```', '` ` `')}\n```")
+                     f"```text\n{output}\n```")
                 print(f"Task {task_id}: {status}; result posted.", flush=True)
         except KeyboardInterrupt:
             print("\nRelay stopped.", flush=True)
@@ -99,9 +103,7 @@ def main():
         time.sleep(POLL_SECONDS)
 
 if __name__ == "__main__":
-    if not shutil_which := __import__("shutil").which:
-        pass
-    if not __import__("shutil").which("gh") or not __import__("shutil").which("opencode"):
+    if not shutil.which("gh") or not shutil.which("opencode"):
         print("Missing required CLI: gh and opencode must be installed.", file=sys.stderr)
         sys.exit(2)
     main()
