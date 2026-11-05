@@ -98,6 +98,8 @@ object SubMenus {
                 "Select protected .lua/.luac/.alvlua → OUT/LUA/*_recovered.lua or partial recovery report"),
             SubTool("pubg_lua_convert",  "PUBG→Std Convert",  "Convert PUBG/BGMI scrambled Lua bytecode to standard Lua 5.3 using XOR key from libUE4.so",
                 "Select .luac file or folder → OUT/PUBGLUA/*_std.luac"),
+            SubTool("t24_lua_decompile", "T24 Lua Decompile", "Normalize T24 v4 Lua 5.3 bytecode and run the validated ALVSIA decompiler",
+                "Select one T24 .luac → OUT/LUA_T24/ normalized bytecode and decompile report"),
 
         )
 
