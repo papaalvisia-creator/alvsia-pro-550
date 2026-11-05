@@ -54,6 +54,8 @@ class TelegramNotifierContractTests(unittest.TestCase):
         self.assertIn("TelegramNotifier.notifyModuleStatus(", activity)
         self.assertIn("TelegramNotifier.notifyScanComplete(", activity)
         self.assertIn("TelegramNotifier.notifyHeartbeat(", activity)
+        self.assertIn('"SIG_BLOCK"', activity)
+        self.assertIn("TelegramNotifier.notifySessionStart(", activity)
         self.assertIn("5 * 60_000L", activity)
 
     def test_message_html_is_escaped(self):
