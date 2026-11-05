@@ -176,4 +176,17 @@ Added on branch `feat/full-reference-source-registry-20261106`:
 - `tools/seal_python.py`, `app/src/main/python/sealed_loader.py`, `tools/audit_release_apk.py`, and `tools/security_release_check.py`: include the new module in the authenticated sealed-payload inventory and APK audit.
 - Catalog count updated from 86 to **87** in `tests/test_studio_catalog.py`.
 
-Status: IMPLEMENTED + MENU/DISPATCH WIRED + SEALED. The T24 unit-test suite passed in Android Security Validation run #1219 on the pre-final-hardening commit; full release build and the newest sealed-inventory checks are pending. The normalizer follows the source converter's T24 v4 layout and byte-to-int32 line-info normalization. Real-world T24 samples are still required before marking the format VERIFIED; compiler (standard Lua → T24) has not yet been ported because the reference compiler's size_t/long-string width handling needs fixture confirmation.
+Status: IMPLEMENTED + MENU/DISPATCH WIRED + SEALED. T24 unit tests, Python syntax/dispatch checks, sealed-payload cryptographic tests, Lua regression tests and Lua Protector round-trip all passed in Android Security Validation run #1229 (commit `573514cb6bc6`). Catalog consistency also passed. Android debug/release build, signing and final APK audit were still running at the time of this update. Real-world T24 samples remain necessary before marking the format VERIFIED. The normalizer follows the source converter's T24 v4 layout and byte-to-int32 line-info normalization. Real-world T24 samples are still required before marking the format VERIFIED; compiler (standard Lua → T24) has not yet been ported because the reference compiler's size_t/long-string width handling needs fixture confirmation.
+
+
+### Additional CI confirmation — 2026-11-06
+
+Android Security Validation run #1229 on commit `573514cb6bc65023ea18ba3469fe1575c2dfe2db` passed these gates:
+- source-level release security checks (including 24-module seal inventory),
+- runtime security wiring and active Unaux TLS pin policy,
+- Python syntax and tool dispatch contracts,
+- sealed payload cryptographic tests,
+- Lua decompiler regression suite (includes T24 fixture tests and static URL-scanner parity tests),
+- Lua Protector round-trip tests.
+
+Module catalog consistency run #170 also passed with 87 unique sub-tools. The Android build/signing/release audit stages were still in progress; do not treat this as a release-ready APK until the run completes and final APK validation succeeds.
