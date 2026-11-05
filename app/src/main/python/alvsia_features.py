@@ -577,9 +577,9 @@ KNOWN_BRANDS = [
     "t.me/ALVSIA",
 ]
 
-DEFAULT_BRAND = "ALVSIA PRO"
+DEFAULT_BRAND = "@ALVSIA_PRO"
 DEFAULT_CHANNEL = "t.me/ALVSIA_PRO"
-DEFAULT_WATERMARK = "ALVSIA PRO | t.me/ALVSIA_PRO"
+DEFAULT_WATERMARK = "@ALVSIA_PRO | t.me/ALVSIA_PRO"
 
 # Third-party credit lines that ship inside imported scripts. ALVSIA never
 # re-publishes another channel's branding, so recovered report text is
