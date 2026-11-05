@@ -14,8 +14,7 @@
 </p>
 
 <p align="center">
-  <a href="https://t.me/ALVSIA_PRO">Telegram Channel</a> ·
-  <a href="https://t.me/OriginalOnwerALV">Developer Contact</a>
+  <a href="https://t.me/ALVSIA_PRO">@ALVSIA_PRO — Official Channel & Project Identity</a>
 </p>
 
 ---
@@ -166,7 +165,7 @@ Only analyze software, game assets and devices for which you have permission. Do
 ## Support and updates
 
 - **Telegram channel:** [@ALVSIA_PRO](https://t.me/ALVSIA_PRO)
-- **Developer:** [@OriginalOnwerALV](https://t.me/OriginalOnwerALV)
+- **Project identity:** [@ALVSIA_PRO](https://t.me/ALVSIA_PRO)
 
 For a useful bug report, include the app version, Android version, device ABI, affected tool, exact reproduction steps and relevant sanitized logs. Never attach passwords, license keys, tokens, private keys or personal data.
 
@@ -175,5 +174,5 @@ For a useful bug report, include the app version, Android version, device ABI, a
 <p align="center">
   <strong>ALVSIA PRO</strong><br/>
   Built for structured Android resource analysis.<br/>
-  <sub>By Kapten Jack</sub>
+  <sub>Official project identity: @ALVSIA_PRO</sub>
 </p>
