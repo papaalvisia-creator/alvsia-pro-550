@@ -44,6 +44,6 @@ This audit is source review only. The Kotlin notifier already contains a bounded
 - Kept the existing notifier API and added `MODULE_STATUS` and `HEARTBEAT` event types.
 - Wired module status and scan aggregate summaries from `MainActivity.kt`; authenticated foreground sessions emit a low-volume heartbeat every five minutes.
 - Added `tests/test_telegram_notifier_contract.py` to check the event registry, bounded queue/message sizes, redaction, selected-file reporting, and runtime wiring.
-- Updated `.github/workflows/android-validation.yml` so pushes to the PR #99 branch run the Android validation workflow and execute the notifier contract tests.
+- Updated `.github/workflows/android-validation.yml` on both the PR branch and `main`: the default-branch workflow now explicitly includes the PR #99 branch in its push trigger and runs the notifier contract test.
 - `Vault.tgToken()` and `Vault.tgChatId()` still return empty values. Therefore Android-to-Telegram delivery is intentionally not reported as working; a server-side credential-backed relay endpoint and its request/response contract must be confirmed before wiring a live delivery path.
 - No Android build, signed APK, or device test is claimed until the workflow produces a successful run and artifacts.
