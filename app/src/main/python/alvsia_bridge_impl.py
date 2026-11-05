@@ -557,9 +557,26 @@ def run_tool(module_id, sub_id, input_path, out_root, engine_dir, jars_dir):
                     return "\n".join(lines)
 
         # ── 6  File Scan ─────────────────────────────────────────────────
-        if mid == 6 or sid in ("string_scan", "hash_scan"):
+        if mid == 6 or sid in ("string_scan", "hash_scan", "metadata_v39_decode"):
             if not need_file(): return "\n".join(lines)
             dest_sc = out_dir("SCAN")
+            if sid == "metadata_v39_decode":
+                try:
+                    from alvsia_metadata import decode_metadata_v39_file
+                    source = Path(ip)
+                    digest = hashlib.sha256(source.read_bytes()).hexdigest()[:12]
+                    target = dest_sc / (source.stem + "_metadata_decoded_" + digest + ".dat")
+                    report = decode_metadata_v39_file(source, target)
+                    report_path = target.with_suffix(target.suffix + ".json")
+                    report_path.write_text(json.dumps(report, indent=2, sort_keys=True), encoding="utf-8")
+                    lines.append("OK IL2CPP metadata v39 decoded and all section ranges validated")
+                    lines.append("sections=%s overlaps=%s" % (report.get("section_count"), len(report.get("overlaps", []))))
+                    lines.append("OUT -> %s" % target)
+                    lines.append("REPORT -> %s" % report_path)
+                    lines.append("Original input preserved; output written atomically")
+                except Exception as exc:
+                    lines.append("X metadata v39 decode failed: %s" % str(exc)[:500])
+                return "\\n".join(lines)
             if sid == "string_scan":
                 r = feat.run_strings_scan(ip, dest_sc)
                 lines.append(str(r))
