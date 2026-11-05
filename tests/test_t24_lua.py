@@ -39,7 +39,7 @@ def _t24_fixture(key):
     out.extend(struct.pack("<i", 0))
     out.extend(struct.pack("<i", 0))
     out.extend(struct.pack("<i", 2))
-    out.extend(bytes([1, 1]))
+    out.extend(bytes([1, 255]))
     out.extend(struct.pack("<i", 0))
     out.extend(struct.pack("<i", 0))
     out.extend(struct.pack("<i", 0))
@@ -56,6 +56,7 @@ class T24LuaTests(unittest.TestCase):
         self.assertEqual(output[13], 8)
         self.assertIn(b"ALVSIA_T24_FIXTURE_2026", output)
         self.assertIn(b"@sample.lua", output)
+        self.assertIn(struct.pack("<ii", 1, 255), output)
         code_offset = 34 + (1 + len(b"@sample.lua")) + 8 + 3 + 4
         self.assertEqual(struct.unpack_from("<I", output, code_offset)[0] & 0x3F, 1)
         self.assertTrue(report["ok"] and report["strings_decoded"])
