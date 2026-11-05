@@ -26,6 +26,7 @@ EXPECTED_SEALED = {
     "lua_engine_engine.alv",
     "lua_engine_decompiler53.alv",
     "lua_engine_bgmi.alv",
+    "lua_engine_t24.alv",
     "lua_engine_luajit_decompiler.alv",
     "lua_engine_container.alv",
     "lua_engine_detector.alv",
