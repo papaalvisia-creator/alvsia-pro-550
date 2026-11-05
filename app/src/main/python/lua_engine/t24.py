@@ -214,7 +214,7 @@ def convert_t24_to_standard(data, key):
         # Preserve the reference converter's byte-to-int32 normalization.
         writer.i32(line_count)
         for line_value in line_bytes:
-            writer.i32(line_value if line_value < 128 else line_value - 256)
+            writer.i32(line_value)
 
         local_count = reader.i32()
         if local_count < 0 or local_count > MAX_ITEMS:
