@@ -40,7 +40,7 @@ Legend:
 | 3 | `GRWTOOL_no_login (1).py` | `fe9b9f6ef35b5a2e0d1a108bc1097a819e480ee73882c92322ed6f19df951a21` | Candidate — audit and map all functions |
 | 4 | `HR_DHAMA.py` | `5731f64fdd572b373641fb4d70ac1490917a9fd380b99ad51976568b28074417` | Existing crypto overlap — verify each cipher/mode/format against known-answer vectors |
 | 5 | `LUADEC` | `1a9d70dc0b67a3cdee48c19c1753ff7e9dc3e1c92ad6da123ba5f905616b32ce` | Candidate Lua engine — identify architecture, version support and Android compatibility |
-| 6 | `LUCKY_HUB_BYPASS_DUMPER.py` | `2d67ab97faf34992931d3e46c63c404a14771a19aafc9cf3706634a799` | Candidate — inspect every function and map safe, authorized analysis capabilities |
+| 6 | `LUCKY_HUB_BYPASS_DUMPER.py` | `2d67ab97faf34992931d3e46c63c404a14771a19aafc9cf3706634a799` | **QUARANTINE —** incoming-manifest source; absent from current tree. Do not execute or integrate bypass/dumper paths; any safe offline parser must be extracted separately after review |
 | 7 | `LUCKY_HUB_LUA_TOOL.py` | `60da6875cc88c399051fdbbed2a716a90471d9a2a17ed1e0f32e064ab9fba1f4` | Existing Lua overlap — verify parity and distinct workflows |
 | 8 | `LUCKY_HUB_PY_PROTECTOR.py` | `5323679a84398b5eb1eb6f452df861e130d16b089ed8bb4b4d210089008123e3` | Existing protection overlap — verify formats, round-trip and runtime compatibility |
 | 9 | `MASTER ANOGS.py` | `ff946e791e11ae0f3817cadf3a94a7ea1425bc217c842a768150cd0ff084e044` | Candidate — audit and map all functions |
@@ -50,14 +50,14 @@ Legend:
 | 13 | `PPH.py` | `820e2a9375a92fe7dfc03cf6029038c02d0c0098cff10c3a7dcb97af01dac2c6` | Existing crypto/format overlap — audit and map each capability |
 | 14 | `README.md` | `ad5cd6fb27b887f82caac1b1189ee675c023f2bd07b659ba837a0e6d6aebe01a` | Documentation — extract feature inventory and dependencies |
 | 15 | `aes_dump.py` | `9dd5dc78b278310af9cf7d02d4c6e903f5a7001dbce9b123ee8dddb2efab2e7a` | Existing AES/dump-analysis overlap — map offline authorized-file workflows |
-| 16 | `bypass.cpp` | `95d7e785be1151240c1e36547ac3e90cd3b996e17a6e640f84f0b450efae9670` | Candidate — inspect and map legitimate diagnostics; do not silently discard source |
+| 16 | `bypass.cpp` | `95d7e785be1151240c1e36547ac3e90cd3b996e17a6e640f84f0b450efae9670` | **QUARANTINE —** incoming-manifest source; absent from current tree. Preserve provenance only; do not compile, execute or ship bypass behavior |
 | 17 | `command` | `fab0a02f7f26ead62b1c1d308292504ebef6a412052f6ad19225d3c811207148` | Candidate — identify invocation contract and dependencies |
 | 18 | `decode.html` | `ab93960fc62c61eec1f47a9cacee30553bcb5edf4bcf24cdd9d9382117500429` | Candidate — inspect UI/decoder behavior and web-runtime dependencies |
 | 19 | `kaifee_decode_tool.so` | `f8035ee82c23463a0feac33d63575b8c590e5df09e29f914348de4d2e0281db8` | Native asset — identify ABI/architecture, exported symbols and safe invocation contract |
 | 20 | `kashmiri_paste.lua` | `3c6ed8718936bb8c83bd99d9b48df8e4fd79e25b4ac8f391e5a4115dcf1971ab` | Lua/source — classify format and intended workflow |
 | 21 | `luac` | `8f2de75bcab08e4a7f70776da1f948dad3a6e6c72ad730b14017e0d7c848906c` | Native executable — identify ABI, Lua version and compatibility |
-| 22 | `magic noban.lua` | `0e13b093a014970d1a0cd15d56f51147afd6cf982d3d243ea5778b7d6ef8ba9d` | Lua/source — inspect and map legitimate Lua analysis/format functions |
-| 23 | `mem_dump.py` | `86ea24decf2fa09279840fd8f828cdafe9db35b1a3e703f2db53ba28063e8938` | Candidate dump tooling — map offline dump parsing and authorized diagnostics |
+| 22 | `magic noban.lua` | `0e13b093a014970d1a0cd15d56f51147afd6cf982d3d243ea5778b7d6ef8ba9d` | **QUARANTINE —** incoming-manifest source; absent from current tree. Preserve as inert provenance only; do not execute or ship no-ban behavior |
+| 23 | `mem_dump.py` | `86ea24decf2fa09279840fd8f828cdafe9db35b1a3e703f2db53ba28063e8938` | **QUARANTINE PENDING CONTENT REVIEW —** incoming-manifest source; absent from current tree. Only a separately reviewed, explicit-file offline dump parser may be adapted; no live process attachment or memory acquisition |
 | 24 | `nadeem without firewall.lua` | `11bfa54d29df95fd8da66f8c7cbcc8b9ecb54584811374569426a487d510abc6` | Lua/source — classify and map all legitimate transformations |
 | 25 | `pak-tool-v5.0.py` | `110ded0899e188541706bc525ed5df11f690eaeabf36d45c950fcedf5e53fac3` | Existing PAK overlap — slot fingerprints and non-slot integrity checks remain explicit parity candidates |
 | 26 | `php2shell_checker.py` | `19b1fe9f66b157d19d4550f1dfc1e499c5839bb1dd870182f461a65a3644dace` | Candidate — map static PHP/config security-checking functions |
@@ -241,3 +241,15 @@ Disposition: **REVIEWED — NOT IMPORTED AS-IS**. Do not add the source's defaul
 ### Updated release state
 
 PR #99 head advanced beyond the successful APK commit after the SO URL patch parity increment. The APK artifact linked above is verified for commit `0d78f85`, **not** the newer source commit. A fresh Android Security Validation run is required before distributing an APK built from the newer head. Keep the successful 0d78f85 artifact available only as that exact commit's validation build.
+
+
+## Quarantine disposition update — 2026-11-06
+
+The following repository sources are now retained byte-for-byte under ALVISIA8/kumpulan-source-tool/source-tools/quarantine and are not runtime features:
+
+- Any fuction Log Dumper.lua — GameGuardian live-process reads of libUE4.so and ban/kick offset collection.
+- ue4_master_tool.py — socket C2 listener and shell command execution.
+- ultra_notifications.py — IP discovery/geolocation and Telegram telemetry.
+- ZmaDumpernub4.py — direct Telegram sendDocument of local files and shell terminal clearing.
+
+The incoming-manifest entries LUCKY_HUB_BYPASS_DUMPER.py, bypass.cpp, magic noban.lua and mem_dump.py are absent from the current source-tool Git tree. They are classified as quarantine-only; absence is not represented as a physical move. The separate root-level dump.py parser remains an offline file-based metadata parser and is not a live memory acquisition tool.
