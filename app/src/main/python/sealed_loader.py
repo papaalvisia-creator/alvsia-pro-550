@@ -26,6 +26,7 @@ _MAP = {
     "lua_engine.engine": "lua_engine_engine.alv",
     "lua_engine.decompiler53": "lua_engine_decompiler53.alv",
     "lua_engine.bgmi": "lua_engine_bgmi.alv",
+    "lua_engine.t24": "lua_engine_t24.alv",
     "lua_engine.luajit_decompiler": "lua_engine_luajit_decompiler.alv",
     "lua_engine.container": "lua_engine_container.alv",
     "lua_engine.detector": "lua_engine_detector.alv",
