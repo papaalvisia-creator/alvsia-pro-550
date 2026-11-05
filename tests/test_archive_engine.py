@@ -5,7 +5,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "app/src/main/python"))
-from archive_engine import detect_archive, inspect_archive, extract_archive, repack_obb
+from archive_engine import detect_archive, inspect_archive, extract_archive, repack_obb, repack_pak
+import alvsia_core
 
 
 def test_obb_roundtrip_and_inspection():
@@ -38,6 +39,33 @@ def test_zip_slip_rejected():
         assert "unsafe archive path" in result["error"]
 
 
+def test_pak_dispatch_uses_authenticated_core_contract():
+    with tempfile.TemporaryDirectory() as td:
+        root = Path(td)
+        pak = root / "sample.pak"
+        pak.write_bytes(b"PAK0" + bytes(64))
+        old_unpack = alvsia_core.run_pak_unpack
+        old_repack = alvsia_core.run_pak_smart_repack
+        try:
+            calls = []
+            alvsia_core.run_pak_unpack = lambda src, dest: (
+                calls.append(("unpack", str(src), str(dest))) or {"ok": True, "files": 1}
+            )
+            result = extract_archive(pak, root / "pak_out")
+            assert result["ok"] and result["format"] == "tencent-pak", result
+            assert calls and calls[0][0] == "unpack"
+
+            alvsia_core.run_pak_smart_repack = lambda base, modified, out: (
+                calls.append(("repack", str(base), str(modified), str(out))) or {"ok": True}
+            )
+            result = repack_pak(pak, root, root / "rebuilt.pak")
+            assert result["ok"], result
+            assert any(item[0] == "repack" for item in calls)
+        finally:
+            alvsia_core.run_pak_unpack = old_unpack
+            alvsia_core.run_pak_smart_repack = old_repack
+
+
 def test_non_archive_rejected():
     with tempfile.TemporaryDirectory() as td:
         p = Path(td) / "x.bin"
@@ -48,5 +76,5 @@ def test_non_archive_rejected():
 if __name__ == "__main__":
     test_obb_roundtrip_and_inspection()
     test_zip_slip_rejected()
-    test_non_archive_rejected()
-    print("ARCHIVE ENGINE TEST: PASS (3/3)")
+    test_pak_dispatch_uses_authenticated_core_contract()\n    test_non_archive_rejected()
+    print("ARCHIVE ENGINE TEST: PASS (4/4)")
