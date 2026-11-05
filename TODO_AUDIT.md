@@ -74,3 +74,18 @@ Verified on build 1170 (run 41768295623): native libraries STORED and
 page-aligned, `zipalign -c -p 4` Verification successful, `RESULT=PASS`,
 `JOB_STATUS: success`, 224 tests passing.
 APK SHA-256 `911d9e3c3d233870700fbe4c108c6de4b3f2c7443c08f3ecc077a46241828f30`.
+
+## Current continuation status — 2026-11-06
+
+This section supersedes any earlier successful-build status above when assessing PR #99's current head.
+
+- [x] Live Unaux panel PHP files uploaded by the owner; owner reports panel login, APK login and Telegram notifications are working.
+- [x] Main branch changes merged into the PR branch; PR #99 branch is up to date with main and GitHub reports it mergeable. It remains draft.
+- [x] Prevent normal login/tool events from being mislabeled as THREAT and remove duplicate threat-alert calls.
+- [x] Extend notifier detail redaction to HWID/device identifiers, location fields and IPv4 addresses.
+- [x] Integrate bounded PAK/OBB archive engine and archive regression tests into the PR branch; correct the archive test's literal newline syntax defect.
+- [x] Quarantine live-process GameGuardian offset dumper, socket C2/shell utility, IP/geolocation Telegram injector and direct Telegram file-upload dumper in the source-tool repository.
+- [ ] Execute source tests and Android validation on the current head. GitHub Actions runs 42090892030 (Android), 42090891940 (release audit), 42090892292 (module catalog), and 42090279095 (source tools) all show runner_id=0 and steps=[]; retry did not allocate a runner.
+- [ ] Complete current-head Gradle build, signed XopProtector APK, final artifact audit and real Android installation test.
+
+Earlier PASS records in this file refer to older commits/runs and are not evidence that the current PR head has been built or installed.
