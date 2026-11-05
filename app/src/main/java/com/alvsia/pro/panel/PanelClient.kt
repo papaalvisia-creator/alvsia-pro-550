@@ -296,6 +296,35 @@ class PanelClient {
         }
     }
 
+    /** Send a bounded operational event through the authenticated Unaux session. */
+    fun sendOperationalEvent(event: String, detail: String, appVersion: String): Boolean {
+        return try {
+            val token = sessionToken.trim().lowercase()
+            val hwid = lastHwid.trim()
+            if (!token.matches(Regex("^[0-9a-f]{64}$")) || hwid.length < 8) return false
+            val allowed = setOf(
+                "SESSION_OK", "SESSION_START", "SESSION_END", "TOOL_OK", "TOOL_ERROR",
+                "FILE_LOADED", "SCAN_COMPLETE", "PATCH_OK", "ERROR", "TAMPER", "FRIDA",
+                "ROOT", "DEBUG", "SIG_BLOCK", "THREAT", "ENGINE_CAP", "BUILD_OK",
+                "BUILD_FAIL", "STARTUP_OK", "STARTUP_FAIL", "MODULE_STATUS", "HEARTBEAT"
+            )
+            if (event !in allowed) return false
+            val payload = JSONObject()
+                .put("session_token", token)
+                .put("hwid", hwid)
+                .put("event", event)
+                .put("detail", detail.take(1400))
+                .put("app_version", appVersion.take(48))
+                .toString()
+            ensureGate()
+            val raw = postJson(base() + "app_event.php", payload) ?: return false
+            if (raw.trimStart().startsWith("<")) return false
+            JSONObject(raw).optString("status") == "ok"
+        } catch (_: Exception) {
+            false
+        }
+    }
+
     fun securityEvent(jsonBody: String): Boolean {
         return try {
             val media = "application/json; charset=utf-8".toMediaType()
