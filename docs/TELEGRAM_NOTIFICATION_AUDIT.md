@@ -30,11 +30,11 @@ The script dynamically injects a notification block into another Python program 
 
 ## Verification still required
 
-1. Locate the actual Kotlin notifier source path in the repository tree or release source bundle.
-2. Trace every call site, scheduler, worker and lifecycle hook for Telegram sends.
-3. Compare the Kotlin implementation against the findings above, including any storage traversal, hashing, file upload, heartbeat and license/device reporting.
-4. Add tests with a fake Telegram transport to verify allowed event payloads, redaction, size limits, failure handling and absence of secrets.
-5. Verify the bot credential is supplied only through protected server/runtime configuration and is absent from source, generated artifacts, logs and APK contents.
+1. Continue tracing notifier call sites and lifecycle hooks as the app evolves; the current PR wires module status, aggregate scan summaries and a five-minute authenticated-session heartbeat.
+2. Add an isolated fake-transport test before claiming end-to-end Telegram delivery; the current contract test is source-level and does not contact Telegram.
+3. Implement a server-side relay only after the active Unaux panel's deployed endpoint contract is confirmed. The current app Vault exposes empty token/chat-ID getters, and the panel API contract has not yet been verified from the accessible source.
+4. Supply the bot token and destination chat ID only as protected server configuration. Do not place either secret in Kotlin constants, BuildConfig, Gradle-generated resources, APK assets, or client-side preferences.
+5. After CI produces a release artifact, inspect the APK for secrets, verify package/version/signature/alignment, then perform a real Android installation test.
 
 This audit is source review only. The Kotlin notifier already contains a bounded operational-event queue and compatibility methods; this audit does not claim end-to-end Telegram delivery or Android build validation.
 
