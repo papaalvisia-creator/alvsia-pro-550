@@ -190,3 +190,54 @@ Android Security Validation run #1229 on commit `573514cb6bc65023ea18ba3469fe157
 - Lua Protector round-trip tests.
 
 Module catalog consistency run #170 also passed with 87 unique sub-tools. The Android build/signing/release audit stages were still in progress; do not treat this as a release-ready APK until the run completes and final APK validation succeeds.
+
+
+### CI release verification — 2026-11-06
+
+The workflow fallback for repository draft-release policy was validated on commit `0d78f859c6ec4e572ae00d56b6ab7a54c17dfd7a`:
+- Android Security Validation run #1231: **SUCCESS**.
+- All job steps succeeded, including debug tests, release APK build, internal signing, XopProtector packing, final signing, v2/v3 verification, APK packaging/alignment validation, release audit, draft release publication, artifact upload and source restoration.
+- Artifact: `ALVISIA_PRO_5.5.2-xop_candidate_signed`, 25,789,316 bytes, artifact ID `13432951700`, expires 2026-11-06 16:30:02 UTC.
+- Archive SHA-256: `30099bdea20c800b5f25f0c1f87f515bdcc9eee1851ba33fd2c2dc564521de69`.
+- The prior unsigned/failed publication run #1230 is superseded; do not report its failure as current.
+- PR #99 remains open, draft, and unmerged. This is intentional; release success does not authorize merging.
+
+### Additional source parity increment — MK Panel Changer URL patch
+
+Source: `MK PANEL CHANGER.py` functions `replace_url`, `auto_patch`, and `multi_edit`.
+
+Existing app mapping: Module 10 → `so_patch_url` dispatch → `alvsia_ultimate.so_patch_url`.
+
+A real parity gap was found: the app previously patched only the first exact occurrence, whereas the reference workflow replaces every exact occurrence while preserving the original field width. Updated `so_patch_url` to:
+- replace every exact occurrence in a separate output copy;
+- NUL-pad shorter replacement URLs to preserve binary offsets;
+- reject longer replacements and missing/empty inputs;
+- preserve the original input;
+- report occurrence count, offsets, and input/output SHA-256 values.
+
+Added `tests/test_so_patch_url_parity.py` for multiple matches, offset stability, original preservation, hashes, longer replacement rejection, missing URL and required arguments. Android Security Validation now runs this test alongside URL scanner parity tests. Status: IMPLEMENTED + DISPATCHED + TEST ADDED; final CI result pending for commit `3612a151344ccc23995df609055c1c5cc198e070`.
+
+The source script also contains fake key/login gates, "bypass" menu options, remote HTTPS/SO loader behavior and legacy owner branding. Those standalone behaviors are not copied into the app. Only deterministic local file analysis and binary URL patch behavior are considered for parity.
+
+### APK Protector source review
+
+Source: root `tool.py` ("APK Protector Tool").
+
+Review found a broad APK decompile/rebuild/signing workflow but unsafe defaults and weak extraction assumptions:
+- default keystore and key passwords are hard-coded as `apkprotector123`;
+- raw ZIP extraction uses `extractall` without an explicit path-traversal guard;
+- its decompile/rebuild pipeline relies on external apktool/Java and overlaps the existing ALVSIA APK validation/signing/release pipeline;
+- signature and integrity checks are useful concepts, but the current app already has release APK audits, signature verification and packaging validation.
+
+Disposition: **REVIEWED — NOT IMPORTED AS-IS**. Do not add the source's default signing credentials or unsafe archive extraction. A future isolated feature may reuse only bounded read-only APK inspection after adding path validation and fixture tests; no distinct, verified user-facing capability has yet been established by this file review.
+
+### Explicitly isolated source behaviors
+
+- `ue4_master_tool.py`: source advertises hidden RAT injection/listener, socket C2 and bypass/mod workflows. These are not integrated. A bounded offline UEXP/PAK metadata scanner can be assessed separately, but must not include RAT, injection, stealth or live bypass.
+- `ZmaDumpernub4.py`: source sends generated hook files and messages to Telegram. The local diff/log analysis can be evaluated as offline authorized-dump diagnostics, but automatic file/message exfiltration is not integrated.
+- `AttcToolFor4.6.py`: source contains large standalone panel/license/heartbeat/device-monitoring and process-control surfaces in addition to file/crypto/archive helpers. The full script is not imported wholesale. Each isolated deterministic archive/crypto helper still needs separate known-answer/fixture parity review.
+- `Attc10 (1).py`, `rjtool_core.py`, and `valerrine.py`: remain candidates for per-function PAK/crypto/parser comparison; no full parity claim is made from filename similarity or overlapping module labels.
+
+### Updated release state
+
+PR #99 head advanced beyond the successful APK commit after the SO URL patch parity increment. The APK artifact linked above is verified for commit `0d78f85`, **not** the newer source commit. A fresh Android Security Validation run is required before distributing an APK built from the newer head. Keep the successful 0d78f85 artifact available only as that exact commit's validation build.
