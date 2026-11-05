@@ -112,9 +112,15 @@ class MainActivity : ComponentActivity() {
 
                 LaunchedEffect(screen, license, hwid) {
                     if (screen == "home" && license.isNotBlank() && panel.sessionToken.length == 64) {
+                        var lastHeartbeatAt = 0L
                         while (true) {
                             val fresh = withContext(Dispatchers.IO) { panel.fetchMessages(hwid) }
                             liveMessages = fresh
+                            val now = System.currentTimeMillis()
+                            if (now - lastHeartbeatAt >= 5 * 60_000L) {
+                                TelegramNotifier.notifyHeartbeat(this@MainActivity)
+                                lastHeartbeatAt = now
+                            }
                             delay(30_000L)
                         }
                     } else {
@@ -386,6 +392,26 @@ class MainActivity : ComponentActivity() {
                                         val eventDetail = "${sub.id}: " +
                                             (result.firstOrNull { it.startsWith("X ") } ?: if (success) "operation completed" else "operation needs review")
                                         val eventKind = if (success) "TOOL_OK" else "TOOL_ERROR"
+                                        TelegramNotifier.notifyModuleStatus(
+                                            this@MainActivity,
+                                            sub.title,
+                                            if (success) "SUCCESS" else "ATTENTION",
+                                            eventDetail.take(200)
+                                        )
+                                        val scanLike = sub.id.contains("scan", ignoreCase = true) ||
+                                            sub.title.contains("scan", ignoreCase = true)
+                                        if (scanLike) {
+                                            val scanCounts = mapOf(
+                                                "success" to result.count { it.startsWith("OK ") },
+                                                "error" to result.count { it.startsWith("X ") },
+                                                "other" to result.count { !it.startsWith("OK ") && !it.startsWith("X ") }
+                                            )
+                                            TelegramNotifier.notifyScanComplete(
+                                                this@MainActivity,
+                                                result.size,
+                                                scanCounts
+                                            )
+                                        }
                                         ThreatReport.emit(
                                             this@MainActivity,
                                             eventKind,
