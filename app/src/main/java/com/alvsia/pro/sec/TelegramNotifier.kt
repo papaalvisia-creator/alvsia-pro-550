@@ -233,7 +233,15 @@ object TelegramNotifier {
 
     private fun sanitize(value: String): String {
         var out = value
-            .replace(Regex("(?i)(token|api[_-]?key|password|license[_-]?key|session[_-]?token)\\s*[:=]\\s*[^\\s,;]+"), "$1=[REDACTED]")
+            .replace(
+                Regex("(?i)(token|api[_ -]?key|password|license(?:[_ -]?key)?|session[_ -]?token|hwid|device[_ -]?id|android[_ -]?id|serial|mac(?:[_ -]?address)?)\\s*[:=]\\s*[^\\s,;]+"),
+                "$1=[REDACTED]"
+            )
+            .replace(
+                Regex("(?i)(latitude|longitude|lat|lon|lng|location|gps)\\s*[:=]\\s*[^\\s,;]+"),
+                "$1=[REDACTED]"
+            )
+            .replace(Regex("(?<![0-9.])(?:[0-9]{1,3}\\.){3}[0-9]{1,3}(?![0-9.])"), "[IP REDACTED]")
             .replace(Regex("(?i)https?://[^\\s]+"), "[URL REDACTED]")
             .replace(Regex("(?i)(/data/[^\\s]+|/storage/[^\\s]+|/sdcard/[^\\s]+)"), "[PATH REDACTED]")
         out = out.replace(Regex("[\\r\\n]{3,}"), "\n\n")
