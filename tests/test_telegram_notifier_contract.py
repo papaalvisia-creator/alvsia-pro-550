@@ -23,7 +23,7 @@ class TelegramNotifierContractTests(unittest.TestCase):
             "TOOL_ERROR", "FILE_LOADED", "SCAN_COMPLETE", "PATCH_OK",
             "ERROR", "TAMPER", "FRIDA", "ROOT", "DEBUG", "SIG_BLOCK",
             "THREAT", "ENGINE_CAP", "BUILD_OK", "BUILD_FAIL",
-            "STARTUP_OK", "STARTUP_FAIL",
+            "STARTUP_OK", "STARTUP_FAIL", "MODULE_STATUS", "HEARTBEAT",
         ):
             self.assertIn(f'"{event}"', self.source)
 
@@ -48,6 +48,13 @@ class TelegramNotifierContractTests(unittest.TestCase):
         self.assertIn("Full storage indexing is not part of operational notifications", self.source)
         self.assertIn("Background file-delta reporting is not part of operational notifications", self.source)
         self.assertIn("Automatic file upload is not supported", self.source)
+
+    def test_module_scan_and_heartbeat_events_are_wired_to_activity(self):
+        activity = (ROOT / "app/src/main/java/com/alvsia/pro/MainActivity.kt").read_text(encoding="utf-8")
+        self.assertIn("TelegramNotifier.notifyModuleStatus(", activity)
+        self.assertIn("TelegramNotifier.notifyScanComplete(", activity)
+        self.assertIn("TelegramNotifier.notifyHeartbeat(", activity)
+        self.assertIn("5 * 60_000L", activity)
 
     def test_message_html_is_escaped(self):
         self.assertIn('replace("&", "&amp;")', self.source)
