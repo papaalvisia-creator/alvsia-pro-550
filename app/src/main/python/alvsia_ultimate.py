@@ -644,7 +644,7 @@ def get_neon_header() -> Panel:
         grid.add_column(justify="left", ratio=1)
         grid.add_column(justify="right", ratio=1)
         grid.add_row(
-            Text.assemble(" ", rainbow_text("𝐎𝐖𝐍𝐄𝐑 ➩", off), " ", Text("@OriginalOnwerALV", style="bold white")),
+            Text.assemble(" ", rainbow_text("𝐎𝐖𝐍𝐄𝐑 ➩", off), " ", Text("@ALVSIA_PRO", style="bold white")),
             Text.assemble(rainbow_text("𝐔𝐏𝐓𝐈𝐌𝐄 ➩", off + 3), " ", Text(to_fancy(now.strftime('%H:%M:%S')), style="bold white")),
         )
         grid.add_row(
@@ -669,7 +669,7 @@ def get_neon_header() -> Panel:
     grid.add_column(justify="left", ratio=1)
     grid.add_column(justify="right", ratio=1)
     grid.add_row(
-        f"[bold {b_color}] {to_fancy('𝐎𝐖𝐍𝐄𝐑')} ➩[/bold {b_color}] [bold white]@OriginalOnwerALV[/]",
+        f"[bold {b_color}] {to_fancy('𝐎𝐖𝐍𝐄𝐑')} ➩[/bold {b_color}] [bold white]@ALVSIA_PRO[/]",
         f"[bold {b_color}]{to_fancy('𝐔𝐏𝐓𝐈𝐌𝐄')} ➩[/bold {b_color}] [bold white]{to_fancy(now.strftime('%H:%M:%S'))}[/]"
     )
     grid.add_row(
@@ -869,7 +869,7 @@ def _ks_show_banner(hwid: str) -> None:
     _ks_row("[bold yellow]🔑 ALVSIA KEY SYSTEM v2.0[/bold yellow]")
     _ks_box_mid()
     _ks_row(f"[dim]HWID:[/dim]  [bold white]{hwid}[/bold white]")
-    _ks_row("[dim]Contact [bold cyan]@OriginalOnwerALV[/bold cyan] for a key[/dim]")
+    _ks_row("[dim]Contact [bold cyan]@ALVSIA_PRO[/bold cyan] for a key[/dim]")
     _ks_box_bot()
 
 
@@ -936,7 +936,7 @@ def _ks_prompt_key(hwid: str) -> bool:
     console.print()
     console.print(Panel(
         "[bold red]❌ Too many invalid attempts.[/bold red]\n"
-        "[yellow]Contact [bold cyan]@OriginalOnwerALV[/bold cyan] to get a valid key.[/yellow]",
+        "[yellow]Contact [bold cyan]@ALVSIA_PRO[/bold cyan] to get a valid key.[/yellow]",
         title="[bold white on red] 🚫 ACCESS DENIED [/]",
         border_style="red",
         box=box.HEAVY,
@@ -4308,7 +4308,7 @@ def run_obb_analysis_tool():
             pak_org = TencentPakFile(org_path)
             pak_mod = TencentPakFile(mod_path)
 
-            console.print("[bold yellow]🔥POWER BY- @OriginalOnwerALV...👇[/bold yellow]")
+            console.print("[bold yellow]🔥POWER BY- @ALVSIA_PRO...👇[/bold yellow]")
             if not pak_mod._index:
                 console.print("[bold cyan]..[/bold cyan]")
                 pak_mod._index = pak_org._index
@@ -10770,7 +10770,7 @@ def run_combined_modding_tool():
             print(f"              {G}~SKIN TOOL : SYSTEM DEVELOPER~{RESET}\n")
 
             print(f"{G}╔════════════════════════════════════════════════════════════╗")
-            print(f"{G}║ {G}{to_fancy('OWNER:')}  {W}{to_fancy('@OriginalOnwerALV'):<18} {G}{to_fancy('𝐔𝐏𝐓𝐈𝐌:')} {W}{uptime_str:<12} {G}║")
+            print(f"{G}║ {G}{to_fancy('OWNER:')}  {W}{to_fancy('@ALVSIA_PRO'):<18} {G}{to_fancy('𝐔𝐏𝐓𝐈𝐌:')} {W}{uptime_str:<12} {G}║")
             print(f"{G}║ {G}{to_fancy('DEVICE:')} {W}{to_fancy(phone_model):<18} {G}{to_fancy('DATE:')}   {W}{current_date:<12} {G}║")
             print(f"{G}║ {G}{to_fancy('HWID:')}   {W}{hwid[:15]:<18} {G}{to_fancy('SYSTEM:')} {Y}{to_fancy('REAL DEVICE ✔')} {G}║")
             print(f"{G}╚════════════════════════════════════════════════════════════╝")
@@ -11235,7 +11235,7 @@ def save_license_data(license_key, device_id):
         "device_model": get_device_model(), "android_version": get_android_version(),
         "activation_date": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "license_hash": generate_license_hash(license_key, device_id),
-        "tool_version": "ALVSIA v8.0 Secure", "activated_by": "@OriginalOnwerALV"
+        "tool_version": "ALVSIA v8.0 Secure", "activated_by": "@ALVSIA_PRO"
     }
     json_str = json.dumps(data)
     encoded = hashlib.md5(json_str.encode()).hexdigest() + "|" + json_str
@@ -11308,7 +11308,7 @@ def check_device_model():
                 console.print(f"[bold red]║  [bold cyan]... and {len(ALLOWED_DEVICE_MODELS)-8} more[bold red]                [bold red]║[/bold red]")
             console.print(f"[bold red]║  [bold cyan]Your Model: [bold white]{current_model}[bold red]                       [bold red]║[/bold red]")
             console.print(f"[bold red]║  [bold cyan]Your Brand: [bold white]{current_brand}[bold red]                       [bold red]║[/bold red]")
-            console.print(f"[bold red]║  [bold yellow]Contact @OriginalOnwerALV to add your model[bold red]           [bold red]║[/bold red]")
+            console.print(f"[bold red]║  [bold yellow]Contact @ALVSIA_PRO to add your model[bold red]           [bold red]║[/bold red]")
             console.print(f"[bold red]╚{'═' * 56}╝[/bold red]")
             return False
     elif ALLOWED_BRANDS and len(ALLOWED_BRANDS) > 0:
@@ -11325,7 +11325,7 @@ def check_device_model():
             console.print(f"[bold red]║  [bold cyan]... and {len(ALLOWED_BRANDS)-8} more[bold red]                            [bold red]║[/bold red]")
         console.print(f"[bold red]║  [bold cyan]Your Brand: [bold white]{current_brand}[bold red]                        [bold red]║[/bold red]")
         console.print(f"[bold red]║  [bold cyan]Your Model: [bold white]{current_model}[bold red]                       [bold red]║[/bold red]")
-        console.print(f"[bold red]║  [bold yellow]Contact @OriginalOnwerALV for access[bold red]                    [bold red]║[/bold red]")
+        console.print(f"[bold red]║  [bold yellow]Contact @ALVSIA_PRO for access[bold red]                    [bold red]║[/bold red]")
         console.print(f"[bold red]╚{'═' * 56}╝[/bold red]")
         return False
     console.print(f"[bold yellow]⚠ No model restrictions active[/bold yellow]")
@@ -11364,7 +11364,7 @@ def check_device_lock():
         console.print(f"[bold red]║  [bold cyan]Registered: [bold white]{saved_id}[bold red]                  [bold red]║[/bold red]")
         console.print(f"[bold red]║  [bold cyan]Current:    [bold white]{current_device_id}[bold red]                  [bold red]║[/bold red]")
         console.print(f"[bold red]║  [bold cyan]Model:      [bold white]{saved_device.get('device_model', 'N/A')}[bold red]                        [bold red]║[/bold red]")
-        console.print(f"[bold red]║  [bold yellow]Contact @OriginalOnwerALV to transfer license[bold red]             [bold red]║[/bold red]")
+        console.print(f"[bold red]║  [bold yellow]Contact @ALVSIA_PRO to transfer license[bold red]             [bold red]║[/bold red]")
         console.print(f"[bold red]╚{'═' * 56}╝[/bold red]")
         return False
     return True
@@ -11378,7 +11378,7 @@ def check_expiry():
         console.print(f"[bold red]║  [bold white on red] ⏰ TOOL EXPIRED! [/bold white on red]                               [bold red]║[/bold red]")
         console.print(f"[bold red]║  [bold yellow]Expiry Date: {TOOL_EXPIRY_DATE.strftime('%d-%m-%Y')}[bold red]                          [bold red]║[/bold red]")
         console.print(f"[bold red]║  [bold yellow]Current Date: {now.strftime('%d-%m-%Y')}[bold red]                         [bold red]║[/bold red]")
-        console.print(f"[bold red]║  [bold cyan]Contact @OriginalOnwerALV for renewal[bold red]                     [bold red]║[/bold red]")
+        console.print(f"[bold red]║  [bold cyan]Contact @ALVSIA_PRO for renewal[bold red]                     [bold red]║[/bold red]")
         console.print(f"[bold red]╚{'═' * 56}╝[/bold red]")
         return False
     remaining = (TOOL_EXPIRY_DATE - now).days
@@ -11891,7 +11891,7 @@ def check_license():
     console.print(f"\n[bold magenta]╔{'═' * 56}╗[/bold magenta]")
     console.print(f"[bold magenta]║  [bold yellow]🔑 LICENSE ACTIVATION REQUIRED[bold magenta]                      [bold magenta]║[/bold magenta]")
     console.print(f"[bold magenta]║  [bold white]Enter your premium license key to continue[bold magenta]          [bold magenta]║[/bold magenta]")
-    console.print(f"[bold magenta]║  [bold cyan]Contact @OriginalOnwerALV to get license key[bold magenta]              [bold magenta]║[/bold magenta]")
+    console.print(f"[bold magenta]║  [bold cyan]Contact @ALVSIA_PRO to get license key[bold magenta]              [bold magenta]║[/bold magenta]")
     console.print(f"[bold magenta]║  [dim]Your Device ID: {current_device_id}[bold magenta]                  [bold magenta]║[/bold magenta]")
     console.print(f"[bold magenta]╚{'═' * 56}╝[/bold magenta]")
     attempts = 3
@@ -11932,7 +11932,7 @@ def check_license():
                 console.print(f"[bold green]║  [bold cyan]Status: [bold green]✅ LIFETIME ACTIVE[/bold green]                     [bold green]║[/bold green]")
             else:
                 console.print(f"[bold green]║  [bold cyan]Status: [bold green]✅ ACTIVE ({remaining} days)[/bold green]              [bold green]║[/bold green]")
-            console.print(f"[bold green]║  [bold yellow]Thank you for choosing @OriginalOnwerALV![/bold green]                 [bold green]║[/bold green]")
+            console.print(f"[bold green]║  [bold yellow]Thank you for choosing @ALVSIA_PRO![/bold green]                 [bold green]║[/bold green]")
             console.print(f"[bold green]╚{'═' * 56}╝[/bold green]")
             return True
         if license_key in VALID_LICENSE_KEYS:
@@ -11944,12 +11944,12 @@ def check_license():
             console.print(f"[bold red]╔{'═' * 56}╗[/bold red]")
             console.print(f"[bold red]║  [bold red]❌ INVALID LICENSE KEY![/bold red]                              [bold red]║[/bold red]")
             console.print(f"[bold red]║  [bold yellow]Attempts remaining: {attempts}[/bold red]                          [bold red]║[/bold red]")
-            console.print(f"[bold red]║  [bold cyan]Contact @OriginalOnwerALV for valid key[/bold red]                   [bold red]║[/bold red]")
+            console.print(f"[bold red]║  [bold cyan]Contact @ALVSIA_PRO for valid key[/bold red]                   [bold red]║[/bold red]")
             console.print(f"[bold red]╚{'═' * 56}╝[/bold red]")
         else:
             console.print(f"\n[bold red]╔{'═' * 56}╗[/bold red]")
             console.print(f"[bold red]║  [bold white on red] 🚫 ALL ATTEMPTS USED! ACCESS DENIED! [/bold white on red]          [bold red]║[/bold red]")
-            console.print(f"[bold red]║  [bold yellow]Contact @OriginalOnwerALV for license key[/bold red]                 [bold red]║[/bold red]")
+            console.print(f"[bold red]║  [bold yellow]Contact @ALVSIA_PRO for license key[/bold red]                 [bold red]║[/bold red]")
             console.print(f"[bold red]║  [bold cyan]Device ID: [bold white]{current_device_id}[/bold red]                  [bold red]║[/bold red]")
             console.print(f"[bold red]╚{'═' * 56}╝[/bold red]")
             return False
