@@ -58,6 +58,12 @@ class TelegramNotifierContractTests(unittest.TestCase):
         self.assertIn("TelegramNotifier.notifySessionStart(", activity)
         self.assertIn("5 * 60_000L", activity)
 
+    def test_telegram_payload_excludes_device_identifiers(self):
+        self.assertNotIn("Build.MANUFACTURER", self.source)
+        self.assertNotIn("Build.MODEL", self.source)
+        self.assertNotIn("DEVICE:", self.source)
+        self.assertNotIn("Hwid.deviceId", self.source)
+
     def test_message_html_is_escaped(self):
         self.assertIn('replace("&", "&amp;")', self.source)
         self.assertIn('replace("<", "&lt;")', self.source)
