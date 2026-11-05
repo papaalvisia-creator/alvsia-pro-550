@@ -67,7 +67,7 @@ object TelegramNotifier {
         "TOOL_OK", "TOOL_ERROR", "FILE_LOADED", "SCAN_COMPLETE", "PATCH_OK",
         "ERROR", "TAMPER", "FRIDA", "ROOT", "DEBUG",
         "SIG_BLOCK", "THREAT", "ENGINE_CAP", "BUILD_OK",
-        "BUILD_FAIL", "STARTUP_OK", "STARTUP_FAIL"
+        "BUILD_FAIL", "STARTUP_OK", "STARTUP_FAIL", "MODULE_STATUS", "HEARTBEAT"
     )
 
     fun bindApplicationContext(ctx: Context) {
@@ -142,6 +142,18 @@ object TelegramNotifier {
 
     fun notifyError(ctx: Context, error: String) {
         notify(ctx, "ERROR", "Operation error: ${sanitize(error).take(1200)}")
+    }
+
+    /** Module lifecycle summary; module identifiers and details are sanitized. */
+    fun notifyModuleStatus(ctx: Context, module: String, status: String, detail: String = "") {
+        val safeStatus = sanitize(status).take(48)
+        val safeModule = sanitize(module).take(96)
+        notify(ctx, "MODULE_STATUS", "Module: $safeModule\\nStatus: $safeStatus\\n${sanitize(detail).take(500)}")
+    }
+
+    /** Low-volume authenticated-session heartbeat; contains no device or license identifiers. */
+    fun notifyHeartbeat(ctx: Context) {
+        notify(ctx, "HEARTBEAT", "Authenticated application session is active")
     }
 
     fun notifySessionSummary(ctx: Context, totalFiles: Int, success: Int, failed: Int) {
@@ -236,7 +248,7 @@ object TelegramNotifier {
         }.getOrDefault("unknown")
         val status = when (event.kind) {
             "SESSION_OK", "SESSION_START", "SESSION_END", "TOOL_OK",
-            "SCAN_COMPLETE", "PATCH_OK", "BUILD_OK", "STARTUP_OK" -> "SUCCESS"
+            "SCAN_COMPLETE", "PATCH_OK", "BUILD_OK", "STARTUP_OK", "MODULE_STATUS", "HEARTBEAT" -> "SUCCESS"
             "TAMPER", "FRIDA", "DEBUG", "SIG_BLOCK", "THREAT",
             "TOOL_ERROR", "ERROR", "BUILD_FAIL", "STARTUP_FAIL" -> "ATTENTION"
             else -> "INFO"
