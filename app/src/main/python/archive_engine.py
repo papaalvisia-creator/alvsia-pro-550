@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import os
 import stat
+import tempfile
 import zipfile
 from pathlib import Path
 
@@ -109,6 +110,7 @@ def extract_archive(path, output_dir):
 
     written = 0
     total = 0
+    seen_targets = set()
     try:
         with zipfile.ZipFile(str(p), "r") as zf:
             infos = zf.infolist()
@@ -121,6 +123,10 @@ def extract_archive(path, output_dir):
                 target = _safe_target(root, info.filename)
                 if target is None:
                     raise ValueError("unsafe archive path rejected")
+                target_key = str(target)
+                if target_key in seen_targets:
+                    raise ValueError("duplicate archive target rejected")
+                seen_targets.add(target_key)
                 mode = (info.external_attr >> 16) & 0xFFFF
                 if stat.S_ISLNK(mode):
                     raise ValueError("symbolic-link archive entry rejected")
@@ -130,23 +136,33 @@ def extract_archive(path, output_dir):
                     target.mkdir(parents=True, exist_ok=True)
                     continue
                 target.parent.mkdir(parents=True, exist_ok=True)
-                temp = target.with_name(target.name + ".alvsia-tmp")
+                temp_path = None
                 try:
-                    with zf.open(info, "r") as source, temp.open("wb") as dest:
-                        copied = 0
-                        while True:
-                            block = source.read(1024 * 1024)
-                            if not block:
-                                break
-                            copied += len(block)
-                            total += len(block)
-                            if copied > MAX_SINGLE_FILE or total > MAX_TOTAL_UNCOMPRESSED:
-                                raise ValueError("archive expansion limit exceeded")
-                            dest.write(block)
-                    os.replace(str(temp), str(target))
+                    # Use a unique file in the destination directory. Never open a
+                    # predictable .tmp path that could already be a symlink.
+                    with tempfile.NamedTemporaryFile(
+                        mode="wb",
+                        dir=str(target.parent),
+                        prefix="." + target.name + ".",
+                        suffix=".alvsia-tmp",
+                        delete=False,
+                    ) as dest:
+                        temp_path = Path(dest.name)
+                        with zf.open(info, "r") as source:
+                            copied = 0
+                            while True:
+                                block = source.read(1024 * 1024)
+                                if not block:
+                                    break
+                                copied += len(block)
+                                total += len(block)
+                                if copied > MAX_SINGLE_FILE or total > MAX_TOTAL_UNCOMPRESSED:
+                                    raise ValueError("archive expansion limit exceeded")
+                                dest.write(block)
+                    os.replace(str(temp_path), str(target))
                 finally:
-                    if temp.exists():
-                        temp.unlink()
+                    if temp_path is not None and temp_path.exists():
+                        temp_path.unlink()
                 written += 1
         return {"ok": True, "format": kind["format"], "files": written,
                 "uncompressed_bytes": total, "out": str(root)}
@@ -161,9 +177,19 @@ def repack_obb(source_dir, output_file):
     if not source.is_dir():
         return {"ok": False, "error": "source directory not found"}
     target.parent.mkdir(parents=True, exist_ok=True)
-    temp = target.with_name(target.name + ".alvsia-tmp")
+    temp_path = None
     try:
-        with zipfile.ZipFile(str(temp), "w", compression=zipfile.ZIP_DEFLATED,
+        # Create a unique temporary file rather than following a predictable
+        # attacker-controlled sibling symlink.
+        with tempfile.NamedTemporaryFile(
+            mode="wb",
+            dir=str(target.parent),
+            prefix="." + target.name + ".",
+            suffix=".alvsia-tmp",
+            delete=False,
+        ) as handle:
+            temp_path = Path(handle.name)
+        with zipfile.ZipFile(str(temp_path), "w", compression=zipfile.ZIP_DEFLATED,
                              compresslevel=6, allowZip64=True) as zf:
             files = sorted(p for p in source.rglob("*") if p.is_file())
             if len(files) > MAX_ENTRIES:
@@ -182,13 +208,14 @@ def repack_obb(source_dir, output_file):
                 if size > MAX_SINGLE_FILE or total > MAX_TOTAL_UNCOMPRESSED:
                     raise ValueError("source size limit exceeded")
                 zf.write(str(item), rel)
-        os.replace(str(temp), str(target))
+        os.replace(str(temp_path), str(target))
         return {"ok": True, "format": "obb-zip", "files": len(files),
                 "bytes": target.stat().st_size, "out": str(target)}
     except Exception as exc:
-        if temp.exists():
-            temp.unlink()
         return {"ok": False, "format": "obb-zip", "error": str(exc)}
+    finally:
+        if temp_path is not None and temp_path.exists():
+            temp_path.unlink()
 
 
 def repack_pak(base_pak, modified_dir, output_pak, smart=True):
