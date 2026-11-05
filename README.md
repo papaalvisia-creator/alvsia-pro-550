@@ -48,7 +48,7 @@ The application source documents the following 19 tool areas. Availability and b
 | 03 | PAK Compact | Remove selected entries and compact archives |
 | 04 | OBB Tools | Inspect, extract and rebuild OBB data |
 | 05 | Lua Tools | Detect, inspect, decompile and clean Lua content |
-| 06 | File Scan | Scan files and calculate common hashes |
+| 06 | File Scan | Scan files, calculate hashes and validate IL2CPP metadata v39 |
 | 07 | Workspace | Manage tool input, work and output directories |
 | 08 | Export Report | Export session and file-analysis summaries |
 | 09 | Rebrand | Apply supported branding/resource changes |
