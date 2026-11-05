@@ -4,6 +4,7 @@ from __future__ import annotations
 import os
 import shutil
 import subprocess
+import tempfile
 import zipfile
 from pathlib import Path
 
@@ -635,6 +636,47 @@ def scrub_foreign_branding(text, brand=DEFAULT_BRAND, channel=DEFAULT_CHANNEL):
             replacements += text.count(token)
             text = text.replace(token, brand)
     return text, replacements
+
+
+def scrub_output_text_files(out_root, max_file_bytes=8 * 1024 * 1024):
+    """Normalize known legacy credits in generated OUT text artifacts only.
+
+    Inputs under IN/WORK and binary assets are never touched.
+    """
+    root = Path(out_root) / "OUT"
+    allowed = {".txt", ".json", ".csv", ".md", ".log", ".lua", ".xml", ".ini", ".cfg"}
+    stats = {"files": 0, "replacements": 0}
+    if not root.is_dir():
+        return stats
+    for path in root.rglob("*"):
+        if path.is_symlink() or not path.is_file() or path.suffix.lower() not in allowed:
+            continue
+        try:
+            if path.stat().st_size > max_file_bytes:
+                continue
+            original = path.read_bytes()
+            decoded = original.decode("utf-8")
+        except (OSError, UnicodeDecodeError):
+            continue
+        cleaned, count = scrub_foreign_branding(decoded)
+        if not count:
+            continue
+        fd, temp_name = tempfile.mkstemp(prefix=".alvsia-brand-", suffix=".tmp", dir=str(path.parent))
+        try:
+            with os.fdopen(fd, "wb") as handle:
+                handle.write(cleaned.encode("utf-8"))
+                handle.flush()
+                os.fsync(handle.fileno())
+            os.replace(temp_name, str(path))
+        except Exception:
+            try:
+                os.unlink(temp_name)
+            except OSError:
+                pass
+            raise
+        stats["files"] += 1
+        stats["replacements"] += count
+    return stats
 
 
 def _load_rebrand_config(out_root):
