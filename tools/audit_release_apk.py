@@ -39,7 +39,7 @@ PROTECTED_MODULES = {
     "alvsia_features", "pinned_http", "lua_engine/lua_decompiler_final",
     "lua_engine/lua_protector", "lua_engine/pattern_registry",
     "lua_output_validator", "lua_string_recover",
-    "lua_engine/engine", "lua_engine/decompiler53", "lua_engine/bgmi",
+    "lua_engine/engine", "lua_engine/decompiler53", "lua_engine/bgmi", "lua_engine/t24",
     "lua_engine/luajit_decompiler", "lua_engine/container", "lua_engine/detector",
     "lua_engine/multi_format", "lua_engine/streaming_decompiler", "lua_engine/vm_deobfuscator",
 }
