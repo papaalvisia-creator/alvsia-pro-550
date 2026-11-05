@@ -19,7 +19,7 @@ Replace legacy owner branding in project-owned code, UI, generated reports and o
 
 - The incoming manifest header claims **34 file entries** (20 Python, 4 Lua/source, 2 JARs and 8 other/native/assets), but a direct count of visible SHA-256 records finds **33 named entries**. This remains an unresolved source-inventory discrepancy.
 - The two `py_decryptor` entries have the same SHA-256 and are byte-identical duplicates in the manifest.
-- PR #96 currently describes 19 top-level modules, 86 catalog sub-tools and 23 sealed Python modules. These are app catalog/inventory counts, not counts of imported source files.
+- The PR #96 baseline describes 19 top-level modules and 23 sealed Python modules. This branch adds the 87th catalog sub-tool: T24 Lua Decompile. These are app catalog/inventory counts, not counts of imported source files.
 - PR #96 lists seven reference-derived diagnostic sub-tools: Lua format probe, PAK integrity audit, OBB integrity audit, offline authorized-dump analyzer, static source triage, XOR known-vector self-test and AES known-answer self-test.
 - PR #96 also records an IL2CPP Metadata v39 decoder addition. The full source repository contains root-level `dump.py`; the app implementation is `app/src/main/python/alvsia_metadata.py`, with regression coverage in `tests/test_metadata_v39.py`.
 - The separate PR #91 describes further reference audit work, but it is draft/unmerged. Do not count its code as part of the PR #96 baseline APK unless merged or independently cherry-picked.
@@ -162,3 +162,17 @@ These are concrete source-level mappings from files inspected in the full reposi
 - That run validates the PR #96 head only. It does not validate new PR #99 registry commits or the newly added URL-scanner parity tests.
 - For PR #99 commit `3ca0745f39da1c281dd4edc9a8f234d0d7113364`, catalog consistency passed (run #150); release safety audit was in progress and Android Security Validation was pending at the time of this update.
 - Device installation, user-device end-to-end operation and full coverage across all 53 repository files remain outstanding.
+
+
+### T24 Lua pipeline increment — 2026-11-06
+
+Source reference: root-level `PREMIUM.py`, T24 v4 converter/decompiler section (opcode table, T24→standard Lua 5.3 conversion and XOR string transform).
+
+Added on branch `feat/full-reference-source-registry-20261106`:
+- `app/src/main/python/lua_engine/t24.py`: bounded T24→standard Lua 5.3 normalizer; validates header, counts, nested-prototype depth, string sizes and input size; maps T24 opcodes; keeps original input unchanged and writes atomically to a separate file.
+- `app/src/main/java/com/alvsia/pro/tool/SubMenus.kt`: new Module 05 subtool `t24_lua_decompile`.
+- `app/src/main/python/alvsia_bridge_impl.py`: dispatches the operation through the existing Lua tool grant, uses the existing project Lua XOR key and hands normalized output to the existing smart decompiler. It does not execute input bytecode.
+- `tests/test_t24_lua.py`: synthetic valid fixture, opcode mapping, XOR string handling, structure-only mode, malformed/truncated input and original-file preservation.
+- Catalog count updated from 86 to **87** in `tests/test_studio_catalog.py`.
+
+Status: IMPLEMENTED + MENU/DISPATCH WIRED; unit tests and Android CI are pending. The normalizer follows the source converter's T24 v4 layout and byte-to-int32 line-info normalization. Real-world T24 samples are still required before marking the format VERIFIED; compiler (standard Lua → T24) has not yet been ported because the reference compiler's size_t/long-string width handling needs fixture confirmation.
