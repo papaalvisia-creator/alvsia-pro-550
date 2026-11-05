@@ -65,7 +65,7 @@ def main() -> int:
             check("AndroidManifest.xml present", "AndroidManifest.xml" in names)
             check(
                 "classes.dex present",
-                any(re.fullmatch(r"classes(?:[0-9]+)?\\.dex", name) for name in names),
+                any(re.fullmatch(r"classes([0-9]+)?[.]dex", name) for name in names),
             )
             check(
                 "arm64 native payload present",
@@ -86,11 +86,11 @@ def main() -> int:
             str(apksigner), "verify", "--verbose", "--print-certs", str(apk)
         ])
         v2 = re.search(
-            r"Verified using v2 scheme \\(APK Signature Scheme v2\\):\\s*true",
+            r"Verified using v2 scheme .*: *true",
             signature, re.I,
         )
         v3 = re.search(
-            r"Verified using v3 scheme \\(APK Signature Scheme v3\\):\\s*true",
+            r"Verified using v3 scheme .*: *true",
             signature, re.I,
         )
         check("APK Signature Scheme v2", bool(v2), "v2 signature must verify")
