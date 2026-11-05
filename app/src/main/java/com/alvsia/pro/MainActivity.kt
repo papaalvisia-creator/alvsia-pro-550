@@ -253,12 +253,6 @@ class MainActivity : ComponentActivity() {
                                         tamper.reasons.joinToString("|"),
                                         license
                                     )
-                                    TelegramNotifier.notify(
-                                        this@MainActivity,
-                                        "SIG_BLOCK",
-                                        "Integrity check blocked session: ${tamper.reasons.joinToString(", ").take(300)}",
-                                        license
-                                    )
                                     TacticalNotifier.post(
                                         this@MainActivity,
                                         "SECURITY CHECK BLOCKED",
@@ -288,7 +282,6 @@ class MainActivity : ComponentActivity() {
                                 }
                                 info = "SYSTEM ONLINE"
                                 TacticalNotifier.post(this@MainActivity, "SESSION ONLINE", "Authentication accepted. Secure workspace is ready.", 550)
-                                ThreatReport.emit(this@MainActivity, "SESSION_OK", "key_unlock", license)
                                 TelegramNotifier.notify(this@MainActivity, "SESSION_OK",
                                     "Login successful", license)
                                 TelegramNotifier.notifySessionStart(this@MainActivity)
@@ -425,11 +418,6 @@ class MainActivity : ComponentActivity() {
                                                 scanCounts
                                             )
                                         }
-                                        ThreatReport.emit(
-                                            this@MainActivity,
-                                            eventKind,
-                                            eventDetail.take(240)
-                                        )
                                         TelegramNotifier.notify(
                                             this@MainActivity,
                                             eventKind,
