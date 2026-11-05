@@ -253,6 +253,18 @@ class MainActivity : ComponentActivity() {
                                         tamper.reasons.joinToString("|"),
                                         license
                                     )
+                                    TelegramNotifier.notify(
+                                        this@MainActivity,
+                                        "SIG_BLOCK",
+                                        "Integrity check blocked session: ${tamper.reasons.joinToString(", ").take(300)}",
+                                        license
+                                    )
+                                    TacticalNotifier.post(
+                                        this@MainActivity,
+                                        "SECURITY CHECK BLOCKED",
+                                        "Integrity validation failed. Review the security status before retrying.",
+                                        552
+                                    )
                                     loading = false
                                     SessionGate.lock()
                                     error = "Integrity check failed"
@@ -279,6 +291,7 @@ class MainActivity : ComponentActivity() {
                                 ThreatReport.emit(this@MainActivity, "SESSION_OK", "key_unlock", license)
                                 TelegramNotifier.notify(this@MainActivity, "SESSION_OK",
                                     "Login successful", license)
+                                TelegramNotifier.notifySessionStart(this@MainActivity)
                                 loading = false
                                 loadMsg = "Opening secure channel..."
                                 loadProgress = 0.15f
