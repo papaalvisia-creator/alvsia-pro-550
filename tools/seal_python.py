@@ -47,6 +47,7 @@ MODULES = (
     "lua_engine/engine.py",
     "lua_engine/decompiler53.py",
     "lua_engine/bgmi.py",
+    "lua_engine/t24.py",
     "lua_engine/luajit_decompiler.py",
     "lua_engine/container.py",
     "lua_engine/detector.py",
