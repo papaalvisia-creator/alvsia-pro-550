@@ -12509,7 +12509,7 @@ def so_patch_url(input_path, out_dir, old_url="", new_url=""):
             break
         offsets.append("0x%X" % idx)
         cursor = idx + len(old_b)
-    padded = new_b + b"\\x00" * (len(old_b) - len(new_b))
+    padded = new_b + b"\x00" * (len(old_b) - len(new_b))
     patched = raw.replace(old_b, padded)
     out_file = out_dir / ("patched_%s" % p.name)
     try:
