@@ -20,7 +20,7 @@ class SoPatchUrlParityTests(unittest.TestCase):
     def test_patches_all_exact_occurrences_and_preserves_offsets(self):
         old = b"https://old.example/a"
         new = b"https://new.example"
-        original = b"HEAD\\x00" + old + b"\\x00MID\\x00" + old + b"\\x00TAIL"
+        original = b"HEAD\x00" + old + b"\x00MID\x00" + old + b"\x00TAIL"
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
             source = root / "libsample.so"
@@ -29,7 +29,7 @@ class SoPatchUrlParityTests(unittest.TestCase):
             result = so_patch_url(str(source), str(out), old.decode(), new.decode())
             self.assertTrue(result["ok"], result)
             patched = Path(result["out"]).read_bytes()
-            padded = new + b"\\x00" * (len(old) - len(new))
+            padded = new + b"\x00" * (len(old) - len(new))
             self.assertEqual(patched, original.replace(old, padded))
             self.assertEqual(result["patched_count"], 2)
             self.assertEqual(result["patched_offsets"], [
