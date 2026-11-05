@@ -40,8 +40,9 @@ def run_tool(mid,sid,inp,out_root,engine_dir,jars_dir):
   import alvsia_bridge_impl as impl
   result=impl.run_tool(mid,sid,inp,out_root,engine_dir,jars_dir)
   try:
-   from alvsia_features import scrub_foreign_branding
+   from alvsia_features import scrub_foreign_branding, scrub_output_text_files
    result,_=scrub_foreign_branding(result)
+   scrub_output_text_files(out_root)
   except Exception:pass
   return result
  except Exception:
