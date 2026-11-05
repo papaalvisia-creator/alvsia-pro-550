@@ -31,6 +31,7 @@ SEED_ENV = "ALVSIA_SEAL_SEED_HEX"
 MAGIC = b"ALVSEAL2"
 MODULES = (
     "alvsia_bridge_impl.py",
+    "alvsia_metadata.py",
     "alvsia_private.py",
     "alvsia_vm_protect.py",
     "lua_engine/pattern_registry.py",
