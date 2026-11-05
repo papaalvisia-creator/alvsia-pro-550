@@ -67,6 +67,12 @@ class TelegramNotifierContractTests(unittest.TestCase):
         self.assertNotIn("DEVICE:", self.source)
         self.assertNotIn("Hwid.deviceId", self.source)
 
+    def test_sanitizer_redacts_device_location_and_ip_fields(self):
+        self.assertIn("device[_-]?id", self.source)
+        self.assertIn("hwid", self.source)
+        self.assertIn("latitude|longitude|lat|lon|lng|location|gps", self.source)
+        self.assertIn("[IP REDACTED]", self.source)
+
     def test_message_html_is_escaped(self):
         self.assertIn('replace("&", "&amp;")', self.source)
         self.assertIn('replace("<", "&lt;")', self.source)
