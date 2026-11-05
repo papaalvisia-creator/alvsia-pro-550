@@ -64,7 +64,7 @@ object TelegramNotifier {
 
     private val knownEvents = setOf(
         "SESSION_OK", "SESSION_START", "SESSION_END",
-        "TOOL_OK", "TOOL_ERROR", "SCAN_COMPLETE", "PATCH_OK",
+        "TOOL_OK", "TOOL_ERROR", "FILE_LOADED", "SCAN_COMPLETE", "PATCH_OK",
         "ERROR", "TAMPER", "FRIDA", "ROOT", "DEBUG",
         "SIG_BLOCK", "THREAT", "ENGINE_CAP", "BUILD_OK",
         "BUILD_FAIL", "STARTUP_OK", "STARTUP_FAIL"
