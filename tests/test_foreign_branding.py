@@ -50,6 +50,7 @@ class ForeignBrandingScrubTests(unittest.TestCase):
 
     def test_owner_branding_is_used_for_replacements(self):
         cleaned, _ = scrub_foreign_branding("XTHrlen")
+        self.assertEqual(DEFAULT_BRAND, "@ALVSIA_PRO")
         self.assertEqual(cleaned, DEFAULT_BRAND)
         self.assertIn(DEFAULT_CHANNEL.split("/")[-1], DEFAULT_CHANNEL)
 
