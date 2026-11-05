@@ -293,28 +293,28 @@ def run_tool(module_id, sub_id, input_path, out_root, engine_dir, jars_dir):
 
         # ── 4  OBB Tools — unified bounded archive engine ────────────────
         if mid == 4 or sid.startswith("obb_"):
-            if not need_file(): return "\\n".join(lines)
+            if not need_file(): return "\n".join(lines)
             from archive_engine import inspect_archive, extract_archive, repack_obb
             p = Path(ip)
             if sid == "obb_info":
                 dest = out_dir("OBB") / "info.txt"
                 r = inspect_archive(p, dest)
                 lines.append(str(r))
-                return "\\n".join(lines)
+                return "\n".join(lines)
             if sid == "obb_unzip":
                 d = out_dir("OBB") / p.stem
                 r = extract_archive(p, d)
                 lines.append(str(r))
-                return "\\n".join(lines)
+                return "\n".join(lines)
             if sid == "obb_rezip":
                 extracted = out_dir("OBB") / p.stem
                 if not extracted.is_dir():
                     lines.append("X Extract this OBB first; expected edited tree at OUT/OBB/%s" % p.stem)
-                    return "\\n".join(lines)
+                    return "\n".join(lines)
                 dest = out_dir("OBB") / (p.stem + "_rezip.obb")
                 r = repack_obb(extracted, dest)
                 lines.append(str(r))
-                return "\\n".join(lines)
+                return "\n".join(lines)
 
         # ── 5  LUA Tools ─────────────────────────────────────────────────
         if mid == 5 or sid.startswith("lua_"):
