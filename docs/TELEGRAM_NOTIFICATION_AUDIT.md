@@ -51,3 +51,14 @@ This audit is source review only. The Kotlin notifier already contains a bounded
 - The owner reports that `app_event.php` and `config.php` were uploaded to the active Unaux hosting account, APK login succeeded, and Telegram notifications arrived. This is owner-reported runtime validation; repository inspection does not independently observe the hosting account.
 - A follow-up source audit found that `ThreatReport.kt` still posted to the retired `security_event.php` route and included license/HWID/device-model fields. The active Unaux repository does not contain that endpoint. PR #99 now routes `ThreatReport.emit()` through `TelegramNotifier` and the authenticated `app_event.php` relay, keeps the existing API signature, redacts sensitive fields/URLs/paths/location labels, and adds a dedicated contract test.
 - CI run 1265 currently reports failure with an empty job step list (`steps: []`), so the failure occurred before any test step could be inspected or confirmed. It is not evidence that the source tests failed. A successful Gradle build, signed APK, artifact audit, and fresh Android install are still not verified for this PR head.
+
+## Status update — 2026-11-06
+
+The current feature branch now uses the authenticated Unaux relay rather than direct Telegram credentials in the APK. The user reports that panel login, APK login and Telegram notifications work on the live deployment after the PHP files were uploaded.
+
+Follow-up source fixes:
+- ThreatReport is now reserved for actual integrity/security events. Normal SESSION_OK and TOOL_OK/TOOL_ERROR events no longer fall through to a THREAT label or create duplicate threat alerts.
+- Telegram detail redaction now includes credentials, HWID/device identifiers, location fields, IPv4 addresses, URLs and storage paths.
+- The legacy ultra_notifications.py injector has been moved to source-tools/quarantine in the separate source-tool repository. It is not an APK feature.
+
+The five-minute home-screen heartbeat remains enabled and carries no device/license identifier. The current source-level contract tests have not yet run on GitHub Actions. Latest app runs 42090892030, 42090891940 and 42090892292, plus source-tool run 42090279095, all fail before runner allocation with runner_id=0 and steps=[]. No current-head Gradle build, signed APK or installation result is claimed.
