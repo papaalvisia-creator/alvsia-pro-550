@@ -71,7 +71,9 @@ jobs:
           python3 -m unittest discover -s tests -p 'test_foreign_branding.py'
 
       - name: Verify Telegram notifier integration contract
-        run: python3 -m unittest tests.test_telegram_notifier_contract
+        run: |
+          python3 -m unittest tests.test_telegram_notifier_contract
+          python3 -m unittest tests.test_threat_report_contract
 
       - name: Run sealed payload cryptographic tests
         run: |
