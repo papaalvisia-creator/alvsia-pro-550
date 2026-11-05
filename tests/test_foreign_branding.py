@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import sys
 import unittest
+import tempfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -73,9 +74,31 @@ class ForeignBrandingScrubTests(unittest.TestCase):
             self.assertNotIn("Kapten Jack", cleaned)
             self.assertIn("ALVSIA", cleaned)
 
+    def test_generated_text_artifacts_are_rebranded_but_inputs_and_binaries_are_not(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            out = root / "OUT" / "SCAN"
+            work = root / "WORK"
+            out.mkdir(parents=True)
+            work.mkdir(parents=True)
+            report = out / "result.lua"
+            report.write_text("-- By @OriginalOnwerALV\\nprint('Kapten Jack')", encoding="utf-8")
+            source = work / "original.lua"
+            source.write_text("-- By @OriginalOnwerALV", encoding="utf-8")
+            binary = out / "asset.so"
+            binary.write_bytes(b"\\x00Kapten Jack\\xff")
+            from alvsia_features import scrub_output_text_files
+            stats = scrub_output_text_files(root)
+            self.assertEqual(stats["files"], 1)
+            self.assertIn("@ALVSIA_PRO", report.read_text(encoding="utf-8"))
+            self.assertNotIn("OriginalOnwerALV", report.read_text(encoding="utf-8"))
+            self.assertIn("OriginalOnwerALV", source.read_text(encoding="utf-8"))
+            self.assertEqual(binary.read_bytes(), b"\\x00Kapten Jack\\xff")
+
     def test_bridge_scrubs_returned_tool_messages(self):
         bridge = (ROOT / "app" / "src" / "main" / "python" / "alvsia_bridge.py").read_text(encoding="utf-8")
         self.assertIn("scrub_foreign_branding(result)", bridge)
+        self.assertIn("scrub_output_text_files(out_root)", bridge)
 
     def test_empty_input_is_safe(self):
         self.assertEqual(scrub_foreign_branding(""), ("", 0))
