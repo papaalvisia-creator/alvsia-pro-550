@@ -54,6 +54,6 @@ All tools should share a consistent interaction shell: input selection, format d
 2. Android debug unit tests and assembleDebug pass.
 3. Existing Python dispatch, Lua, crypto, PAK/OBB, private-tool and release-safety tests pass.
 4. Shared output handoff preselects the chosen artifact in the next tool, and destructive cleanup requires confirmation.
-5. Each of the 19 modules and its 85 declared sub-tools is smoke-tested with valid and invalid fixtures; expected output, input preservation and error reporting are checked.
+5. Each of the 19 modules and its 86 declared sub-tools is smoke-tested with valid and invalid fixtures; expected output, input preservation and error reporting are checked.
 6. Signed release APK passes package/version, signature, ZIP integrity and native-library alignment checks.
 7. Physical-device install and runtime smoke tests pass before calling the redesign production-ready.
