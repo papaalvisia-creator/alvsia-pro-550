@@ -32,9 +32,10 @@ The script dynamically injects a notification block into another Python program 
 
 1. Continue tracing notifier call sites and lifecycle hooks as the app evolves; the current PR wires module status, aggregate scan summaries and a five-minute authenticated-session heartbeat.
 2. Add an isolated fake-transport test before claiming end-to-end Telegram delivery; the current contract test is source-level and does not contact Telegram.
-3. Implement a server-side relay only after the active Unaux panel's deployed endpoint contract is confirmed. The current app Vault exposes empty token/chat-ID getters, and the panel API contract has not yet been verified from the accessible source.
-4. Supply the bot token and destination chat ID only as protected server configuration. Do not place either secret in Kotlin constants, BuildConfig, Gradle-generated resources, APK assets, or client-side preferences.
-5. After CI produces a release artifact, inspect the APK for secrets, verify package/version/signature/alignment, then perform a real Android installation test.
+3. Deploy the new `htdocs/api/app_event.php` endpoint to the active Unaux hosting account. The endpoint validates the authenticated session, HWID binding, active license, device-ban state, event allowlist, payload size and per-session rate limit.
+4. The endpoint relays only bounded operational event summaries through the server-side Telegram helper. The helper now requires cURL TLS peer and hostname verification and fails closed; it no longer uses insecure TLS fallbacks.
+5. Confirm the hosting PHP runtime has cURL enabled and that the live endpoint responds successfully to an authenticated test event. Repository source changes alone do not prove the live hosting copy has been deployed.
+6. After CI produces a release artifact, inspect the APK for secrets, verify package/version/signature/alignment, then perform a real Android installation test.
 
 This audit is source review only. The Kotlin notifier already contains a bounded operational-event queue and compatibility methods; this audit does not claim end-to-end Telegram delivery or Android build validation.
 
@@ -45,5 +46,7 @@ This audit is source review only. The Kotlin notifier already contains a bounded
 - Wired module status and scan aggregate summaries from `MainActivity.kt`; authenticated foreground sessions emit a low-volume heartbeat every five minutes.
 - Added `tests/test_telegram_notifier_contract.py` to check the event registry, bounded queue/message sizes, redaction, selected-file reporting, and runtime wiring.
 - Updated `.github/workflows/android-validation.yml` on both the PR branch and `main`: the default-branch workflow now explicitly includes the PR #99 branch in its push trigger and runs the notifier contract test.
-- `Vault.tgToken()` and `Vault.tgChatId()` still return empty values. Therefore Android-to-Telegram delivery is intentionally not reported as working; a server-side credential-backed relay endpoint and its request/response contract must be confirmed before wiring a live delivery path.
+- The app now sends allowlisted events through `PanelClient.sendOperationalEvent()` and the existing authenticated `PanelHolder.client`; no Telegram bot token or chat ID is used by the APK.
+- The panel source now contains `htdocs/api/app_event.php`, which validates the session/HWID pair, active license, ban state, allowlisted event names, bounded payload and per-session rate limit before relaying a summary to Telegram.
+- The live Unaux hosting copy has not been changed or verified from GitHub. Deploy `app_event.php` and the updated `config.php` to hosting before expecting end-to-end delivery.
 - No Android build, signed APK, or device test is claimed until the workflow produces a successful run and artifacts.
