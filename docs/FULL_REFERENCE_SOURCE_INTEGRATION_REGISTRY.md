@@ -17,11 +17,11 @@ Replace legacy owner branding in project-owned code, UI, generated reports and o
 
 ## Verified baseline facts
 
-- The incoming manifest records **34 file entries**: 20 Python entries, 4 Lua/source entries, 2 JARs and 8 other/native/assets entries.
+- The incoming manifest header claims **34 file entries** (20 Python, 4 Lua/source, 2 JARs and 8 other/native/assets), but a direct count of visible SHA-256 records finds **33 named entries**. This remains an unresolved source-inventory discrepancy.
 - The two `py_decryptor` entries have the same SHA-256 and are byte-identical duplicates in the manifest.
 - PR #96 currently describes 19 top-level modules, 86 catalog sub-tools and 23 sealed Python modules. These are app catalog/inventory counts, not counts of imported source files.
 - PR #96 lists seven reference-derived diagnostic sub-tools: Lua format probe, PAK integrity audit, OBB integrity audit, offline authorized-dump analyzer, static source triage, XOR known-vector self-test and AES known-answer self-test.
-- PR #96 also records an IL2CPP Metadata v39 decoder addition. The supplied bundle manifest does not contain a file named `dump.py`; verify the actual source provenance before attributing that decoder to this bundle.
+- PR #96 also records an IL2CPP Metadata v39 decoder addition. The full source repository contains root-level `dump.py`; the app implementation is `app/src/main/python/alvsia_metadata.py`, with regression coverage in `tests/test_metadata_v39.py`.
 - The separate PR #91 describes further reference audit work, but it is draft/unmerged. Do not count its code as part of the PR #96 baseline APK unless merged or independently cherry-picked.
 - No full per-file source-to-app parity audit or complete 34-entry functional test result is established by this registry's creation.
 
@@ -140,3 +140,25 @@ Prioritize source programs not represented by the 2026-11-03 bundle:
 4. Inspect `Any fuction Log Dumper.lua`, the two Android/iOS PAK trees, GRW sources, and all existing reference bundles. Keep sample PAKs as immutable fixtures; never modify originals during tests.
 
 This expanded tree inventory is a verified repository listing, not a claim that every listed source has been fully analyzed, ported or tested. Exact per-source parity remains open.
+
+
+## Source-to-app parity findings — inspected 2026-11-06
+
+These are concrete source-level mappings from files inspected in the full repository tree. “Implemented” means a corresponding app implementation and dispatch/menu were found; it does not imply a complete byte-for-byte port of the original standalone script.
+
+| Repository source | App implementation / destination | Evidence and status |
+|---|---|---|
+| `url_scanner.py` | `app/src/main/python/alvsia_features.py` → `BinaryURLScanner`; Module 10 `url_scan_so` in `SubMenus.kt`; bridge route in `alvsia_bridge_impl.py` | **IMPLEMENTED + DISPATCHED.** Static file/folder scanning for URLs, host/IP patterns and context-bound base64. App route accepts selected files/folders; it does not use source script's `/proc/<pid>/mem` live-process scan. Added `tests/test_reference_source_parity.py` for URL, host, public-IP, private-loopback exclusion, deduplication and selected-file behavior. CI pending. |
+| `PUBGM.py` | `app/src/main/python/alvsia_features.py` → `PUBGLuaConverter`; Lua pipeline also has `lua_engine/bgmi.py` | **ADAPTED / IMPLEMENTED.** Existing BGMI Lua normalizer handles encrypted string constants, opcode mapping and Lua 5.3 ABI conversion. `tests/test_bgmi_transform.py` covers normalization, encrypted-string preservation, long strings, byte-exact round-trip and decompile fixture. It is not a wholesale port of the source script. |
+| `dump.py` | `app/src/main/python/alvsia_metadata.py`; File Scan → IL2CPP Metadata v39 Decoder | **ADAPTED / IMPLEMENTED + TESTED.** Bounded 128 MiB offline decoder, v39 magic/version check, 31 descriptor validation, overlap reporting, original-input preservation and atomic separate output. `tests/test_metadata_v39.py` includes valid, wrong-magic, wrong-version, truncated and out-of-range fixtures. |
+| `SM4.py` | Existing `SM4KeyFinder` / `SM4AllKeyFinder` in `alvsia_features.py`, Module 19 private operations | **OVERLAP / PARITY REVIEW.** Both source and app inspect static shared-library bytes for key-shaped candidates. The source script scans a hard-coded storage path and prints candidate strings. No additional standalone scanner is needed merely to duplicate this behavior; verify candidate classes with controlled fixtures and ensure output handling is authorized and access-controlled. |
+| `ultra_notifications.py` | No direct app port identified | **NOT PORTED AS-IS.** Source embeds a password, decrypts Telegram credentials, reads license/device/file metadata and obtains IP-derived location before sending telemetry. This is not needed for the app's core tool functionality. Any useful build/session notification concept must be rebuilt as explicit opt-in, minimal-data reporting with no precise location, license secrets or file contents. |
+| `pubg_ultimate_decompiler.py` | Existing Lua engine and BGMI normalization pipeline | **NOT PARITY-VERIFIED.** Source contains a simplified parser/code generator that skips nested prototypes and emits placeholder register operations. Do not label it an implemented full decompiler; compare its supported format against known fixtures before adopting any parser logic. |
+| `ultra_notifications.py` | Existing GitHub Actions Telegram build report is separate CI infrastructure | **DISTINCT.** CI build notification is not equivalent to end-user location/device tracking and must not be used to claim this source is integrated. |
+
+### Validation note
+
+- The prior PR #96 head workflow run #1206 completed successfully for release safety audit, catalog consistency and Android Security Validation. The Android validation job included Python dispatch contracts, sealed payload cryptographic tests, Lua safety tests, Lua Protector round-trip, Android debug/release builds, XopProtector candidate build, signing and final APK fingerprint reporting.
+- That run validates the PR #96 head only. It does not validate new PR #99 registry commits or the newly added URL-scanner parity tests.
+- For PR #99 commit `3ca0745f39da1c281dd4edc9a8f234d0d7113364`, catalog consistency passed (run #150); release safety audit was in progress and Android Security Validation was pending at the time of this update.
+- Device installation, user-device end-to-end operation and full coverage across all 53 repository files remain outstanding.
