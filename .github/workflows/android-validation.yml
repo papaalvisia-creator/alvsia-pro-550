@@ -50,6 +50,7 @@ jobs:
           modules = (
               "app/src/main/python/alvsia_bridge.py",
               "app/src/main/python/alvsia_bridge_impl.py",
+              "app/src/main/python/alvsia_metadata.py",
               "app/src/main/python/alvsia_core.py",
               "app/src/main/python/alvsia_features.py",
               "app/src/main/python/alvsia_ultimate.py",
@@ -66,6 +67,7 @@ jobs:
           python3 tests/test_process_page.py
           python3 tests/test_workspace_handoff.py
           python3 -m unittest tests.test_private_tool_engine
+          python3 -m unittest discover -s tests -p 'test_metadata_v39.py'
 
       - name: Run sealed payload cryptographic tests
         run: |
