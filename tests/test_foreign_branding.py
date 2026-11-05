@@ -58,6 +58,19 @@ class ForeignBrandingScrubTests(unittest.TestCase):
         self.assertEqual(count, 0)
         self.assertEqual(cleaned, text)
 
+    def test_legacy_owner_identity_is_rewritten_in_generated_text(self):
+        samples = (
+            "-- By @OriginalOnwerALV",
+            "https://t.me/OriginalOnwerALV",
+            "Credits: Kapten Jack",
+        )
+        for sample in samples:
+            cleaned, count = scrub_foreign_branding(sample)
+            self.assertGreater(count, 0)
+            self.assertNotIn("OriginalOnwerALV", cleaned)
+            self.assertNotIn("Kapten Jack", cleaned)
+            self.assertIn("ALVSIA", cleaned)
+
     def test_empty_input_is_safe(self):
         self.assertEqual(scrub_foreign_branding(""), ("", 0))
         self.assertEqual(scrub_foreign_branding(None), (None, 0))
