@@ -1430,7 +1430,7 @@ class BinaryURLScanner:
     """
 
     _RE_URL     = _re.compile(
-        rb'(https?|wss?|ftp|sftp|rtsp|rtmp)://[^\s<>"\'{}|\\^`\[\]]{4,200}',
+        rb'(https?|wss?|ftp|sftp|rtsp|rtmp)://[^\x00-\x20\x7f\s<>"\'{}|\\^`\[\]]{4,200}',
         _re.IGNORECASE,
     )
     _RE_HOST    = _re.compile(
