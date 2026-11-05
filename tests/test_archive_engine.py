@@ -76,5 +76,6 @@ def test_non_archive_rejected():
 if __name__ == "__main__":
     test_obb_roundtrip_and_inspection()
     test_zip_slip_rejected()
-    test_pak_dispatch_uses_authenticated_core_contract()\n    test_non_archive_rejected()
+    test_pak_dispatch_uses_authenticated_core_contract()
+    test_non_archive_rejected()
     print("ARCHIVE ENGINE TEST: PASS (4/4)")
