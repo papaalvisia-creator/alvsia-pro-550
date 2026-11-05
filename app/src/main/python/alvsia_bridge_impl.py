@@ -200,7 +200,8 @@ def run_tool(module_id, sub_id, input_path, out_root, engine_dir, jars_dir):
                 lines.append("X PAK UNPACK FAILED: cannot reset output directory: %s" % (str(exc)[:500]))
                 return "\n".join(lines)
             try:
-                r = core.run_pak_unpack(ip, dest)
+                from archive_engine import extract_archive
+                r = extract_archive(ip, dest)
             except Exception as exc:
                 lines.append("X PAK UNPACK FAILED: %s" % (str(exc)[:1200] or type(exc).__name__))
                 return "\n".join(lines)
@@ -267,9 +268,8 @@ def run_tool(module_id, sub_id, input_path, out_root, engine_dir, jars_dir):
                 lines.append("X Put edited files in OUT/PAK/<stem>/ or WORK/MOD then select base .pak")
                 return "\n".join(lines)
             dest = out_dir("PAK") / (pak_file.stem + "_repack.pak")
-            r = core.run_pak_smart_repack(pak_file, mod_dir, dest)
-            if not r.get("ok"):
-                r = core.run_pak_repack(pak_file, mod_dir, dest)
+            from archive_engine import repack_pak
+            r = repack_pak(pak_file, mod_dir, dest, smart=True)
             lines.append(str(r))
             return "\n".join(lines)
 
