@@ -200,7 +200,8 @@ def run_tool(module_id, sub_id, input_path, out_root, engine_dir, jars_dir):
                 lines.append("X PAK UNPACK FAILED: cannot reset output directory: %s" % (str(exc)[:500]))
                 return "\n".join(lines)
             try:
-                r = core.run_pak_unpack(ip, dest)
+                from archive_engine import extract_archive
+                r = extract_archive(ip, dest)
             except Exception as exc:
                 lines.append("X PAK UNPACK FAILED: %s" % (str(exc)[:1200] or type(exc).__name__))
                 return "\n".join(lines)
@@ -267,9 +268,8 @@ def run_tool(module_id, sub_id, input_path, out_root, engine_dir, jars_dir):
                 lines.append("X Put edited files in OUT/PAK/<stem>/ or WORK/MOD then select base .pak")
                 return "\n".join(lines)
             dest = out_dir("PAK") / (pak_file.stem + "_repack.pak")
-            r = core.run_pak_smart_repack(pak_file, mod_dir, dest)
-            if not r.get("ok"):
-                r = core.run_pak_repack(pak_file, mod_dir, dest)
+            from archive_engine import repack_pak
+            r = repack_pak(pak_file, mod_dir, dest, smart=True)
             lines.append(str(r))
             return "\n".join(lines)
 
@@ -311,72 +311,30 @@ def run_tool(module_id, sub_id, input_path, out_root, engine_dir, jars_dir):
                 lines.append("X OBB integrity audit failed: %s" % str(exc)[:300])
             return "\n".join(lines)
 
-        # ── 4  OBB Tools ─────────────────────────────────────────────────
+        # ── 4  OBB Tools — unified bounded archive engine ────────────────
         if mid == 4 or sid.startswith("obb_"):
             if not need_file(): return "\n".join(lines)
+            from archive_engine import inspect_archive, extract_archive, repack_obb
             p = Path(ip)
             if sid == "obb_info":
                 dest = out_dir("OBB") / "info.txt"
-                try:
-                    import zipfile
-                    size = p.stat().st_size
-                    report = ["OBB INFO", f"name={p.name}", f"size={size} bytes"]
-                    if p.suffix.lower() in (".obb", ".zip"):
-                        with zipfile.ZipFile(p, "r") as z:
-                            report.append(f"entries={len(z.infolist())}")
-                    dest.write_text("\n".join(report), encoding="utf-8")
-                    lines.extend(report)
-                    lines.append(f"OK OUT -> {dest}")
-                except Exception as e:
-                    lines.append(f"X {e}")
+                r = inspect_archive(p, dest)
+                lines.append(str(r))
                 return "\n".join(lines)
             if sid == "obb_unzip":
                 d = out_dir("OBB") / p.stem
-                r = feat.run_obb_extract(ip, d)
+                r = extract_archive(p, d)
                 lines.append(str(r))
                 return "\n".join(lines)
             if sid == "obb_rezip":
-                dest = out_dir("OBB") / (p.stem + "_rezip.obb")
                 extracted = out_dir("OBB") / p.stem
                 if not extracted.is_dir():
                     lines.append("X Extract this OBB first; expected edited tree at OUT/OBB/%s" % p.stem)
                     return "\n".join(lines)
-                r = feat.run_obb_rezip(str(extracted), dest)
+                dest = out_dir("OBB") / (p.stem + "_rezip.obb")
+                r = repack_obb(extracted, dest)
                 lines.append(str(r))
                 return "\n".join(lines)
-
-        # ── Reference-derived read-only inspectors (routed by owning module) ──
-        if sid in ("lua_format_probe", "anti_re_source_triage", "so_dump_audit"):
-            if not need_file():
-                return "\n".join(lines)
-            from alvsia_reference_tools import (
-                probe_lua_file, scan_source_file, inspect_dump_file
-            )
-            import json as _json
-            source_path = Path(ip)
-            if not source_path.is_file():
-                lines.append("X This inspector accepts one file at a time")
-                return "\n".join(lines)
-            if sid == "lua_format_probe":
-                report = probe_lua_file(source_path)
-                target = out_dir("LUA") / (source_path.name + ".format_probe.json")
-            elif sid == "anti_re_source_triage":
-                report = scan_source_file(source_path)
-                target = out_dir("AUDIT") / (source_path.name + ".source_triage.json")
-            else:
-                report = inspect_dump_file(source_path)
-                target = out_dir("SO") / (source_path.name + ".offline_dump.json")
-            target.write_text(_json.dumps(report, indent=2, sort_keys=True), encoding="utf-8")
-            lines.append("OK read-only inspection complete")
-            lines.append("OUT -> %s" % target)
-            if sid == "lua_format_probe":
-                lines.append("format=%s confidence=%s" % (report.get("format"), report.get("confidence")))
-            elif sid == "anti_re_source_triage":
-                lines.append("indicators=%s (static only; no execution)" % len(report.get("findings", [])))
-            else:
-                lines.append("blocks=%s strings=%s (offline file only)" % (
-                    len(report.get("blocks", [])), len(report.get("strings", []))))
-            return "\n".join(lines)
 
         # ── 5  LUA Tools ─────────────────────────────────────────────────
         if mid == 5 or sid.startswith("lua_"):
