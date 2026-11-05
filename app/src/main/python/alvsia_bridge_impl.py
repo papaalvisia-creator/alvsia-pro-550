@@ -291,39 +291,30 @@ def run_tool(module_id, sub_id, input_path, out_root, engine_dir, jars_dir):
             lines.append(str(core.run_pak_delete_entries(ip, dest, targets)))
             return "\n".join(lines)
 
-        # ── 4  OBB Tools ─────────────────────────────────────────────────
+        # ── 4  OBB Tools — unified bounded archive engine ────────────────
         if mid == 4 or sid.startswith("obb_"):
-            if not need_file(): return "\n".join(lines)
+            if not need_file(): return "\\n".join(lines)
+            from archive_engine import inspect_archive, extract_archive, repack_obb
             p = Path(ip)
             if sid == "obb_info":
                 dest = out_dir("OBB") / "info.txt"
-                try:
-                    import zipfile
-                    size = p.stat().st_size
-                    report = ["OBB INFO", f"name={p.name}", f"size={size} bytes"]
-                    if p.suffix.lower() in (".obb", ".zip"):
-                        with zipfile.ZipFile(p, "r") as z:
-                            report.append(f"entries={len(z.infolist())}")
-                    dest.write_text("\n".join(report), encoding="utf-8")
-                    lines.extend(report)
-                    lines.append(f"OK OUT -> {dest}")
-                except Exception as e:
-                    lines.append(f"X {e}")
-                return "\n".join(lines)
+                r = inspect_archive(p, dest)
+                lines.append(str(r))
+                return "\\n".join(lines)
             if sid == "obb_unzip":
                 d = out_dir("OBB") / p.stem
-                r = feat.run_obb_extract(ip, d)
+                r = extract_archive(p, d)
                 lines.append(str(r))
-                return "\n".join(lines)
+                return "\\n".join(lines)
             if sid == "obb_rezip":
-                dest = out_dir("OBB") / (p.stem + "_rezip.obb")
                 extracted = out_dir("OBB") / p.stem
                 if not extracted.is_dir():
                     lines.append("X Extract this OBB first; expected edited tree at OUT/OBB/%s" % p.stem)
-                    return "\n".join(lines)
-                r = feat.run_obb_rezip(str(extracted), dest)
+                    return "\\n".join(lines)
+                dest = out_dir("OBB") / (p.stem + "_rezip.obb")
+                r = repack_obb(extracted, dest)
                 lines.append(str(r))
-                return "\n".join(lines)
+                return "\\n".join(lines)
 
         # ── 5  LUA Tools ─────────────────────────────────────────────────
         if mid == 5 or sid.startswith("lua_"):
