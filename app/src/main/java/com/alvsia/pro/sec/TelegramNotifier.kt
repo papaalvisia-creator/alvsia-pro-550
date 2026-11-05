@@ -203,37 +203,22 @@ object TelegramNotifier {
     }
 
     private fun send(event: Event): Boolean {
-        val token = Vault.tgToken().trim()
-        val chatId = Vault.tgChatId().trim()
-        if (token.isBlank() || chatId.isBlank()) {
-            Log.w(TAG, "Telegram runtime credentials are not configured; event=${event.kind}")
+        val ctx = appContext ?: return false
+        val client = com.alvsia.pro.panel.PanelHolder.client
+        if (client == null) {
+            Log.w(TAG, "Authenticated panel client is not attached; event=${event.kind}")
             return false
         }
-        val ctx = appContext ?: return false
-        val message = buildMessage(ctx, event)
-        if (message.length > MAX_MESSAGE_LEN) return false
         return try {
-            val payload = JSONObject()
-                .put("chat_id", chatId)
-                .put("text", message)
-                .put("parse_mode", "HTML")
-                .put("disable_notification", false)
-                .toString()
-            val request = Request.Builder()
-                .url("$TG_API$token/sendMessage")
-                .post(payload.toRequestBody("application/json; charset=utf-8".toMediaType()))
-                .header("User-Agent", Vault.ua())
-                .build()
-            http.newCall(request).execute().use { response ->
-                val body = response.body?.string().orEmpty()
-                val ok = response.isSuccessful &&
-                    runCatching { JSONObject(body).optBoolean("ok", false) }.getOrDefault(false)
-                if (ok) Log.i(TAG, "Telegram event delivered: ${event.kind} id=${event.correlationId}")
-                else Log.e(TAG, "Telegram rejected event ${event.kind}: ${body.take(180)}")
-                ok
-            }
+            val version = runCatching {
+                ctx.packageManager.getPackageInfo(ctx.packageName, 0).versionName ?: "unknown"
+            }.getOrDefault("unknown")
+            val delivered = client.sendOperationalEvent(event.kind, event.detail, version)
+            if (delivered) Log.i(TAG, "Telegram event relayed by panel: ${event.kind} id=${event.correlationId}")
+            else Log.w(TAG, "Panel event relay unavailable: ${event.kind}")
+            delivered
         } catch (t: Exception) {
-            Log.e(TAG, "Telegram transport error for ${event.kind}: ${t.javaClass.simpleName}")
+            Log.e(TAG, "Panel event relay error for ${event.kind}: ${t.javaClass.simpleName}")
             false
         }
     }
