@@ -32,8 +32,9 @@ class StudioCatalogTests(unittest.TestCase):
     def test_declared_subtool_inventory_has_unique_ids(self):
         menus = (ROOT / "app/src/main/java/com/alvsia/pro/tool/SubMenus.kt").read_text(encoding="utf-8")
         subtool_ids = re.findall(r'SubTool\(\s*"([^"]+)"', menus)
-        self.assertEqual(len(subtool_ids), 85, "Update the documented sub-tool inventory when tools change")
-        self.assertEqual(len(set(subtool_ids)), 85, "Sub-tool IDs must be unique")
+        self.assertEqual(len(subtool_ids), 86, "Update the documented sub-tool inventory when tools change")
+        self.assertEqual(len(set(subtool_ids)), 86, "Sub-tool IDs must be unique")
+        self.assertIn("metadata_v39_decode", subtool_ids)
 
     def test_studio_navigation_keeps_legacy_module_dispatch(self):
         home = (ROOT / "app/src/main/java/com/alvsia/pro/ui/home/HomeScreen.kt").read_text(encoding="utf-8")
