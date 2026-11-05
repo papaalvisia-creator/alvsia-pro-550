@@ -110,3 +110,33 @@ Preserve and implement legitimate source capabilities, including static analysis
 ## Current completion statement
 
 This registry establishes the 34-entry manifest as the required source inventory baseline. It does **not** claim all 34 entries or all their functions are already integrated. The next implementation increments must fill the per-source mappings and tests above, then report exact counts by status.
+
+
+## Expanded repository inventory — 2026-11-06
+
+A recursive Git tree audit of the current default branch of `ALVISIA8/kumpulan-source-tool` found **65 tree entries: 53 files and 12 directories**. This is a larger scope than the 2026-11-03 incoming archive. File-type counts across all 53 blobs:
+- 38 Python files
+- 1 Lua file
+- 7 Markdown files
+- 2 TXT files
+- 3 PAK binary fixtures/assets
+- 1 SHA-256 manifest
+- 1 gitignore file
+
+The 53-file repository tree includes (in addition to the incoming archive) substantial source programs such as `Attc10 (1).py`, `AttcToolFor4.6.py`, `PREMIUM.py`, `T24XOR_tool_source (1).py`, `rjtool_core.py`, `valerrine.py`, `main.py`, `fix.py`, `dravix.py`, `REDMAGIX_TOOL_reconstructed.py`, `Modders_Core_Decompiled.py`, `UltimateEngineTool.py`, `ue4_master_tool.py`, `tool.py`, `tool_me.py`, `alv_main.py`, `PUBGM.py`, `pubg_ultimate_decompiler.py`, `dump.py`, `gen_enc (1).py`, `JINSHIPAPA (1).py`, `MODER.py`, `ZmaDumpernub4.py`, `ChatGPR_PRO.py`, `MK PANEL CHANGER.py`, `SM4.py`, `url_scanner.py`, `ultra_notifications.py`, `ng1aaLib.py`, and the GRW pair under `source-tools/GRW/`.
+
+The tree also contains the older 2026-11-02 reference bundle, the 2026-11-03 incoming review/manifest, a `source-tools/incoming/GAME_PATCH_TOOL.py` copy, and Android/iOS PAK fixture trees. These are separate repository entries and must be tracked independently from the 34-entry upload archive. Do not count documentation, duplicate byte-identical copies, test fixtures or binary assets as unique app tools without classifying them.
+
+### Archive manifest discrepancy — unresolved
+
+The 2026-11-03 manifest header and IMPORT_REVIEW say 34 entries, but the visible SHA-256 manifest currently contains 33 named hash records. The registry's earlier 33-row table matches those visible named records. This discrepancy is explicitly unresolved; the missing entry must be reconciled against the original ZIP before claiming all 34 names have been mapped. Do not invent a filename.
+
+### Next source audit batch
+
+Prioritize source programs not represented by the 2026-11-03 bundle:
+1. `Attc10 (1).py`, `AttcToolFor4.6.py`, `PREMIUM.py`, `T24XOR_tool_source (1).py`, `rjtool_core.py`, and `valerrine.py` — inspect feature surfaces and shared/duplicate engines; do not transplant full standalone login/panel applications.
+2. `main.py`, `fix.py`, `dravix.py`, `REDMAGIX_TOOL_reconstructed.py`, `Modders_Core_Decompiled.py`, `UltimateEngineTool.py`, `ue4_master_tool.py`, `tool.py`, `tool_me.py`, and `alv_main.py` — map distinct tool operations, file formats, and dependencies.
+3. `PUBGM.py`, `pubg_ultimate_decompiler.py`, `dump.py`, `gen_enc (1).py`, `JINSHIPAPA (1).py`, `MODER.py`, `ZmaDumpernub4.py`, `ChatGPR_PRO.py`, `MK PANEL CHANGER.py`, `SM4.py`, `url_scanner.py`, `ultra_notifications.py`, and `ng1aaLib.py` — classify by capability and map safe, testable units.
+4. Inspect `Any fuction Log Dumper.lua`, the two Android/iOS PAK trees, GRW sources, and all existing reference bundles. Keep sample PAKs as immutable fixtures; never modify originals during tests.
+
+This expanded tree inventory is a verified repository listing, not a claim that every listed source has been fully analyzed, ported or tested. Exact per-source parity remains open.
