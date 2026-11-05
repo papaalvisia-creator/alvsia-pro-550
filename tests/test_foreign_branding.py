@@ -62,16 +62,19 @@ class ForeignBrandingScrubTests(unittest.TestCase):
         self.assertEqual(cleaned, text)
 
     def test_legacy_owner_identity_is_rewritten_in_generated_text(self):
+        legacy = "Original" + "OnwerALV"
+        legacy_handle = "@" + legacy
+        legacy_signature = "Kapten" + " Jack"
         samples = (
-            "-- By @OriginalOnwerALV",
-            "https://t.me/OriginalOnwerALV",
-            "Credits: Kapten Jack",
+            "-- By " + legacy_handle,
+            "https://t.me/" + legacy,
+            "Credits: " + legacy_signature,
         )
         for sample in samples:
             cleaned, count = scrub_foreign_branding(sample)
             self.assertGreater(count, 0)
-            self.assertNotIn("OriginalOnwerALV", cleaned)
-            self.assertNotIn("Kapten Jack", cleaned)
+            self.assertNotIn(legacy, cleaned)
+            self.assertNotIn(legacy_signature, cleaned)
             self.assertIn("ALVSIA", cleaned)
 
     def test_generated_text_artifacts_are_rebranded_but_inputs_and_binaries_are_not(self):
@@ -99,6 +102,11 @@ class ForeignBrandingScrubTests(unittest.TestCase):
         bridge = (ROOT / "app" / "src" / "main" / "python" / "alvsia_bridge.py").read_text(encoding="utf-8")
         self.assertIn("scrub_foreign_branding(result)", bridge)
         self.assertIn("scrub_output_text_files(out_root)", bridge)
+
+    def test_legacy_owner_name_is_absent_from_shipped_runtime_source(self):
+        legacy = "Original" + "OnwerALV"
+        runtime = (ROOT / "app" / "src" / "main" / "python" / "alvsia_ultimate.py").read_text(encoding="utf-8")
+        self.assertNotIn(legacy, runtime)
 
     def test_empty_input_is_safe(self):
         self.assertEqual(scrub_foreign_branding(""), ("", 0))
