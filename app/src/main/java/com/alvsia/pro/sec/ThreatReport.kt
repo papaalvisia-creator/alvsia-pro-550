@@ -1,58 +1,34 @@
 package com.alvsia.pro.sec
 
 import android.content.Context
-import android.os.Build
-import android.util.Log
-import com.alvsia.pro.panel.Hwid
-import com.alvsia.pro.panel.Vault
-import okhttp3.MediaType.Companion.toMediaType
-import okhttp3.OkHttpClient
-import okhttp3.Request
-import okhttp3.RequestBody.Companion.toRequestBody
-import org.json.JSONObject
-import java.util.concurrent.TimeUnit
-import kotlin.concurrent.thread
 
+/**
+ * Security-event adapter.
+ *
+ * Keeps the existing emit API while routing threat reports through the same
+ * authenticated Unaux session and server-side Telegram relay as operational
+ * notifications. License values, HWIDs, device model/build identifiers,
+ * coordinates, storage paths and file contents are never included.
+ */
 object ThreatReport {
-    private const val TAG = "ALVISIA_ThreatReport"
-    private val http by lazy {
-        OkHttpClient.Builder()
-            .connectTimeout(12, TimeUnit.SECONDS)
-            .readTimeout(12, TimeUnit.SECONDS)
-            .certificatePinner(Vault.certPinner())
-            .build()
-    }
+    private val acceptedKinds = setOf("TAMPER", "FRIDA", "ROOT", "DEBUG", "SIG_BLOCK", "THREAT")
 
     fun emit(ctx: Context, kind: String, detail: String, license: String = "") {
-        thread(name = "threat-emit", isDaemon = true) {
-            try {
-                val body = JSONObject()
-                    .put("event", kind)
-                    .put("detail", detail.take(800))
-                    .put("license", license.take(64))
-                    .put("hwid", Hwid.deviceId(ctx).take(64))
-                    .put("pkg", ctx.packageName)
-                    .put("sdk", Build.VERSION.SDK_INT)
-                    .put("model", "${Build.MANUFACTURER} ${Build.MODEL}".take(80))
-                    .put("debuggable", (ctx.applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0)
-                    .put("cert", Tamper.signingCertSha256(ctx).orEmpty().take(64))
-                    .put("ts", System.currentTimeMillis() / 1000)
-                    .toString()
-                val req = Request.Builder()
-                    .url(Vault.apiBase() + Vault.pathSecurity())
-                    .post(body.toRequestBody("application/json; charset=utf-8".toMediaType()))
-                    .header("User-Agent", Vault.ua())
-                    .build()
-                http.newCall(req).execute().use { response ->
-                    if (!response.isSuccessful) {
-                        Log.e(TAG, "Panel event rejected: HTTP ${response.code}; event=$kind")
-                    } else {
-                        Log.i(TAG, "Panel event accepted: event=$kind")
-                    }
-                }
-            } catch (t: Exception) {
-                Log.e(TAG, "Panel event delivery failed: event=$kind; ${t.javaClass.simpleName}: ${t.message}", t)
-            }
-        }
+        val event = kind.trim().uppercase().takeIf { it in acceptedKinds } ?: "THREAT"
+        val safeDetail = detail
+            .replace(
+                Regex("(?i)\\b(token|api[_-]?key|password|license(?:[_-]?key)?|session[_-]?token|hwid|device[_-]?id)\\b\\s*[:=]\\s*[^\\s,;]+"),
+                "$1=[REDACTED]"
+            )
+            .replace(Regex("(?i)https?://[^\\s]+"), "[URL REDACTED]")
+            .replace(Regex("(?i)(/data/[^\\s]+|/storage/[^\\s]+|/sdcard/[^\\s]+)"), "[PATH REDACTED]")
+            .replace(Regex("(?i)\\b(latitude|longitude|lat|lon|lng|location)\\s*[:=]\\s*[^\\s,;]+"), "$1=[REDACTED]")
+            .take(1200)
+
+        // The legacy license argument is retained for binary/source compatibility,
+        // but deliberately ignored. PanelClient binds the relay to its active session.
+        @Suppress("UNUSED_VARIABLE")
+        val ignoredLegacyLicense = license
+        TelegramNotifier.notify(ctx, event, safeDetail)
     }
 }
