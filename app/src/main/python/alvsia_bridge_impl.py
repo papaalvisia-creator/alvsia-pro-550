@@ -1468,6 +1468,34 @@ def run_tool(module_id, sub_id, input_path, out_root, engine_dir, jars_dir):
                 lines.append("X PUBGLuaConverter error: %s" % str(exc)[:300])
             return "\n".join(lines)
 
+        # ── T24 Lua v4 bytecode normalizer + validated ALVSIA decompiler ──
+        elif sid == "t24_lua_decompile":
+            from lua_engine.t24 import convert_t24_file
+            from pathlib import Path as _P
+            if not need_file():
+                return "\n".join(lines)
+            source_path = _P(ip)
+            if not source_path.is_file():
+                lines.append("X T24 decompiler accepts one bytecode file at a time")
+                return "\n".join(lines)
+            try:
+                dest_dir = out_dir("LUA_T24")
+                normalized_path = dest_dir / (source_path.stem + "_standard.luac")
+                # T24 v4 and the existing PUBG/BGMI normalizer share the
+                # project XOR key. Input is never executed or overwritten.
+                key = bytes(feat.PUBG_XOR_KEY)
+                report = convert_t24_file(source_path, normalized_path, key)
+                lines.append("OK T24 bytecode normalized")
+                lines.append("instructions=%s prototypes=%s strings=%s" % (
+                    report.get("instructions"), report.get("prototypes"), report.get("strings")))
+                lines.append("OUT -> %s" % normalized_path)
+                decompile_dir = dest_dir / "DECOMPILED"
+                result = feat.run_lua_smart(normalized_path, decompile_dir, jars)
+                lines.append("DECOMPILE -> %s" % json.dumps(result, ensure_ascii=False, sort_keys=True))
+            except Exception as exc:
+                lines.append("X T24 Lua error: %s" % str(exc)[:300])
+            return "\n".join(lines)
+
         # ── fallback ─────────────────────────────────────────────────────
         lines.append("X Unknown sub_id='%s' for module=%s" % (sid, mid))
         return "\n".join(lines)
