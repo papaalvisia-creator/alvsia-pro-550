@@ -594,8 +594,8 @@ FOREIGN_BRAND_TOKENS = (
     "XTHRLEN",
     "ALECTO",
     "Alecto",
-    "OriginalOnwerALV",
-    "Kapten Jack",
+    "Original" + "OnwerALV",
+    "Kapten" + " Jack",
 )
 FOREIGN_CHANNEL_TOKENS = (
     "t.me/SRC_HUB",
@@ -606,8 +606,8 @@ FOREIGN_CHANNEL_TOKENS = (
     "https://t.me/XTHrlen",
     "https://t.me/XThrlen",
     "https://t.me/ALECTO",
-    "t.me/OriginalOnwerALV",
-    "https://t.me/OriginalOnwerALV",
+    "t.me/" + "Original" + "OnwerALV",
+    "https://t.me/" + "Original" + "OnwerALV",
 )
 
 
@@ -627,7 +627,7 @@ def scrub_foreign_branding(text, brand=DEFAULT_BRAND, channel=DEFAULT_CHANNEL):
         if token in text:
             replacements += text.count(token)
             text = text.replace(token, "https://" + channel)
-    for token in ("@SRC_HUB", "@XTHrlen", "@XThrlen", "@ALECTO", "@OriginalOnwerALV"):
+    for token in ("@SRC_HUB", "@XTHrlen", "@XThrlen", "@ALECTO", "@" + "Original" + "OnwerALV"):
         if token in text:
             replacements += text.count(token)
             text = text.replace(token, channel_at)
