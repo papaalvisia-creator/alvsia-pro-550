@@ -12,9 +12,11 @@ class TelegramNotifierContractTests(unittest.TestCase):
     def setUpClass(cls):
         cls.source = SOURCE.read_text(encoding="utf-8")
 
-    def test_runtime_credentials_are_vault_backed_not_embedded(self):
-        self.assertIn("Vault.tgToken()", self.source)
-        self.assertIn("Vault.tgChatId()", self.source)
+    def test_delivery_uses_authenticated_panel_relay_not_client_credentials(self):
+        self.assertIn("PanelHolder.client", self.source)
+        self.assertIn("sendOperationalEvent", self.source)
+        self.assertNotIn("Vault.tgToken()", self.source)
+        self.assertNotIn("Vault.tgChatId()", self.source)
         self.assertNotRegex(self.source, r"\b\d{7,}:[A-Za-z0-9_-]{20,}\b")
 
     def test_operational_event_families_are_registered(self):
