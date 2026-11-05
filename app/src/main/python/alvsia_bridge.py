@@ -38,7 +38,12 @@ def run_tool(mid,sid,inp,out_root,engine_dir,jars_dir):
  _isr()
  try:
   import alvsia_bridge_impl as impl
-  return impl.run_tool(mid,sid,inp,out_root,engine_dir,jars_dir)
+  result=impl.run_tool(mid,sid,inp,out_root,engine_dir,jars_dir)
+  try:
+   from alvsia_features import scrub_foreign_branding
+   result,_=scrub_foreign_branding(result)
+  except Exception:pass
+  return result
  except Exception:
   return "X SEALED BRIDGE: operation failed"
 def bridge_run_sub(mid,sid,inp,en,wd,jd):
