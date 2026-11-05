@@ -333,8 +333,9 @@ jobs:
           echo "APK bytes: $(wc -c < "$APK" | tr -d ' ')"
           echo "APK SHA-256: $(sha256sum "$APK" | awk '{print $1}')"
 
-      - name: Publish private draft validation release (avoids Actions artifact quota)
+      - name: Publish private draft validation release
         if: (github.event_name == 'push' && github.ref == 'refs/heads/main') || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository)
+        continue-on-error: true
         uses: softprops/action-gh-release@v2
         with:
           tag_name: alvsia-validation-${{ github.run_number }}
@@ -348,6 +349,20 @@ jobs:
             validation-artifacts/ALVISIA_PRO_5.5.2-xop_candidate_signed.apk
             validation-artifacts/xop_candidate_security_audit.txt
           fail_on_unmatched_files: true
+
+      # Keep a short-lived CI download path if repository release policy blocks draft releases.
+      # One-day retention limits storage use while preserving the signed APK for validation.
+      - name: Upload signed XopProtector validation APK
+        if: always() && hashFiles('validation-artifacts/ALVISIA_PRO_5.5.2-xop_candidate_signed.apk') != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: ALVISIA_PRO_5.5.2-xop_candidate_signed
+          path: |
+            validation-artifacts/ALVISIA_PRO_5.5.2-xop_candidate_signed.apk
+            validation-artifacts/xop_candidate_security_audit.txt
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
 
       - name: Restore source files after sealed build
         if: always()
