@@ -82,18 +82,18 @@ class ForeignBrandingScrubTests(unittest.TestCase):
             out.mkdir(parents=True)
             work.mkdir(parents=True)
             report = out / "result.lua"
-            report.write_text("-- By @OriginalOnwerALV\\nprint('Kapten Jack')", encoding="utf-8")
+            report.write_text("-- By @OriginalOnwerALV\nprint('Kapten Jack')", encoding="utf-8")
             source = work / "original.lua"
             source.write_text("-- By @OriginalOnwerALV", encoding="utf-8")
             binary = out / "asset.so"
-            binary.write_bytes(b"\\x00Kapten Jack\\xff")
+            binary.write_bytes(b"\x00Kapten Jack\xff")
             from alvsia_features import scrub_output_text_files
             stats = scrub_output_text_files(root)
             self.assertEqual(stats["files"], 1)
             self.assertIn("@ALVSIA_PRO", report.read_text(encoding="utf-8"))
             self.assertNotIn("OriginalOnwerALV", report.read_text(encoding="utf-8"))
             self.assertIn("OriginalOnwerALV", source.read_text(encoding="utf-8"))
-            self.assertEqual(binary.read_bytes(), b"\\x00Kapten Jack\\xff")
+            self.assertEqual(binary.read_bytes(), b"\x00Kapten Jack\xff")
 
     def test_bridge_scrubs_returned_tool_messages(self):
         bridge = (ROOT / "app" / "src" / "main" / "python" / "alvsia_bridge.py").read_text(encoding="utf-8")
