@@ -1,7 +1,7 @@
 name: Android Security Validation
 on:
   push:
-    branches: [ main, fix/chaquopy-python312-ci, fix/lua-normalization-fallback-20261103, release/5.5.2-19-module-redesign ]
+    branches: [ main, feat/full-reference-source-registry-20261106, fix/chaquopy-python312-ci, fix/lua-normalization-fallback-20261103, release/5.5.2-19-module-redesign ]
   pull_request:
     branches: [ main ]
   workflow_dispatch:
@@ -69,6 +69,9 @@ jobs:
           python3 -m unittest tests.test_private_tool_engine
           python3 -m unittest discover -s tests -p 'test_metadata_v39.py'
           python3 -m unittest discover -s tests -p 'test_foreign_branding.py'
+
+      - name: Verify Telegram notifier integration contract
+        run: python3 -m unittest tests.test_telegram_notifier_contract
 
       - name: Run sealed payload cryptographic tests
         run: |
