@@ -1,7 +1,6 @@
 package com.alvsia.pro.sec
 
 import android.content.Context
-import android.os.Build
 import android.util.Log
 import com.alvsia.pro.BuildConfig
 import com.alvsia.pro.panel.Vault
@@ -100,8 +99,6 @@ object TelegramNotifier {
         notify(
             ctx, "SESSION_START",
             "Application session started\n" +
-                "Device: ${Build.MANUFACTURER} ${Build.MODEL}\n" +
-                "Android: ${Build.VERSION.RELEASE} (SDK ${Build.VERSION.SDK_INT})\n" +
                 "App: $version\nBuild: ${if (BuildConfig.DEBUG) "debug" else "release"}"
         )
     }
@@ -259,7 +256,6 @@ object TelegramNotifier {
             append("<code>STATUS: ").append(status).append("</code>\n")
             append("<code>TIME: ").append(html(time)).append("</code>\n")
             append("<code>APP: ").append(html(version)).append("</code>\n")
-            append("<code>DEVICE: ").append(html("${Build.MANUFACTURER} ${Build.MODEL}")).append("</code>\n")
             append("<code>─────────────────────────────</code>\n")
             append("<code>").append(html(event.detail.take(2800))).append("</code>\n")
             append("<code>OWNER CHANNEL: @ALVSIA_PRO</code>")
