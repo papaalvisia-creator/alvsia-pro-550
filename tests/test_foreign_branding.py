@@ -71,6 +71,10 @@ class ForeignBrandingScrubTests(unittest.TestCase):
             self.assertNotIn("Kapten Jack", cleaned)
             self.assertIn("ALVSIA", cleaned)
 
+    def test_bridge_scrubs_returned_tool_messages(self):
+        bridge = (ROOT / "app" / "src" / "main" / "python" / "alvsia_bridge.py").read_text(encoding="utf-8")
+        self.assertIn("scrub_foreign_branding(result)", bridge)
+
     def test_empty_input_is_safe(self):
         self.assertEqual(scrub_foreign_branding(""), ("", 0))
         self.assertEqual(scrub_foreign_branding(None), (None, 0))
