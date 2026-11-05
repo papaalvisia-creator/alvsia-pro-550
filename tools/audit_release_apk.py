@@ -10,6 +10,7 @@ from pathlib import Path
 
 EXPECTED_SEALED = {
     "alvsia_bridge_impl.alv",
+    "alvsia_metadata.alv",
     "alvsia_private.alv",
     "alvsia_vm_protect.alv",
     "lua_engine_pattern_registry.alv",
@@ -33,7 +34,7 @@ EXPECTED_SEALED = {
     "lua_engine_vm_deobfuscator.alv",
 }
 PROTECTED_MODULES = {
-    "alvsia_bridge_impl", "alvsia_private", "alvsia_vm_protect", "alvsia_core", "alvsia_ultimate", "alvsia_ultimate_compat",
+    "alvsia_bridge_impl", "alvsia_metadata", "alvsia_private", "alvsia_vm_protect", "alvsia_core", "alvsia_ultimate", "alvsia_ultimate_compat",
     "alvsia_features", "pinned_http", "lua_engine/lua_decompiler_final",
     "lua_engine/lua_protector", "lua_engine/pattern_registry",
     "lua_output_validator", "lua_string_recover",
