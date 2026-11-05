@@ -49,7 +49,7 @@ class ProductionSealPayloadTests(unittest.TestCase):
                 _seed()
 
     def test_module_manifest_is_nonempty_and_unique(self):
-        self.assertEqual(len(MODULES), 22, "release sealing inventory must include all 22 reviewed modules")
+        self.assertEqual(len(MODULES), 23, "release sealing inventory must include all 22 reviewed modules")
         self.assertEqual(len(MODULES), len(set(MODULES)))
         self.assertTrue(all((ROOT / "app/src/main/python" / rel).is_file() for rel in MODULES))
         loader = (ROOT / "app/src/main/python" / "sealed_loader.py").read_text(encoding="utf-8")
@@ -61,6 +61,9 @@ class ProductionSealPayloadTests(unittest.TestCase):
             self.assertIn(f'"{blob}"', audit, f"APK audit missing {blob}")
 
     def test_large_lua_streaming_module_is_sealed_and_mapped(self):
+        self.assertIn("alvsia_metadata.py", MODULES)
+        self.assertIn('"alvsia_metadata": "alvsia_metadata.alv"', loader)
+        self.assertIn('"alvsia_metadata.alv"', audit)
         rel = "lua_engine/streaming_decompiler.py"
         self.assertIn(rel, MODULES)
         loader = (ROOT / "app/src/main/python" / "sealed_loader.py").read_text(encoding="utf-8")
