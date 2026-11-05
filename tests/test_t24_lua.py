@@ -27,43 +27,41 @@ def _t24_fixture(key):
     )
     assert len(header) == 33
     out = bytearray(header)
-    out.append(0)  # main upvalue count
+    out.append(0)
     out.extend(_enc_string(b"@sample.lua", key))
     out.extend(struct.pack("<ii", 0, 0))
-    out.extend(bytes([0, 0, 2]))  # params, vararg, max stack
-    out.extend(struct.pack("<i", 2))  # code count
-    out.extend(struct.pack("<II", 18, 38 | (2 << 23)))  # T24 LOADK, RETURN
-    out.extend(struct.pack("<i", 1))  # constant count
-    out.append(4)  # string constant
+    out.extend(bytes([0, 0, 2]))
+    out.extend(struct.pack("<i", 2))
+    out.extend(struct.pack("<II", 18, 38 | (2 << 23)))
+    out.extend(struct.pack("<i", 1))
+    out.append(4)
     out.extend(_enc_string(b"ALVSIA_T24_FIXTURE_2026", key))
-    out.extend(struct.pack("<i", 0))  # upvalues
-    out.extend(struct.pack("<i", 0))  # child prototypes
-    out.extend(struct.pack("<i", 2))  # line-info count
+    out.extend(struct.pack("<i", 0))
+    out.extend(struct.pack("<i", 0))
+    out.extend(struct.pack("<i", 2))
     out.extend(bytes([1, 1]))
-    out.extend(struct.pack("<i", 0))  # absolute line records
-    out.extend(struct.pack("<i", 0))  # locals
-    out.extend(struct.pack("<i", 0))  # upvalue names
+    out.extend(struct.pack("<i", 0))
+    out.extend(struct.pack("<i", 0))
+    out.extend(struct.pack("<i", 0))
     return bytes(out)
 
 
 class T24LuaTests(unittest.TestCase):
-    def test_t24_normalizes_opcodes_and_decrypts_strings(self):
+    def test_normalizes_opcodes_and_decrypts_strings(self):
         key = b"ALVSIA-t24-test-key"
         source = _t24_fixture(key)
         output, report = convert_t24_to_standard(source, key)
-    assert output[:4] == b"\x1bLua"
-    assert output[4] == 0x53
-    assert output[13] == 8
-    assert b"ALVSIA_T24_FIXTURE_2026" in output
-    assert b"@sample.lua" in output
-    # First instruction maps T24 opcode 18 to standard LOADK opcode 1.
-    code_offset = 34 + (1 + len(b"@sample.lua")) + 8 + 3 + 4
-    assert struct.unpack_from("<I", output, code_offset)[0] & 0x3F == 1
-    assert report["ok"] and report["strings_decoded"]
-    assert report["format"] == "T24 Lua 5.3"
+        self.assertEqual(output[:4], b"\x1bLua")
+        self.assertEqual(output[4], 0x53)
+        self.assertEqual(output[13], 8)
+        self.assertIn(b"ALVSIA_T24_FIXTURE_2026", output)
+        self.assertIn(b"@sample.lua", output)
+        code_offset = 34 + (1 + len(b"@sample.lua")) + 8 + 3 + 4
+        self.assertEqual(struct.unpack_from("<I", output, code_offset)[0] & 0x3F, 1)
+        self.assertTrue(report["ok"] and report["strings_decoded"])
+        self.assertEqual(report["format"], "T24 Lua 5.3")
 
-
-    def test_t24_structure_only_mode_keeps_encrypted_strings(self):
+    def test_structure_only_mode_keeps_encrypted_strings(self):
         key = b"ALVSIA-t24-test-key"
         source = _t24_fixture(key)
         output, report = convert_t24_to_standard(source, b"")
@@ -72,28 +70,25 @@ class T24LuaTests(unittest.TestCase):
         self.assertNotIn(b"ALVSIA_T24_FIXTURE_2026", output)
         self.assertTrue(report["ok"] and not report["strings_decoded"])
 
-
-    def test_t24_rejects_wrong_header_and_truncated_chunks(self):
+    def test_rejects_wrong_header_and_truncated_chunks(self):
         source = _t24_fixture(b"test-key")
         with self.assertRaisesRegex(ValueError, "header"):
             convert_t24_to_standard(b"not a lua file", b"test-key")
         with self.assertRaisesRegex(ValueError, "truncated|unexpected"):
             convert_t24_to_standard(source[:-3], b"test-key")
 
-
-    def test_t24_file_writer_preserves_original_and_writes_separate_output(self):
-    key = b"ALVSIA-t24-test-key"
-    with tempfile.TemporaryDirectory() as directory:
-        source = Path(directory) / "sample.luac"
-        target = Path(directory) / "sample_standard.luac"
-        original = _t24_fixture(key)
-        source.write_bytes(original)
-        report = convert_t24_file(source, target, key)
-        assert source.read_bytes() == original
-        assert target.read_bytes().startswith(b"\x1bLua")
-        assert report["ok"] and report["output"] == str(target)
+    def test_file_writer_preserves_original_and_writes_separate_output(self):
+        key = b"ALVSIA-t24-test-key"
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory) / "sample.luac"
+            target = Path(directory) / "sample_standard.luac"
+            original = _t24_fixture(key)
+            source.write_bytes(original)
+            report = convert_t24_file(source, target, key)
+            self.assertEqual(source.read_bytes(), original)
+            self.assertTrue(target.read_bytes().startswith(b"\x1bLua"))
+            self.assertTrue(report["ok"] and report["output"] == str(target))
 
 
 if __name__ == "__main__":
-    import pytest
-    raise SystemExit(pytest.main([__file__, "-q"]))
+    unittest.main(verbosity=2)
