@@ -234,7 +234,7 @@ object TelegramNotifier {
     private fun sanitize(value: String): String {
         var out = value
             .replace(
-                Regex("(?i)(token|api[_ -]?key|password|license(?:[_ -]?key)?|session[_ -]?token|hwid|device[_ -]?id|android[_ -]?id|serial|mac(?:[_ -]?address)?)\\s*[:=]\\s*[^\\s,;]+"),
+                Regex("(?i)(token|api[_ -]?key|password|license(?:[_ -]?key)?|session[_ -]?token|hwid|device[_-]?id|device id|android[_ -]?id|serial|mac(?:[_ -]?address)?)\\s*[:=]\\s*[^\\s,;]+"),
                 "$1=[REDACTED]"
             )
             .replace(
