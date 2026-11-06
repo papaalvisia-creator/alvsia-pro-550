@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
-ALVSIA PRO 5.5.0 — bridge for 18-module catalog.
-Modules 1-9: original. Modules 10-18: new in v5.5.0.
+ALVSIA PRO 5.5.2 — bridge for the 19-module catalog.
+Modules 1-19 retain stable menu IDs and authenticated operation grants.
 """
 from __future__ import annotations
 import os
@@ -455,6 +455,19 @@ def run_tool(module_id, sub_id, input_path, out_root, engine_dir, jars_dir):
                     if r.get("final_status"):
                         lines.append("FINAL STATUS: %s" % r.get("final_status"))
                 return "\n".join(lines)
+            if sid == "lua_format_probe":
+                try:
+                    from alvsia_reference_tools import probe_lua_file
+                    source = Path(ip)
+                    report = probe_lua_file(source)
+                    target = dest_lua / (source.stem + "_format_probe.json")
+                    target.write_text(json.dumps(report, indent=2, sort_keys=True), encoding="utf-8")
+                    lines.append("OK read-only Lua format probe: %s (%s confidence)" % (
+                        report.get("format", "unknown"), report.get("confidence", "low")))
+                    lines.append("OUT -> %s" % target)
+                except Exception as exc:
+                    lines.append("X Lua format probe failed: %s" % (str(exc)[:300] or type(exc).__name__))
+                return "\n".join(lines)
             if sid == "lua_analyze":
                 r = feat.run_lua_analyze(ip, dest_lua)
                 lines.append(str(r))
@@ -582,6 +595,19 @@ def run_tool(module_id, sub_id, input_path, out_root, engine_dir, jars_dir):
             import alvsia_ultimate as ult
             if not need_file(): return "\n".join(lines)
             dest_so = out_dir("SO")
+            if sid == "so_dump_audit":
+                try:
+                    from alvsia_reference_tools import inspect_dump_file
+                    source = Path(ip)
+                    report = inspect_dump_file(source)
+                    target = dest_so / (source.stem + "_offline_dump.json")
+                    target.write_text(json.dumps(report, indent=2, sort_keys=True), encoding="utf-8")
+                    lines.append("OK offline dump inspection; no live process access or secret extraction")
+                    lines.append("size=%s sha256=%s" % (report.get("size"), report.get("sha256")))
+                    lines.append("OUT -> %s" % target)
+                except Exception as exc:
+                    lines.append("X offline dump inspection failed: %s" % (str(exc)[:300] or type(exc).__name__))
+                return "\n".join(lines)
             if sid == "so_xor_scan":
                 r = ult.so_xor_brute(ip, dest_so)
                 lines.append(str(r))
@@ -939,10 +965,24 @@ def run_tool(module_id, sub_id, input_path, out_root, engine_dir, jars_dir):
                 return "\n".join(lines)
 
         # ── 17  Anti-RE Audit ────────────────────────────────────────────
-        if mid == 17 or sid.startswith("audit_"):
+        if mid == 17 or sid.startswith("audit_") or sid == "anti_re_source_triage":
             import alvsia_ultimate as ult
             if not need_file(): return "\n".join(lines)
             dest_audit = out_dir("AUDIT")
+            if sid == "anti_re_source_triage":
+                try:
+                    from alvsia_reference_tools import scan_source_file
+                    source = Path(ip)
+                    report = scan_source_file(source)
+                    target = dest_audit / (source.stem + "_source_triage.json")
+                    target.write_text(json.dumps(report, indent=2, sort_keys=True), encoding="utf-8")
+                    lines.append("OK static-only source triage; input was not executed or modified")
+                    lines.append("indicators=%s sha256=%s" % (
+                        len(report.get("findings", [])), report.get("sha256")))
+                    lines.append("OUT -> %s" % target)
+                except Exception as exc:
+                    lines.append("X source triage failed: %s" % (str(exc)[:300] or type(exc).__name__))
+                return "\n".join(lines)
             if sid == "audit_apk":
                 r = ult.audit_apk(ip, dest_audit)
                 lines.append(str(r))
