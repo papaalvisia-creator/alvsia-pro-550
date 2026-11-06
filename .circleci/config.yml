@@ -1,0 +1,133 @@
+version: 2.1
+
+jobs:
+  android-validation:
+    docker:
+      - image: cimg/android:2024.01
+    resource_class: medium
+    working_directory: ~/project
+    environment:
+      GRADLE_OPTS: "-Dorg.gradle.daemon=false -Dorg.gradle.parallel=false -Dorg.gradle.caching=true"
+    steps:
+      - checkout
+
+      - restore_cache:
+          keys:
+            - alvsia-gradle-v1-{{ checksum "gradle/wrapper/gradle-wrapper.properties" }}-{{ checksum "build.gradle.kts" }}
+            - alvsia-gradle-v1-
+
+      - run:
+          name: Verify CI toolchain
+          command: |
+            set -euo pipefail
+            java -version
+            python3 --version
+            test -x ./gradlew
+            chmod +x ./gradlew
+
+      - run:
+          name: Install Python audit dependencies
+          command: |
+            set -euo pipefail
+            python3 -m pip install --user --disable-pip-version-check --retries 5 --timeout 120 cryptography pycryptodome requests rich zstandard
+
+      - run:
+          name: Install pinned Android SDK, NDK and CMake
+          command: |
+            set -euo pipefail
+            SDKMANAGER="$(command -v sdkmanager || true)"
+            if [ -z "$SDKMANAGER" ]; then
+              SDKMANAGER="$(find /opt -type f -name sdkmanager -path '*/cmdline-tools/*/bin/*' 2>/dev/null | head -n 1)"
+            fi
+            test -n "$SDKMANAGER" && test -x "$SDKMANAGER"
+            set +o pipefail
+            yes | "$SDKMANAGER" --licenses >/dev/null
+            set -o pipefail
+            "$SDKMANAGER" --install \
+              "platforms;android-34" \
+              "build-tools;34.0.0" \
+              "ndk;27.0.12077973" \
+              "cmake;3.22.1"
+            echo "PASS: pinned Android SDK packages installed"
+
+      - run:
+          name: Run source security and runtime wiring checks
+          command: |
+            set -euo pipefail
+            python3 tools/security_release_check.py
+            python3 -m unittest tests.test_security_wiring
+            python3 -m unittest discover -s tests -p 'test_pinned_http.py'
+
+      - run:
+          name: Run Python module and tool contract tests
+          no_output_timeout: 30m
+          command: |
+            set -euo pipefail
+            python3 - <<'PY'
+            from pathlib import Path
+            modules = (
+                "app/src/main/python/alvsia_bridge.py",
+                "app/src/main/python/alvsia_bridge_impl.py",
+                "app/src/main/python/alvsia_metadata.py",
+                "app/src/main/python/alvsia_core.py",
+                "app/src/main/python/alvsia_features.py",
+                "app/src/main/python/alvsia_ultimate.py",
+                "app/src/main/python/alvsia_vm_protect.py",
+                "app/src/main/python/archive_engine.py",
+                "app/src/main/python/alvsia_private.py",
+                "app/src/main/python/sealed_loader.py",
+            )
+            for name in modules:
+                compile(Path(name).read_text(encoding="utf-8"), name, "exec")
+            print("PYTHON SYNTAX CHECK: PASS")
+            PY
+            python3 tests/test_tool_dispatch.py
+            python3 tests/test_archive_engine.py
+            python3 tests/test_studio_catalog.py
+            python3 tests/test_process_page.py
+            python3 tests/test_workspace_handoff.py
+            python3 -m unittest tests.test_private_tool_engine
+            python3 -m unittest discover -s tests -p 'test_metadata_v39.py'
+            python3 -m unittest discover -s tests -p 'test_foreign_branding.py'
+            python3 -m unittest tests.test_telegram_notifier_contract
+            python3 -m unittest tests.test_threat_report_contract
+            python3 tests/test_seal_python_payloads.py
+            python3 -m unittest discover -s tests -p 'test_reference_source_parity.py'
+            python3 -m unittest discover -s tests -p 'test_so_patch_url_parity.py'
+            python3 tests/test_lua_engine.py
+            python3 -m unittest discover -s tests -p 'test_lua*.py'
+            python3 -m unittest discover -s tests -p 'test_streaming_decompiler.py'
+            python3 tests/test_vm_protect_roundtrip.py
+
+      - run:
+          name: Build Android debug APK and run Gradle unit tests
+          no_output_timeout: 45m
+          command: |
+            set -euo pipefail
+            ./gradlew testDebugUnitTest assembleDebug --no-daemon --stacktrace
+            APK="$(find app/build/outputs/apk/debug -type f -name '*.apk' | head -n 1)"
+            test -n "$APK" && test -s "$APK"
+            echo "PASS: debug APK created: $APK"
+            sha256sum "$APK"
+
+      - save_cache:
+          paths:
+            - ~/.gradle/caches
+            - ~/.gradle/wrapper
+          key: alvsia-gradle-v1-{{ checksum "gradle/wrapper/gradle-wrapper.properties" }}-{{ checksum "build.gradle.kts" }}
+
+      - store_test_results:
+          path: app/build/test-results/testDebugUnitTest
+
+      - store_artifacts:
+          path: app/build/outputs/apk/debug
+          destination: android-debug-apk
+
+      - store_artifacts:
+          path: app/build/reports/tests/testDebugUnitTest
+          destination: gradle-unit-test-report
+
+workflows:
+  alvsia-pro-android-validation:
+    jobs:
+      - android-validation
