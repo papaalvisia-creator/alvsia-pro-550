@@ -30,7 +30,7 @@ class TelegramNotifierContractTests(unittest.TestCase):
             self.assertIn(f'"{event}"', self.source)
 
     def test_notifications_are_bounded_and_sanitized(self):
-        self.assertIn("detail.take(1400)", self.source)
+        self.assertIn("sanitize(detail).take(1400)", self.source)
         self.assertIn("MAX_QUEUE = 128", self.source)
         self.assertIn("sanitize(detail)", self.source)
         self.assertIn("sendOperationalEvent", self.source)
