@@ -92,3 +92,15 @@ This section supersedes any earlier successful-build status above when assessing
 - [x] Add a regression test ensuring workspace README branding stays on @ALVSIA_PRO (commit c582f036624d39b11138a153f15ccd2d1603e3f6).
 - [ ] Latest PR-head checks (run 42166076121 module catalog, 42166076001 release audit, 42166075948 Android validation) ended in failure with no step details available; the connector reports null steps for available jobs. Treat this as pre-step runner/check infrastructure failure until logs or runner details are available, not as a source-test result.
 Earlier PASS records in this file refer to older commits/runs and are not evidence that the current PR head has been built or installed.
+
+
+## GitHub-hosted runner allocation diagnosis — 2026-11-06
+
+- [x] Inspected the latest PR-head run metadata and job records directly.
+- The latest release-audit job (run 42166734653, job 127724849902), Android validation job (run 42166734498, job 127724849721), and module-catalog job (run 42166734493, job 127724849236) were each created and marked failed about one second after starting.
+- All three jobs request the standard `ubuntu-latest` label, but report `runner_id=0`, empty `runner_name`, `runner_group_id=0`, and `steps=[]`. The Actions log endpoint returns an empty body. No checkout or workflow step ran.
+- This confirms the immediate blocker is before job execution: GitHub did not assign a hosted runner. It is not a failing Gradle task, Python test, workflow command, or source compilation error.
+- Repository workflow configuration already requests GitHub-hosted Ubuntu runners; the signed-release workflow independently uses `ubuntu-22.04`. Changing source code or retrying jobs cannot provision an account-level hosted runner.
+- [ ] Account-level GitHub Actions availability/billing/spending limit or hosted-runner service restriction must be checked by the repository/account owner in GitHub Settings → Billing & licensing → Usage (and Actions settings). The connected repository API exposes no permission to inspect or change account billing or hosted-runner entitlements.
+- [ ] After hosted-runner allocation is restored, rerun the current PR-head checks, then complete Gradle build, signing, artifact validation and device installation test.
+- No APK build or test pass is claimed for the current PR head.
