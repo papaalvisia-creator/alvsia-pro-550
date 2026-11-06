@@ -108,6 +108,12 @@ class ForeignBrandingScrubTests(unittest.TestCase):
         runtime = (ROOT / "app" / "src" / "main" / "python" / "alvsia_ultimate.py").read_text(encoding="utf-8")
         self.assertNotIn(legacy, runtime)
 
+    def test_workspace_readme_uses_current_owner_identity(self):
+        work_paths = (ROOT / "app" / "src" / "main" / "java" / "com" / "alvsia" / "pro" / "tool" / "WorkPaths.kt").read_text(encoding="utf-8")
+        self.assertIn("ALVSIA PRO 5.5.2", work_paths)
+        self.assertIn("Owner: @ALVSIA_PRO", work_paths)
+        self.assertNotIn("Original" + "OnwerALV", work_paths)
+
     def test_empty_input_is_safe(self):
         self.assertEqual(scrub_foreign_branding(""), ("", 0))
         self.assertEqual(scrub_foreign_branding(None), (None, 0))
