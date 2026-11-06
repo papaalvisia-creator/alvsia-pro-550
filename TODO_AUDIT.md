@@ -63,7 +63,7 @@ Imported scripts embed their author's watermark in the string table, e.g.
 `-- Dump By @SRC_HUB / Dev : @XTHrlen`. `run_lua_bytecode_strings()` and
 `extract_lua_constants()` wrote that text verbatim into `OUT/`, so ALVSIA
 output displayed another channel even though the app itself only references
-`t.me/ALVSIA_PRO`, `t.me/OriginalOnwerALV` and `alvsiapanel.unaux.com`.
+`t.me/ALVSIA_PRO` and the active `alvsiapanel.unaux.com` panel.
 
 `alvsia_features.scrub_foreign_branding()` now rewrites known third-party
 brand/channel tokens to the owner's brand in generated report files only.
@@ -88,4 +88,7 @@ This section supersedes any earlier successful-build status above when assessing
 - [ ] Execute source tests and Android validation on the current head. GitHub Actions runs 42090892030 (Android), 42090891940 (release audit), 42090892292 (module catalog), and 42090279095 (source tools) all show runner_id=0 and steps=[]; retry did not allocate a runner.
 - [ ] Complete current-head Gradle build, signed XopProtector APK, final artifact audit and real Android installation test.
 
+- [x] Correct workspace README identity in `WorkPaths.kt`: display label is now ALVSIA PRO 5.5.2 and owner is @ALVSIA_PRO (commit c918f68bd1f6cbec6b9ff551698debd672b63778).
+- [x] Add a regression test ensuring workspace README branding stays on @ALVSIA_PRO (commit c582f036624d39b11138a153f15ccd2d1603e3f6).
+- [ ] Latest PR-head checks (run 42166076121 module catalog, 42166076001 release audit, 42166075948 Android validation) ended in failure with no step details available; the connector reports null steps for available jobs. Treat this as pre-step runner/check infrastructure failure until logs or runner details are available, not as a source-test result.
 Earlier PASS records in this file refer to older commits/runs and are not evidence that the current PR head has been built or installed.
