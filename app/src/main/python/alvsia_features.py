@@ -437,7 +437,7 @@ def run_lua_smart(input_path, out_dir, jars_dir=None):
         "size=%s" % report.get("size"),
         "final_status=%s" % final_status,
         "mode=smart_fallback",
-        "note=py_decompile53 + unluac both failed — recovery artifacts only",
+        "note=all compatible decompiler engines failed validation — recovery artifacts only",
         "",
     ]
     for st in report.get("steps") or []:
