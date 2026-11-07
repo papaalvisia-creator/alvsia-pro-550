@@ -5,6 +5,7 @@ on:
     paths:
       - .github/workflows/unluac-rs-android-candidate.yml
       - tools/build_unluac_rs_android.sh
+      - tools/build_luau_decompiler_android.sh
       - app/src/main/python/lua_engine/**
       - app/src/main/python/alvsia_features.py
       - app/src/main/python/alvsia_bridge.py
@@ -24,7 +25,7 @@ concurrency:
 jobs:
   build-and-fixture-verify:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 60
     steps:
       - name: Install host Lua compilers and LuaJIT
         run: |
@@ -52,6 +53,14 @@ jobs:
           cmake --build luau-build --target Luau.Compile.CLI --parallel 2
           test -x luau-build/luau-compile
           luau-build/luau-compile --help
+      - name: Build pinned Luau v9 reference compiler
+        run: |
+          set -euo pipefail
+          sed -i 's/LBC_VERSION_TARGET = 7,/LBC_VERSION_TARGET = 9,/' luau-src/Common/include/Luau/Bytecode.h
+          grep -q 'LBC_VERSION_TARGET = 9,' luau-src/Common/include/Luau/Bytecode.h
+          cmake -S luau-src -B luau-build-v9 -DCMAKE_BUILD_TYPE=Release -DLUAU_BUILD_CLI=ON -DLUAU_BUILD_TESTS=OFF
+          cmake --build luau-build-v9 --target Luau.Compile.CLI --parallel 2
+          test -x luau-build-v9/luau-compile
       - name: Install Rust stable and Android target
         uses: dtolnay/rust-toolchain@stable
         with:
@@ -69,6 +78,18 @@ jobs:
       - name: Build host CLI
         working-directory: candidate
         run: cargo build --locked --release -p unluac-cli
+      - name: Build pinned PumbaaDev host Luau decompiler
+        run: |
+          set -euo pipefail
+          git init luau-decompiler-src
+          git -C luau-decompiler-src remote add origin https://github.com/PumbaaDev/luau-decompiler.git
+          git -C luau-decompiler-src fetch --depth 1 origin ee07098c31e11601a9ca434bc12932a4ded65f7b
+          git -C luau-decompiler-src checkout --detach FETCH_HEAD
+          test "$(git -C luau-decompiler-src rev-parse HEAD)" = "ee07098c31e11601a9ca434bc12932a4ded65f7b"
+          grep -q '^license = "MIT"' luau-decompiler-src/Cargo.toml
+          cargo build --locked --release -p luau-cli --manifest-path luau-decompiler-src/Cargo.toml
+          test -x luau-decompiler-src/target/release/luau-decompiler
+          luau-decompiler-src/target/release/luau-decompiler --help
       - name: Verify Lua 5.1–5.5, LuaJIT 2.1 and Luau v7 fixtures
         working-directory: candidate
         run: |
@@ -121,16 +142,27 @@ jobs:
           "$GITHUB_WORKSPACE/luau-build/luau-compile" --fflags=LuauCompileFastpcall=false --binary "$RUNNER_TEMP/lua-fixtures/output-luau.lua" > "$RUNNER_TEMP/lua-fixtures/output-luau.bc"
           test -s "$RUNNER_TEMP/lua-fixtures/output-luau.bc"
           echo "PASS Luau v7 parse/decompile/re-compile"
+          "$GITHUB_WORKSPACE/luau-build-v9/luau-compile" --fflags=LuauCompileFastpcall=false --binary "$RUNNER_TEMP/lua-fixtures/sample.luau" > "$RUNNER_TEMP/lua-fixtures/input-luau-v9.luau"
+          test "$(od -An -tu1 -N1 "$RUNNER_TEMP/lua-fixtures/input-luau-v9.luau" | tr -d ' ')" = "9"
+          "$GITHUB_WORKSPACE/luau-decompiler-src/target/release/luau-decompiler" "$RUNNER_TEMP/lua-fixtures/input-luau-v9.luau" -o "$RUNNER_TEMP/lua-fixtures/output-luau-v9.lua"
+          "$GITHUB_WORKSPACE/luau-build-v9/luau-compile" --fflags=LuauCompileFastpcall=false --binary "$RUNNER_TEMP/lua-fixtures/output-luau-v9.lua" > "$RUNNER_TEMP/lua-fixtures/output-luau-v9.bc"
+          test -s "$RUNNER_TEMP/lua-fixtures/output-luau-v9.bc"
+          echo "PASS Luau v9 PumbaaDev parse/decompile/re-compile"
       - name: Build and stage Android ARM64 app candidate
         env:
           ANDROID_NDK_VERSION: 27.0.12077973
         run: |
           set -euo pipefail
           bash tools/build_unluac_rs_android.sh
+          bash tools/build_luau_decompiler_android.sh
           test -s app/src/main/jniLibs/arm64-v8a/libunluac-cli.so
+          test -s app/src/main/jniLibs/arm64-v8a/libluau-decompiler-cli.so
           test -s app/src/main/assets/engine_licenses/unluac-rs-MIT.txt
+          test -s app/src/main/assets/engine_licenses/luau-decompiler-MIT.txt
           cat app/src/main/assets/engine_licenses/unluac-rs-android-arm64.sha256
           cat app/src/main/assets/engine_licenses/unluac-rs-android-arm64.manifest
+          cat app/src/main/assets/engine_licenses/luau-decompiler-android-arm64.sha256
+          cat app/src/main/assets/engine_licenses/luau-decompiler-android-arm64.manifest
       - name: Execute Android ARM64 CLI on an ARM64 emulator
         uses: reactivecircus/android-emulator-runner@v2
         with:
@@ -152,13 +184,22 @@ jobs:
             adb pull /data/local/tmp/output-luau.lua "$RUNNER_TEMP/lua-fixtures/android-output-luau.lua"
             "$GITHUB_WORKSPACE/luau-build/luau-compile" --fflags=LuauCompileFastpcall=false --binary "$RUNNER_TEMP/lua-fixtures/android-output-luau.lua" > "$RUNNER_TEMP/lua-fixtures/android-output-luau.bc"
             test -s "$RUNNER_TEMP/lua-fixtures/android-output-luau.bc"
+            adb push "$RUNNER_TEMP/lua-fixtures/input-luau-v9.luau" /data/local/tmp/input-luau-v9.luau
+            adb shell /data/local/tmp/libluau-decompiler-cli.so /data/local/tmp/input-luau-v9.luau -o /data/local/tmp/output-luau-v9.lua
+            adb pull /data/local/tmp/output-luau-v9.lua "$RUNNER_TEMP/lua-fixtures/android-output-luau-v9.lua"
+            "$GITHUB_WORKSPACE/luau-build-v9/luau-compile" --fflags=LuauCompileFastpcall=false --binary "$RUNNER_TEMP/lua-fixtures/android-output-luau-v9.lua" > "$RUNNER_TEMP/lua-fixtures/android-output-luau-v9.bc"
+            test -s "$RUNNER_TEMP/lua-fixtures/android-output-luau-v9.bc"
       - name: Upload Android ARM64 candidate and provenance
         uses: actions/upload-artifact@v4
         with:
           name: unluac-rs-v1.4.4-android-arm64-candidate
           path: |
             app/src/main/jniLibs/arm64-v8a/libunluac-cli.so
+            app/src/main/jniLibs/arm64-v8a/libluau-decompiler-cli.so
             app/src/main/assets/engine_licenses/unluac-rs-MIT.txt
             app/src/main/assets/engine_licenses/unluac-rs-android-arm64.sha256
             app/src/main/assets/engine_licenses/unluac-rs-android-arm64.manifest
+            app/src/main/assets/engine_licenses/luau-decompiler-MIT.txt
+            app/src/main/assets/engine_licenses/luau-decompiler-android-arm64.sha256
+            app/src/main/assets/engine_licenses/luau-decompiler-android-arm64.manifest
           if-no-files-found: error
