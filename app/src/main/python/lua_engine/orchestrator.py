@@ -102,6 +102,11 @@ def _available_unluac(jars_dir: Optional[str]) -> bool:
                for name in names)
 
 
+def _copy_lua_source(src: Path, dst: Path) -> tuple[bool, str]:
+    shutil.copy2(src, dst)
+    return True, "validated Lua source passthrough"
+
+
 def build_engine_registry(info, jars_dir: Optional[str] = None) -> list[EngineSpec]:
     """Return only engines compatible with the detected format/version."""
     from .streaming_decompiler import (
@@ -111,6 +116,10 @@ def build_engine_registry(info, jars_dir: Optional[str] = None) -> list[EngineSp
     )
 
     specs: list[EngineSpec] = []
+    if info.format == "lua-source":
+        specs.append(EngineSpec(
+            "source_passthrough", ("lua-source",), _copy_lua_source, 0,
+        ))
     unluac_rs = _find_unluac_rs(jars_dir)
     if unluac_rs and (
         info.format in ("luac", "luac-unknown", "luau")
