@@ -94,6 +94,7 @@ def _find_luau_decompiler_cli(jars_dir: Optional[str]) -> Optional[Path]:
     if jars_dir:
         root = Path(jars_dir)
         candidates.extend((
+            root / "luau-decompiler",
             root / "luau-decompiler-cli",
             root / "bin" / "luau-decompiler",
         ))
