@@ -9,6 +9,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Iterable, Optional
+import os
+import shutil
+import subprocess
 
 from .engine import validate_lua_source, _find_java
 
@@ -28,6 +31,61 @@ class EngineSpec:
     formats: tuple[str, ...]
     runner: Callable[[Path, Path], tuple[bool, str]]
     priority: int = 100
+
+
+def _find_unluac_rs(jars_dir: Optional[str]) -> Optional[Path]:
+    """Locate an explicitly installed Android-compatible unluac-rs CLI."""
+    configured = os.environ.get("ALVSIA_UNLUAC_RS_BIN", "").strip()
+    candidates = [Path(configured)] if configured else []
+    if jars_dir:
+        root = Path(jars_dir)
+        candidates.extend((
+            root / "unluac-cli",
+            root / "bin" / "unluac-cli",
+            root / "unluac-cli-aarch64",
+        ))
+    found = shutil.which("unluac-cli")
+    if found:
+        candidates.append(Path(found))
+    for candidate in candidates:
+        if not candidate.is_file():
+            continue
+        try:
+            if not os.access(candidate, os.X_OK):
+                candidate.chmod(candidate.stat().st_mode | 0o100)
+        except OSError:
+            continue
+        if os.access(candidate, os.X_OK):
+            return candidate
+    return None
+
+
+def _run_unluac_rs(binary: Path, src: Path, dst: Path) -> tuple[bool, str]:
+    """Run the pinned CLI without a shell and require its requested output file."""
+    dst.unlink(missing_ok=True)
+    try:
+        proc = subprocess.run(
+            [
+                str(binary), "-i", str(src), "-o", str(dst),
+                "--generate-mode", "strict",
+            ],
+            capture_output=True, text=True, timeout=180, check=False,
+        )
+    except subprocess.TimeoutExpired:
+        dst.unlink(missing_ok=True)
+        return False, "unluac-rs timed out after 180 seconds"
+    except Exception as exc:
+        dst.unlink(missing_ok=True)
+        return False, f"unluac-rs launch failed: {type(exc).__name__}: {exc}"
+    if proc.returncode != 0:
+        dst.unlink(missing_ok=True)
+        detail = (proc.stderr or proc.stdout or "no diagnostic").strip()
+        return False, f"unluac-rs exit={proc.returncode}: {detail[:700]}"
+    if not dst.is_file() or dst.stat().st_size == 0:
+        dst.unlink(missing_ok=True)
+        return False, "unluac-rs exited successfully but produced no source file"
+    detail = (proc.stderr or proc.stdout or "strict generation completed").strip()
+    return True, f"unluac-rs strict mode: {detail[:400]}"
 
 
 def _available_unluac(jars_dir: Optional[str]) -> bool:
@@ -53,6 +111,20 @@ def build_engine_registry(info, jars_dir: Optional[str] = None) -> list[EngineSp
     )
 
     specs: list[EngineSpec] = []
+    unluac_rs = _find_unluac_rs(jars_dir)
+    if unluac_rs and (
+        info.format in ("luac", "luac-unknown")
+        or (info.format == "luajit" and info.version == "LuaJIT 2.1")
+    ):
+        # Keep the proven local Lua 5.3 engine first; use unluac-rs as the
+        # multi-dialect fallback. LuaJIT 2.0 is deliberately not routed here.
+        priority = 20 if info.format == "luac" and info.version == "Lua 5.3" else 10
+        specs.append(EngineSpec(
+            "unluac_rs_v1_4_4",
+            ("luac", "luac-unknown", "luajit"),
+            lambda src, dst, binary=unluac_rs: _run_unluac_rs(binary, src, dst),
+            priority,
+        ))
     if info.format == "luac" and info.version == "Lua 5.3":
         specs.append(EngineSpec(
             "alvsia_lua53", ("luac",),
