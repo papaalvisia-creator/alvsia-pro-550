@@ -165,6 +165,8 @@ jobs:
           set -euo pipefail
           bash tools/build_unluac_rs_android.sh
           bash tools/build_luau_decompiler_android.sh
+          ALVSIA_ANDROID_TARGET=x86_64-linux-android bash tools/build_unluac_rs_android.sh
+          ALVSIA_ANDROID_TARGET=x86_64-linux-android bash tools/build_luau_decompiler_android.sh
           test -s app/src/main/jniLibs/arm64-v8a/libunluac-cli.so
           test -s app/src/main/jniLibs/arm64-v8a/libluau-decompiler-cli.so
           test -s app/src/main/assets/engine_licenses/unluac-rs-MIT.txt
@@ -189,10 +191,10 @@ jobs:
             set -euo pipefail
             cd "$GITHUB_WORKSPACE"
             adb wait-for-device
-            adb push app/src/main/jniLibs/arm64-v8a/libunluac-cli.so /data/local/tmp/libunluac-cli.so
+            adb push app/src/main/jniLibs/x86_64/libunluac-cli.so /data/local/tmp/libunluac-cli.so
             adb shell chmod 755 /data/local/tmp/libunluac-cli.so
             adb shell /data/local/tmp/libunluac-cli.so --help
-            adb push app/src/main/jniLibs/arm64-v8a/libluau-decompiler-cli.so /data/local/tmp/libluau-decompiler-cli.so
+            adb push app/src/main/jniLibs/x86_64/libluau-decompiler-cli.so /data/local/tmp/libluau-decompiler-cli.so
             adb shell chmod 755 /data/local/tmp/libluau-decompiler-cli.so
             adb shell /data/local/tmp/libluau-decompiler-cli.so --help
             adb push "$RUNNER_TEMP/lua-fixtures/input-5.3.luac" /data/local/tmp/input-5.3.luac
