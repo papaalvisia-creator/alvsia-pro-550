@@ -113,7 +113,7 @@ def run_decompiler_pipeline(
             candidate.unlink(missing_ok=True)
             results.append(EngineResult(spec.name, False, note=str(note)[:800]))
             continue
-        valid, validation_note = validate_lua_source(candidate)
+        valid, validation_note = validate_lua_source(candidate, expected_version=info.version)
         if not valid:
             candidate.unlink(missing_ok=True)
             results.append(EngineResult(
