@@ -313,3 +313,26 @@ invalid output, original-input preservation, and honest engine failure
 reporting. Android Security Validation discovers this test through the
 `test_lua*.py` unittest pattern. CI execution is still required before this
 increment is considered verified.
+
+
+### LuaDec source candidate — 2026-11-07
+
+A suitable source candidate was identified for a separate native engine:
+[`zhangjiequan/luadec`](https://github.com/zhangjiequan/luadec). Its repository
+documents Lua 5.1 support and Lua 5.2/5.3 support, and its fork describes
+improved handling of stripped-debug 5.2/5.3 chunks. The upstream repository
+includes an MIT license. This makes it a viable source candidate, not yet an
+ALVSIA runtime engine.
+
+Integration plan:
+1. Pin an exact upstream commit and preserve the MIT license/credits.
+2. Build separate ARM64 Android and Windows artifacts; do not ship a Windows
+   `.exe`/`.dll` as if Android could execute it.
+3. Establish a version/ABI manifest and SHA-256 for each built artifact.
+4. Add a bounded, no-shell runner with per-version routing and timeout.
+5. Validate output against known Lua 5.1, 5.2 and 5.3 fixtures, including
+   stripped-debug samples, before enabling the engine in Smart Lua.
+
+The upstream README describes Lua 5.2/5.3 as experimental in the general
+project overview, so ALVSIA must keep per-version confidence and fixture
+results rather than assume all versions are equally reliable.
