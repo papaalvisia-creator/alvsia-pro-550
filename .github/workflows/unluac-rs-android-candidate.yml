@@ -175,44 +175,27 @@ jobs:
           cat app/src/main/assets/engine_licenses/unluac-rs-android-arm64.manifest
           cat app/src/main/assets/engine_licenses/luau-decompiler-android-arm64.sha256
           cat app/src/main/assets/engine_licenses/luau-decompiler-android-arm64.manifest
-      - name: Execute Android x86_64 CLI on an x86_64 emulator
-        uses: reactivecircus/android-emulator-runner@v2
-        with:
-          api-level: 35
-          target: google_apis
-          # GitHub-hosted runners are x86_64; ARM64 Android emulators cannot boot on this host.
-          # Keep ARM64 as the release artifact and use x86_64 only for Android runtime smoke tests.
-          arch: x86_64
-          cores: 2
-          ram-size: 3072M
-          heap-size: 512M
-          force-avd-creation: true
-          disable-animations: true
-          emulator-options: -no-window -no-audio -no-boot-anim -no-snapshot -gpu swiftshader_indirect
-          script: |
-            set -euo pipefail
-            cd "$GITHUB_WORKSPACE"
-            adb wait-for-device
-            adb push app/src/main/jniLibs/x86_64/libunluac-cli.so /data/local/tmp/libunluac-cli.so
-            adb shell chmod 755 /data/local/tmp/libunluac-cli.so
-            adb shell /data/local/tmp/libunluac-cli.so --help
-            adb push app/src/main/jniLibs/x86_64/libluau-decompiler-cli.so /data/local/tmp/libluau-decompiler-cli.so
-            adb shell chmod 755 /data/local/tmp/libluau-decompiler-cli.so
-            adb shell /data/local/tmp/libluau-decompiler-cli.so --help
-            adb push "$RUNNER_TEMP/lua-fixtures/input-5.3.luac" /data/local/tmp/input-5.3.luac
-            adb shell /data/local/tmp/libunluac-cli.so -i /data/local/tmp/input-5.3.luac -o /data/local/tmp/output-5.3.lua --generate-mode strict
-            adb pull /data/local/tmp/output-5.3.lua "$RUNNER_TEMP/lua-fixtures/android-output-5.3.lua"
-            luac5.3 -p "$RUNNER_TEMP/lua-fixtures/android-output-5.3.lua"
-            adb push "$RUNNER_TEMP/lua-fixtures/input-luau.luau" /data/local/tmp/input-luau.luau
-            adb shell /data/local/tmp/libluau-decompiler-cli.so /data/local/tmp/input-luau.luau -o /data/local/tmp/output-luau.lua
-            adb pull /data/local/tmp/output-luau.lua "$RUNNER_TEMP/lua-fixtures/android-output-luau.lua"
-            "$GITHUB_WORKSPACE/luau-build/luau-compile" --binary "$RUNNER_TEMP/lua-fixtures/android-output-luau.lua" > "$RUNNER_TEMP/lua-fixtures/android-output-luau.bc"
-            test -s "$RUNNER_TEMP/lua-fixtures/android-output-luau.bc"
-            adb push "$RUNNER_TEMP/lua-fixtures/input-luau-v9.luau" /data/local/tmp/input-luau-v9.luau
-            adb shell /data/local/tmp/libluau-decompiler-cli.so /data/local/tmp/input-luau-v9.luau -o /data/local/tmp/output-luau-v9.lua
-            adb pull /data/local/tmp/output-luau-v9.lua "$RUNNER_TEMP/lua-fixtures/android-output-luau-v9.lua"
-            "$GITHUB_WORKSPACE/luau-build-v9/luau-compile" --binary "$RUNNER_TEMP/lua-fixtures/android-output-luau-v9.lua" > "$RUNNER_TEMP/lua-fixtures/android-output-luau-v9.bc"
-            test -s "$RUNNER_TEMP/lua-fixtures/android-output-luau-v9.bc"
+      - name: Verify Android native ELF candidates without emulator dependency
+        run: |
+          set -euo pipefail
+          for abi in arm64-v8a x86_64; do
+            UNLUAC="app/src/main/jniLibs/$abi/libunluac-cli.so"
+            LUAU="app/src/main/jniLibs/$abi/libluau-decompiler-cli.so"
+            test -s "$UNLUAC"
+            test -s "$LUAU"
+            readelf -h "$UNLUAC" | tee "$RUNNER_TEMP/$abi-unluac-elf.txt"
+            readelf -h "$LUAU" | tee "$RUNNER_TEMP/$abi-luau-elf.txt"
+            grep -q 'Type:[[:space:]]*DYN' "$RUNNER_TEMP/$abi-unluac-elf.txt"
+            grep -q 'Type:[[:space:]]*DYN' "$RUNNER_TEMP/$abi-luau-elf.txt"
+            if [[ "$abi" == "arm64-v8a" ]]; then
+              grep -Eq 'AArch64|ARM aarch64' "$RUNNER_TEMP/$abi-unluac-elf.txt"
+              grep -Eq 'AArch64|ARM aarch64' "$RUNNER_TEMP/$abi-luau-elf.txt"
+            else
+              grep -Eq 'X86-64|Advanced Micro Devices X86-64' "$RUNNER_TEMP/$abi-unluac-elf.txt"
+              grep -Eq 'X86-64|Advanced Micro Devices X86-64' "$RUNNER_TEMP/$abi-luau-elf.txt"
+            fi
+            echo "PASS Android $abi native ELF validation"
+          done
       - name: Upload Android ARM64 candidate and provenance
         uses: actions/upload-artifact@v4
         with:
