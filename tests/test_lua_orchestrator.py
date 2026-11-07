@@ -6,6 +6,7 @@ PY_ROOT = Path(__file__).resolve().parents[1] / "app" / "src" / "main" / "python
 sys.path.insert(0, str(PY_ROOT))
 
 import alvsia_features
+from alvsia_bridge import configure_unluac_rs
 from lua_engine.orchestrator import EngineSpec, build_engine_registry, run_decompiler_pipeline
 from lua_engine.detector import LuaInfo
 
@@ -149,3 +150,17 @@ def test_optional_unluac_rs_adapter_runs_strict_cli_without_shell(tmp_path):
     assert result["ok"] is True, result
     assert result["selected_engine"] == "unluac_rs_v1_4_4"
     assert output.read_text(encoding="utf-8") == "return 42\\n"
+
+
+def test_bridge_registers_only_existing_executable_unluac_binary(tmp_path, monkeypatch):
+    binary = tmp_path / "libunluac-cli.so"
+    binary.write_bytes(b"android-arm64-cli-fixture")
+    binary.chmod(0o700)
+    monkeypatch.delenv("ALVSIA_UNLUAC_RS_BIN", raising=False)
+
+    assert configure_unluac_rs(str(binary)) is True
+    assert __import__("os").environ["ALVSIA_UNLUAC_RS_BIN"] == str(binary.resolve())
+
+    binary.chmod(0o600)
+    assert configure_unluac_rs(str(binary)) is False
+    assert "ALVSIA_UNLUAC_RS_BIN" not in __import__("os").environ
