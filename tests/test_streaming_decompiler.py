@@ -271,7 +271,7 @@ class TestProtectionPatternFallback(unittest.TestCase):
                 if self.outcome == "invalid":
                     artifact.write_text("this is not Lua source", encoding="utf-8")
                 else:
-                    artifact.write_text("return 42\\n", encoding="utf-8")
+                    artifact.write_text("return 42\n", encoding="utf-8")
                 return {
                     "ok": True, "recovered": True, "mode": "fixture_recovery",
                     "out": str(artifact),
