@@ -157,9 +157,9 @@ def main() -> int:
             if unluac_entry in names:
                 native_cli = outer.read(unluac_entry)
                 is_arm64_elf = (
-                    len(native_cli) > 20 and native_cli[:4] == b"\\x7fELF"
-                    and native_cli[18:20] == b"\\xb7\\x00"
-                    and b"/system/bin/linker64\\x00" in native_cli
+                    len(native_cli) > 20 and native_cli[:4] == b"\x7fELF"
+                    and native_cli[18:20] == b"\xb7\x00"
+                    and b"/system/bin/linker64\x00" in native_cli
                 )
                 check(is_arm64_elf, "unluac-rs executable is Android ARM64 ELF")
                 manifest_name = "assets/engine_licenses/unluac-rs-android-arm64.manifest"
@@ -182,9 +182,9 @@ def main() -> int:
             if luau_entry in names:
                 luau_native = outer.read(luau_entry)
                 is_luau_arm64_elf = (
-                    len(luau_native) > 20 and luau_native[:4] == b"\\x7fELF"
-                    and luau_native[18:20] == b"\\xb7\\x00"
-                    and b"/system/bin/linker64\\x00" in luau_native
+                    len(luau_native) > 20 and luau_native[:4] == b"\x7fELF"
+                    and luau_native[18:20] == b"\xb7\x00"
+                    and b"/system/bin/linker64\x00" in luau_native
                 )
                 check(is_luau_arm64_elf, "Luau decompiler executable is Android ARM64 ELF")
                 manifest_name = "assets/engine_licenses/luau-decompiler-android-arm64.manifest"
