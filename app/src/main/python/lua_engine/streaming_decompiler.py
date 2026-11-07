@@ -412,7 +412,7 @@ def probe_lua_header(path: Path) -> Dict[str, Any]:
         result["header_complete"] = len(chunk) >= 33
     return result
 
-def decompile_large(path: Path, out_dir: Path, jars_dir: Optional[str] = None,\n                    preflight_only: bool = False) -> Dict[str, Any]:
+def decompile_large(path: Path, out_dir: Path, jars_dir: Optional[str] = None, preflight_only: bool = False) -> Dict[str, Any]:
     """Top-level entry for streaming decompilation of large Lua inputs.
 
     Pipeline:
