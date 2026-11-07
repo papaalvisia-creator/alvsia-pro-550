@@ -6,7 +6,7 @@ PY_ROOT = Path(__file__).resolve().parents[1] / "app" / "src" / "main" / "python
 sys.path.insert(0, str(PY_ROOT))
 
 import alvsia_features
-from lua_engine.orchestrator import EngineSpec, run_decompiler_pipeline
+from lua_engine.orchestrator import EngineSpec, build_engine_registry, run_decompiler_pipeline
 from lua_engine.detector import LuaInfo
 
 
@@ -120,3 +120,32 @@ def test_smart_pipeline_continues_after_partial_vm_diagnostics(tmp_path):
     assert result["artifact_kind"] == "vm_wrapper_source"
     assert Path(result["out"]).read_text(encoding="utf-8") == "return 42\\n"
     assert any(step.get("step") == "vm_partial_not_final" for step in result["steps"])
+
+
+
+def test_optional_unluac_rs_adapter_runs_strict_cli_without_shell(tmp_path):
+    binary = tmp_path / "unluac-cli"
+    binary.write_text(
+        "#!/usr/bin/env python3\\n"
+        "import pathlib, sys\\n"
+        "args = sys.argv[1:]\\n"
+        "assert args[0] == '-i' and args[2] == '-o'\\n"
+        "assert args[-2:] == ['--generate-mode', 'strict']\\n"
+        "pathlib.Path(args[3]).write_text('return 42\\n', encoding='utf-8')\\n",
+        encoding="utf-8",
+    )
+    binary.chmod(0o700)
+    source = tmp_path / "input.luac"
+    source.write_bytes(b"\\x1bLua\\x51" + bytes(40))
+    output = tmp_path / "output.lua"
+    info = LuaInfo("bytecode", "Lua 5.1", "luac", 45, "1b4c7561", 0.99)
+
+    specs = build_engine_registry(info, jars_dir=str(tmp_path))
+    assert any(spec.name == "unluac_rs_v1_4_4" for spec in specs)
+    result = run_decompiler_pipeline(
+        source, output, info, jars_dir=str(tmp_path)
+    )
+
+    assert result["ok"] is True, result
+    assert result["selected_engine"] == "unluac_rs_v1_4_4"
+    assert output.read_text(encoding="utf-8") == "return 42\\n"
