@@ -251,7 +251,7 @@ class TestProtectionPatternFallback(unittest.TestCase):
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
             src = root / "plain.luac"
-            src.write_bytes(b"\\x1bLua\\x53\\x00" + bytes(40))
+            src.write_bytes(bytes.fromhex("1b4c75615300") + bytes(40))
             out = root / "out"
             with patch(
                 "lua_engine.streaming_decompiler.stream_unluac_jar",
