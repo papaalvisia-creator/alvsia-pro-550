@@ -166,7 +166,8 @@ jobs:
       - name: Execute Android ARM64 CLI on an ARM64 emulator
         uses: reactivecircus/android-emulator-runner@v2
         with:
-          api-level: 35
+          api-level: 34
+          target: default
           arch: arm64-v8a
           disable-animations: true
           script: |
