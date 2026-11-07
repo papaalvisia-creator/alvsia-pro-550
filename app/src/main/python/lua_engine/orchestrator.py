@@ -9,9 +9,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Iterable, Optional
-import shutil
 
-from .engine import validate_lua_source
+from .engine import validate_lua_source, _find_java
 
 
 @dataclass(frozen=True)
@@ -32,7 +31,7 @@ class EngineSpec:
 
 
 def _available_unluac(jars_dir: Optional[str]) -> bool:
-    if not jars_dir or not shutil.which("java"):
+    if not jars_dir or not _find_java():
         return False
     root = Path(jars_dir)
     names = (
@@ -145,9 +144,6 @@ def run_decompiler_pipeline(
         for spec, candidate, note in valid_candidates:
             candidate.unlink(missing_ok=True)
 
-    for result in results:
-        if result.selected:
-            continue
     return {
         "ok": selected_name is not None,
         "out": str(destination) if selected_name else None,
