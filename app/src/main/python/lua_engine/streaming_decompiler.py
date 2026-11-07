@@ -417,13 +417,11 @@ def decompile_large(path: Path, out_dir: Path, jars_dir: Optional[str] = None,\n
 
     Pipeline:
       1. preflight_magic — 8-byte sniff
-      2. If chunked-DEFLATE or gzip → stream-inflate into temp file
-      3. Try VM-deobfuscation patterns FIRST (ALVSEAL3, ALVLUA1, BGMI-VM)
-         — custom VM protection may only yield structure/constants until its
-           matching opcode/dispatcher mapping is known.
-      4. Try unluac jar (Java) — handles large inputs natively on disk
-      5. Try pure-Python decompiler53 — works without Java
-      6. Honest failure: no fake .lua output
+      2. Try VM-deobfuscation patterns (ALVSEAL3, ALVLUA1, BGMI-VM)
+      3. In normal mode, unwrap supported containers and run legacy engines.
+      4. With preflight_only=True, return after pattern triage; the Smart Lua
+         orchestrator owns all standard engine attempts and output selection.
+      5. Honest failure: no fake .lua output.
     """
     p = Path(path)
     out = Path(out_dir)
