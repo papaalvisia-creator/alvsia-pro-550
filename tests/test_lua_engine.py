@@ -70,7 +70,7 @@ def main():
         # Luau has a distinct version/type/string-table/proto header and must
         # not be mistaken for PUC Lua bytecode or arbitrary binary data.
         luau = td / "sample.luau"
-        luau.write_bytes(bytes((13, 3, 0, 1, 0, 0, 0)))
+        luau.write_bytes(bytes((13, 3, 0, 0, 1, 0, 0)))
         luau_info = detect_lua(luau)
         assert luau_info.format == "luau" and luau_info.version == "Luau bytecode v13", luau_info
         truncated_luau = td / "truncated_luau.bin"
