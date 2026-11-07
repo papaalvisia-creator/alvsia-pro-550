@@ -290,3 +290,27 @@ def test_verified_pattern_recovery_beats_source_passthrough_candidate(tmp_path):
     assert result["ok"] is True, result
     assert result["selected_engine"] == "protected_pattern_recovery"
     assert Path(result["out"]).read_text(encoding="utf-8") == "return 42\\n"
+
+
+def test_invalid_pattern_candidate_falls_back_as_explicit_partial_wrapper(tmp_path):
+    source = tmp_path / "wrapped.lua"
+    source.write_text("local wrapper = true\\nreturn wrapper\\n", encoding="utf-8")
+    out = tmp_path / "out"
+    out.mkdir()
+    recovered = out / "wrapped_recovered.lua"
+    recovered.write_text("this is not valid Lua source !!!", encoding="utf-8")
+    pattern = {
+        "ok": True,
+        "recovered": True,
+        "mode": "alvseal3_source",
+        "pattern_id": "ALVSEAL3_SOURCE",
+        "out": str(recovered),
+    }
+    with patch("lua_engine.streaming_decompiler.decompile_large", return_value=pattern):
+        result = alvsia_features.run_lua_smart(source, out)
+
+    assert result["ok"] is True, result
+    assert result["selected_engine"] == "source_passthrough"
+    assert result["final_status"] == "PARTIAL"
+    assert result["source_recovered"] is False
+    assert result["artifact_kind"] == "protected_wrapper_source"
