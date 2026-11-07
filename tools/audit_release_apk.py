@@ -32,6 +32,7 @@ EXPECTED_SEALED = {
     "lua_engine_detector.alv",
     "lua_engine_multi_format.alv",
     "lua_engine_streaming_decompiler.alv",
+    "lua_engine_orchestrator.alv",
     "lua_engine_vm_deobfuscator.alv",
 }
 PROTECTED_MODULES = {
