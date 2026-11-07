@@ -6,7 +6,7 @@ PY_ROOT = Path(__file__).resolve().parents[1] / "app" / "src" / "main" / "python
 sys.path.insert(0, str(PY_ROOT))
 
 import alvsia_features
-from alvsia_bridge import configure_unluac_rs
+from alvsia_bridge import configure_luau_decompiler, configure_unluac_rs
 from lua_engine.orchestrator import EngineSpec, build_engine_registry, run_decompiler_pipeline
 from lua_engine.detector import LuaInfo
 from lua_engine.engine import validate_lua_source
@@ -254,3 +254,17 @@ def test_pumbaadev_luau_v9_adapter_uses_cli_and_validates_output(tmp_path):
     assert result["ok"] is True, result
     assert result["selected_engine"] == "pumbaadev_luau_decompiler_v0_2"
     assert output.read_text(encoding="utf-8") == "return 42\\n"
+
+
+def test_bridge_registers_only_existing_executable_luau_decompiler(tmp_path, monkeypatch):
+    binary = tmp_path / "libluau-decompiler-cli.so"
+    binary.write_bytes(b"android-arm64-luau-cli-fixture")
+    binary.chmod(0o700)
+    monkeypatch.delenv("ALVSIA_LUAU_DECOMPILER_BIN", raising=False)
+
+    assert configure_luau_decompiler(str(binary)) is True
+    assert __import__("os").environ["ALVSIA_LUAU_DECOMPILER_BIN"] == str(binary.resolve())
+
+    binary.chmod(0o600)
+    assert configure_luau_decompiler(str(binary)) is False
+    assert "ALVSIA_LUAU_DECOMPILER_BIN" not in __import__("os").environ
