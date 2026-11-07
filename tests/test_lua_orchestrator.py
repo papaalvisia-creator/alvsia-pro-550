@@ -186,3 +186,26 @@ def test_smart_lua_plain_source_uses_shared_registry_and_validator(tmp_path):
     assert result["final_status"] == "SUCCESS"
     assert result["source_recovered"] is True
     assert Path(result["out"]).read_text(encoding="utf-8") == source.read_text(encoding="utf-8")
+
+
+def test_unknown_encrypted_payload_checks_pattern_recovery_before_nonlua_fallback(tmp_path):
+    source = tmp_path / "encrypted.payload"
+    source.write_bytes(b"ALVLUA1" + bytes(48))
+    out = tmp_path / "out"
+    out.mkdir()
+    recovered = out / "encrypted_recovered.lua"
+    recovered.write_text("return 42\\n", encoding="utf-8")
+    pattern = {
+        "ok": True,
+        "recovered": True,
+        "mode": "alvlua1_payload",
+        "pattern_id": "ALVLUA1_PAYLOAD",
+        "out": str(recovered),
+    }
+    with patch("lua_engine.streaming_decompiler.decompile_large", return_value=pattern):
+        result = alvsia_features.run_lua_smart(source, out)
+
+    assert result["ok"] is True, result
+    assert result["selected_engine"] == "protected_pattern_recovery"
+    assert result["final_status"] == "SUCCESS"
+    assert Path(result["out"]).read_text(encoding="utf-8") == "return 42\\n"
