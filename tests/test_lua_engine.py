@@ -62,6 +62,21 @@ def main():
         li=detect_lua(luac)
         assert li.format=="luac" and li.version=="Lua 5.3"
 
+        lua55 = td / "sample_lua55.luac"
+        lua55.write_bytes(b"\\x1bLua\\x55\\x00" + bytes(40))
+        li55 = detect_lua(lua55)
+        assert li55.format == "luac" and li55.version == "Lua 5.5", li55
+
+        # Luau has a distinct version/type/string-table/proto header and must
+        # not be mistaken for PUC Lua bytecode or arbitrary binary data.
+        luau = td / "sample.luau"
+        luau.write_bytes(bytes((13, 3, 0, 1, 0, 0, 0)))
+        luau_info = detect_lua(luau)
+        assert luau_info.format == "luau" and luau_info.version == "Luau bytecode v13", luau_info
+        truncated_luau = td / "truncated_luau.bin"
+        truncated_luau.write_bytes(bytes((13, 3, 0, 1)))
+        assert detect_lua(truncated_luau).format == "unknown"
+
         # Decompile dispatch must initialize its output/backend state for
         # bytecode inputs even when no external unluac JAR is configured.
         decompile_report = decompile_lua(luac, td / "decompile_out", jars_dir=td / "missing_jars")
