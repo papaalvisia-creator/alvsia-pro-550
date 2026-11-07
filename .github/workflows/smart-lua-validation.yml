@@ -9,6 +9,7 @@ permissions:
 jobs:
   smart-lua-tests:
     runs-on: ubuntu-latest
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
       - name: Set up Python
@@ -31,9 +32,11 @@ jobs:
               compile(path.read_text(encoding="utf-8"), str(path), "exec")
           print(f"PYTHON SYNTAX: PASS ({len(files)} modules)")
           PY
-      - name: Run Lua engine and orchestrator tests
-        run: |
-          python tests/test_lua_engine.py
-          python -m pytest -q -ra tests/test_lua_orchestrator.py
-          python -m unittest discover -s tests -p 'test_lua*.py'
-          python -m unittest discover -s tests -p 'test_streaming_decompiler.py'
+      - name: Run Lua engine regression tests
+        run: python tests/test_lua_engine.py
+      - name: Run Smart Lua orchestrator regression tests
+        run: python -m pytest -vv -ra tests/test_lua_orchestrator.py
+      - name: Run Lua module unittest suite
+        run: python -m unittest discover -s tests -p 'test_lua*.py' -v
+      - name: Run streaming decompiler unittest suite
+        run: python -m unittest discover -s tests -p 'test_streaming_decompiler.py' -v
