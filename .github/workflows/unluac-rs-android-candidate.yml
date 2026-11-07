@@ -1,9 +1,7 @@
 name: Unluac-rs Android ARM64 Candidate
 on:
-  push:
-    branches: [ feat/lua-intelligence-orchestrator-20261107 ]
-    paths:
-      - .github/workflows/unluac-rs-android-candidate.yml
+  pull_request:
+    branches: [ feat/full-reference-source-registry-20261106 ]
   workflow_dispatch:
 permissions:
   contents: read
