@@ -43,6 +43,19 @@ def main():
         )
         malformed_ok, malformed_msg = validate_lua_source(malformed_source)
         assert not malformed_ok and "unclosed" in malformed_msg, malformed_msg
+
+        # When the matching compiler is installed, parser validation must
+        # reject syntax errors that balanced block keywords cannot detect.
+        parser_invalid = td / "parser_invalid.lua"
+        parser_invalid.write_text("local = 1\\nreturn 1\\n", encoding="utf-8")
+        parser_ok, parser_msg = validate_lua_source(
+            parser_invalid, expected_version="Lua 5.3"
+        )
+        assert not parser_ok and "parser rejected" in parser_msg, parser_msg
+        parser_valid, parser_valid_msg = validate_lua_source(
+            src, expected_version="Lua 5.3"
+        )
+        assert parser_valid and "parser accepted" in parser_valid_msg, parser_valid_msg
         report=analyze_lua(src,td)
         assert report["ok"] and report["format"]=="lua-source"
         luac=td/"sample.luac"; luac.write_bytes(bytes.fromhex("1b4c756153") + bytes(32))
