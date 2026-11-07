@@ -471,10 +471,9 @@ def run_lua_smart(input_path, out_dir, jars_dir=None):
         for cand in out_dir.glob("*_decompiled.lua"):
             v = validate_decompile_text(cand.read_text(encoding="utf-8", errors="replace"))
             report["steps"].append({"step": "validate_source", "file": str(cand), **v})
-            if v.get("is_lua_source"):
-                final_status = "SUCCESS"
-                report["ok"] = True
-                break
+            # This legacy text classifier is diagnostic only. It cannot
+            # upgrade PARTIAL to SUCCESS: only a concrete engine candidate
+            # accepted by the Smart Lua validator may do that.
         else:
             # strings file is recovery only
             for cand in out_dir.glob("*_strings.txt"):
