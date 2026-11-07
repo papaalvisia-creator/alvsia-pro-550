@@ -329,13 +329,15 @@ def run_lua_smart(input_path, out_dir, jars_dir=None):
     report = {"file": str(input_path), "size": len(data), "steps": []}
     info = detect_lua(input_path)
     if info.kind == "unknown":
-        report["steps"].append({"step": "detect", "ok": False, "note": "not recognized Lua/source/container"})
-        r = run_lua_bytecode_strings(input_path, out_dir)
-        report["steps"].append({"step": "strings", **r})
-        return {"ok": False, "mode": "smart_nonlua", **report}
-    report["steps"].append({"step": "detect", "ok": True, "format": info.format,
-                             "version": info.version, "wrapped": info.wrapped,
-                             "container": info.container, "chunks": info.container_chunks})
+        report["steps"].append({
+            "step": "detect", "ok": False,
+            "note": "standard Lua signature not recognized; checking known protection patterns before fallback",
+            "format": info.format, "confidence": info.confidence,
+        })
+    else:
+        report["steps"].append({"step": "detect", "ok": True, "format": info.format,
+                                 "version": info.version, "wrapped": info.wrapped,
+                                 "container": info.container, "chunks": info.container_chunks})
 
     # Normalize a comment-prefixed Lua/LuaJIT payload for every downstream
     # engine. The original input remains untouched and is still used for
