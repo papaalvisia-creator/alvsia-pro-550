@@ -114,5 +114,9 @@ def test_smart_pipeline_continues_after_partial_vm_diagnostics(tmp_path):
 
     assert result["ok"] is True
     assert result["selected_engine"] == "fixture_engine"
+    assert result["final_status"] == "PARTIAL"
+    assert result["vm_obfuscated"] is True
+    assert result["source_recovered"] is False
+    assert result["artifact_kind"] == "vm_wrapper_source"
     assert Path(result["out"]).read_text(encoding="utf-8") == "return 42\\n"
     assert any(step.get("step") == "vm_partial_not_final" for step in result["steps"])
