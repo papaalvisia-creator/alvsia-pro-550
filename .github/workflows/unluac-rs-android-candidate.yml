@@ -120,6 +120,27 @@ jobs:
           test -s app/src/main/assets/engine_licenses/unluac-rs-MIT.txt
           cat app/src/main/assets/engine_licenses/unluac-rs-android-arm64.sha256
           cat app/src/main/assets/engine_licenses/unluac-rs-android-arm64.manifest
+      - name: Execute Android ARM64 CLI on an ARM64 emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: arm64-v8a
+          disable-animations: true
+          script: |
+            set -euo pipefail
+            adb wait-for-device
+            adb push app/src/main/jniLibs/arm64-v8a/libunluac-cli.so /data/local/tmp/libunluac-cli.so
+            adb shell chmod 755 /data/local/tmp/libunluac-cli.so
+            adb shell /data/local/tmp/libunluac-cli.so --help
+            adb push "$RUNNER_TEMP/lua-fixtures/input-5.3.luac" /data/local/tmp/input-5.3.luac
+            adb shell /data/local/tmp/libunluac-cli.so -i /data/local/tmp/input-5.3.luac -o /data/local/tmp/output-5.3.lua --generate-mode strict
+            adb pull /data/local/tmp/output-5.3.lua "$RUNNER_TEMP/lua-fixtures/android-output-5.3.lua"
+            luac5.3 -p "$RUNNER_TEMP/lua-fixtures/android-output-5.3.lua"
+            adb push "$RUNNER_TEMP/lua-fixtures/input-luau.luau" /data/local/tmp/input-luau.luau
+            adb shell /data/local/tmp/libunluac-cli.so -i /data/local/tmp/input-luau.luau -o /data/local/tmp/output-luau.lua --generate-mode strict
+            adb pull /data/local/tmp/output-luau.lua "$RUNNER_TEMP/lua-fixtures/android-output-luau.lua"
+            "$GITHUB_WORKSPACE/luau-build/luau-compile" --binary "$RUNNER_TEMP/lua-fixtures/android-output-luau.lua" > "$RUNNER_TEMP/lua-fixtures/android-output-luau.bc"
+            test -s "$RUNNER_TEMP/lua-fixtures/android-output-luau.bc"
       - name: Upload Android ARM64 candidate and provenance
         uses: actions/upload-artifact@v4
         with:
