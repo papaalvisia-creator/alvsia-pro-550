@@ -36,8 +36,9 @@ jobs:
       - name: Build Lua 5.5 reference compiler
         run: |
           set -euo pipefail
-          git clone --depth 1 --branch v5.5.0 https://github.com/lua/lua.git lua-5.5.0
-          make -C lua-5.5.0/src linux -j2
+          curl -fsSL https://www.lua.org/ftp/lua-5.5.0.tar.gz -o lua-5.5.0.tar.gz
+          tar -xzf lua-5.5.0.tar.gz
+          make -C lua-5.5.0 linux -j2
           test -x lua-5.5.0/src/luac
           lua-5.5.0/src/luac -v
       - name: Build genuine Luau v7 reference compiler
