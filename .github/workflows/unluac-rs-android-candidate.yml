@@ -38,27 +38,21 @@ jobs:
           make -C lua-5.5.0 linux -j2
           test -x lua-5.5.0/src/luac
           lua-5.5.0/src/luac -v
-      - name: Build pinned Luau reference compiler
+      - name: Build genuine Luau v7 reference compiler
         run: |
           set -euo pipefail
-          git init luau-src
-          git -C luau-src remote add origin https://github.com/luau-lang/luau.git
-          git -C luau-src fetch --depth 1 origin 91acc8decfca5281fab4a8db46c894268fc70aac
-          git -C luau-src checkout --detach FETCH_HEAD
-          test "$(git -C luau-src rev-parse HEAD)" = "91acc8decfca5281fab4a8db46c894268fc70aac"
-          # Generate a Luau v7 fixture; PumbaaDev is the tested Luau backend.
-          sed -i 's/LBC_VERSION_TARGET = 13,/LBC_VERSION_TARGET = 7,/' luau-src/Common/include/Luau/Bytecode.h
+          git clone --depth 1 --branch 0.729 https://github.com/luau-lang/luau.git luau-src
           grep -q 'LBC_VERSION_TARGET = 7,' luau-src/Common/include/Luau/Bytecode.h
           cmake -S luau-src -B luau-build -DCMAKE_BUILD_TYPE=Release -DLUAU_BUILD_CLI=ON -DLUAU_BUILD_TESTS=OFF
           cmake --build luau-build --target Luau.Compile.CLI --parallel 2
           test -x luau-build/luau-compile
           luau-build/luau-compile --help
-      - name: Build pinned Luau v9 reference compiler
+      - name: Build genuine Luau v9 reference compiler
         run: |
           set -euo pipefail
-          sed -i 's/LBC_VERSION_TARGET = 7,/LBC_VERSION_TARGET = 9,/' luau-src/Common/include/Luau/Bytecode.h
-          grep -q 'LBC_VERSION_TARGET = 9,' luau-src/Common/include/Luau/Bytecode.h
-          cmake -S luau-src -B luau-build-v9 -DCMAKE_BUILD_TYPE=Release -DLUAU_BUILD_CLI=ON -DLUAU_BUILD_TESTS=OFF
+          git clone --depth 1 --branch 0.730 https://github.com/luau-lang/luau.git luau-src-v9
+          grep -q 'LBC_VERSION_TARGET = 9,' luau-src-v9/Common/include/Luau/Bytecode.h
+          cmake -S luau-src-v9 -B luau-build-v9 -DCMAKE_BUILD_TYPE=Release -DLUAU_BUILD_CLI=ON -DLUAU_BUILD_TESTS=OFF
           cmake --build luau-build-v9 --target Luau.Compile.CLI --parallel 2
           test -x luau-build-v9/luau-compile
       - name: Install Rust stable and Android target
@@ -135,18 +129,18 @@ jobs:
           end
           return combine(7, 9)
           LUAU
-          "$GITHUB_WORKSPACE/luau-build/luau-compile" --fflags=LuauCompileFastpcall=false --binary "$RUNNER_TEMP/lua-fixtures/sample.luau" > "$RUNNER_TEMP/lua-fixtures/input-luau.luau"
+          "$GITHUB_WORKSPACE/luau-build/luau-compile" --binary "$RUNNER_TEMP/lua-fixtures/sample.luau" > "$RUNNER_TEMP/lua-fixtures/input-luau.luau"
           test "$(od -An -tu1 -N1 "$RUNNER_TEMP/lua-fixtures/input-luau.luau" | tr -d ' ')" = "7"
           echo "PASS generated Luau bytecode version 7 (supported parser range 3-7)"
           echo "Luau v7 fixture header: $(od -An -tx1 -N128 "$RUNNER_TEMP/lua-fixtures/input-luau.luau" | tr -s ' ')"
           "$GITHUB_WORKSPACE/luau-decompiler-src/target/release/luau-decompiler" "$RUNNER_TEMP/lua-fixtures/input-luau.luau" -o "$RUNNER_TEMP/lua-fixtures/output-luau.lua"
-          "$GITHUB_WORKSPACE/luau-build/luau-compile" --fflags=LuauCompileFastpcall=false --binary "$RUNNER_TEMP/lua-fixtures/output-luau.lua" > "$RUNNER_TEMP/lua-fixtures/output-luau.bc"
+          "$GITHUB_WORKSPACE/luau-build/luau-compile" --binary "$RUNNER_TEMP/lua-fixtures/output-luau.lua" > "$RUNNER_TEMP/lua-fixtures/output-luau.bc"
           test -s "$RUNNER_TEMP/lua-fixtures/output-luau.bc"
           echo "PASS Luau v7 parse/decompile/re-compile"
-          "$GITHUB_WORKSPACE/luau-build-v9/luau-compile" --fflags=LuauCompileFastpcall=false --binary "$RUNNER_TEMP/lua-fixtures/sample.luau" > "$RUNNER_TEMP/lua-fixtures/input-luau-v9.luau"
+          "$GITHUB_WORKSPACE/luau-build-v9/luau-compile" --binary "$RUNNER_TEMP/lua-fixtures/sample.luau" > "$RUNNER_TEMP/lua-fixtures/input-luau-v9.luau"
           test "$(od -An -tu1 -N1 "$RUNNER_TEMP/lua-fixtures/input-luau-v9.luau" | tr -d ' ')" = "9"
           "$GITHUB_WORKSPACE/luau-decompiler-src/target/release/luau-decompiler" "$RUNNER_TEMP/lua-fixtures/input-luau-v9.luau" -o "$RUNNER_TEMP/lua-fixtures/output-luau-v9.lua"
-          "$GITHUB_WORKSPACE/luau-build-v9/luau-compile" --fflags=LuauCompileFastpcall=false --binary "$RUNNER_TEMP/lua-fixtures/output-luau-v9.lua" > "$RUNNER_TEMP/lua-fixtures/output-luau-v9.bc"
+          "$GITHUB_WORKSPACE/luau-build-v9/luau-compile" --binary "$RUNNER_TEMP/lua-fixtures/output-luau-v9.lua" > "$RUNNER_TEMP/lua-fixtures/output-luau-v9.bc"
           test -s "$RUNNER_TEMP/lua-fixtures/output-luau-v9.bc"
           echo "PASS Luau v9 PumbaaDev parse/decompile/re-compile"
       - name: Build and stage Android ARM64 app candidate
@@ -186,12 +180,12 @@ jobs:
             adb push "$RUNNER_TEMP/lua-fixtures/input-luau.luau" /data/local/tmp/input-luau.luau
             adb shell /data/local/tmp/libluau-decompiler-cli.so /data/local/tmp/input-luau.luau -o /data/local/tmp/output-luau.lua
             adb pull /data/local/tmp/output-luau.lua "$RUNNER_TEMP/lua-fixtures/android-output-luau.lua"
-            "$GITHUB_WORKSPACE/luau-build/luau-compile" --fflags=LuauCompileFastpcall=false --binary "$RUNNER_TEMP/lua-fixtures/android-output-luau.lua" > "$RUNNER_TEMP/lua-fixtures/android-output-luau.bc"
+            "$GITHUB_WORKSPACE/luau-build/luau-compile" --binary "$RUNNER_TEMP/lua-fixtures/android-output-luau.lua" > "$RUNNER_TEMP/lua-fixtures/android-output-luau.bc"
             test -s "$RUNNER_TEMP/lua-fixtures/android-output-luau.bc"
             adb push "$RUNNER_TEMP/lua-fixtures/input-luau-v9.luau" /data/local/tmp/input-luau-v9.luau
             adb shell /data/local/tmp/libluau-decompiler-cli.so /data/local/tmp/input-luau-v9.luau -o /data/local/tmp/output-luau-v9.lua
             adb pull /data/local/tmp/output-luau-v9.lua "$RUNNER_TEMP/lua-fixtures/android-output-luau-v9.lua"
-            "$GITHUB_WORKSPACE/luau-build-v9/luau-compile" --fflags=LuauCompileFastpcall=false --binary "$RUNNER_TEMP/lua-fixtures/android-output-luau-v9.lua" > "$RUNNER_TEMP/lua-fixtures/android-output-luau-v9.bc"
+            "$GITHUB_WORKSPACE/luau-build-v9/luau-compile" --binary "$RUNNER_TEMP/lua-fixtures/android-output-luau-v9.lua" > "$RUNNER_TEMP/lua-fixtures/android-output-luau-v9.bc"
             test -s "$RUNNER_TEMP/lua-fixtures/android-output-luau-v9.bc"
       - name: Upload Android ARM64 candidate and provenance
         uses: actions/upload-artifact@v4
