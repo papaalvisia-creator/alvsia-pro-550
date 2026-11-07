@@ -267,10 +267,61 @@ jobs:
             --profile industry \
             --protect-so
           test -s "$CANDIDATE"
+          # These standalone CLI executables must remain byte-identical and executable;
+          # XopProtector may rewrite ordinary .so payloads, so restore only these
+          # two audited open-source engines and their license notices from baseline.
+          python3 - "$BASE_APK" "$CANDIDATE" <<'PY'
+          import os, sys, zipfile
+          base, candidate = sys.argv[1:3]
+          native = {
+              "lib/arm64-v8a/libunluac-cli.so": 0o100755,
+              "lib/arm64-v8a/libluau-decompiler-cli.so": 0o100755,
+          }
+          notices = {
+              "assets/engine_licenses/unluac-rs-MIT.txt": 0o100644,
+              "assets/engine_licenses/luau-decompiler-MIT.txt": 0o100644,
+              "assets/engine_licenses/unluac-rs-android-arm64.manifest": 0o100644,
+              "assets/engine_licenses/unluac-rs-android-arm64.sha256": 0o100644,
+              "assets/engine_licenses/luau-decompiler-android-arm64.manifest": 0o100644,
+              "assets/engine_licenses/luau-decompiler-android-arm64.sha256": 0o100644,
+          }
+          replacements = {**native, **notices}
+          temp = candidate + ".restored"
+          with zipfile.ZipFile(base, "r") as src, zipfile.ZipFile(candidate, "r") as packed:
+              base_names = set(src.namelist())
+              missing = sorted(set(replacements) - base_names)
+              if missing:
+                  raise SystemExit(f"Baseline missing native engine entries: {missing}")
+              with zipfile.ZipFile(temp, "w") as out:
+                  for info in packed.infolist():
+                      if info.filename in replacements:
+                          continue
+                      out.writestr(info, packed.read(info.filename))
+                  for name, mode in replacements.items():
+                      info = src.getinfo(name)
+                      info.external_attr = mode << 16
+                      if name in native:
+                          info.compress_type = zipfile.ZIP_STORED
+                      out.writestr(info, src.read(name))
+          os.replace(temp, candidate)
+          with zipfile.ZipFile(candidate, "r") as check:
+              for name in native:
+                  if check.read(name) != zipfile.ZipFile(base, "r").read(name):
+                      raise SystemExit(f"Native engine changed during Xop restore: {name}")
+          print("PASS: native Smart Lua executables and notices restored byte-identically")
+          PY
           python3 - "$BASE_APK" "$CANDIDATE" <<'PY'
           import sys, zipfile
           base, candidate = sys.argv[1:3]
-          base_required = {"lib/arm64-v8a/librasp_guard.so", "assets/chaquopy/app.imy", "assets/nx/i.dat"}
+          base_required = {
+              "lib/arm64-v8a/librasp_guard.so",
+              "lib/arm64-v8a/libunluac-cli.so",
+              "lib/arm64-v8a/libluau-decompiler-cli.so",
+              "assets/engine_licenses/unluac-rs-MIT.txt",
+              "assets/engine_licenses/luau-decompiler-MIT.txt",
+              "assets/chaquopy/app.imy",
+              "assets/nx/i.dat",
+          }
           candidate_required = base_required | {"lib/arm64-v8a/libprotector.so", "assets/protector/dexes.zip"}
           with zipfile.ZipFile(base) as a, zipfile.ZipFile(candidate) as b:
               for label, z, required in (("baseline", a, base_required), ("Xop candidate", b, candidate_required)):
