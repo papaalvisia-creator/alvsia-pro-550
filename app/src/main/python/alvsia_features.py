@@ -374,41 +374,33 @@ def run_lua_smart(input_path, out_dir, jars_dir=None):
         except Exception as e:
             report["steps"].append({"step": "unwrap", "ok": False, "error": str(e)})
 
-    # ── Step 2: pure-Python Lua 5.3 decompiler (primary — no Java) ─────────
-    work_data = work_input.read_bytes()
-    is_lua53 = (len(work_data) > 4 and
-                work_data[:4] == b"\x1bLua" and
-                work_data[4] == 0x53)
-
-    if _decompile53_file is not None and is_lua53:
-        try:
-            out_lua = out_dir / (input_path.stem + "_decompiled.lua")
-            pr = _decompile53_file(work_input, out_lua)
-            report["steps"].append({"step": "py_decompile53", **pr})
-            if pr.get("ok") and out_lua.exists() and out_lua.stat().st_size > 0:
-                # Use the same source validator as the Unluac path. A keyword alone
-                # can appear in damaged or partially recovered text and is not proof.
-                valid, validation_note = validate_lua_source(out_lua)
-                report["steps"].append({
-                    "step": "validate_py53_source",
-                    "ok": bool(valid),
-                    "note": str(validation_note),
-                    "file": str(out_lua),
-                })
-                if valid:
-                    report["ok"] = True
-                    report["final_status"] = "SUCCESS"
-                    return {"ok": True, "mode": "smart_py53",
-                            "out": str(out_lua), "lines": pr.get("lines", 0), **report}
-                out_lua.unlink(missing_ok=True)
-        except Exception as e:
-            report["steps"].append({"step": "py_decompile53", "ok": False, "error": str(e)})
-
-    # ── Step 3: unluac jar (fallback — needs Java, works in Termux) ─────────
-    ur = run_unluac(work_input, out_dir, jars_dir=jars_dir)
-    report["steps"].append({"step": "unluac", **ur})
-    if ur.get("ok"):
-        return {"ok": True, "mode": "smart_unluac", **report}
+    # ── Unified engine orchestration ───────────────────────────────────────
+    # The orchestrator selects compatible installed engines from the detected
+    # format, validates each output, and retains valid alternatives for review.
+    try:
+        from lua_engine.orchestrator import run_decompiler_pipeline
+        normalized_info = detect_lua(work_input)
+        out_lua = out_dir / (input_path.stem + "_decompiled.lua")
+        pipeline = run_decompiler_pipeline(
+            work_input, out_lua, normalized_info, jars_dir=jars_dir
+        )
+        report["steps"].append({"step": "engine_orchestrator", **pipeline})
+        if pipeline.get("ok"):
+            report["ok"] = True
+            report["final_status"] = "SUCCESS"
+            return {
+                "ok": True,
+                "mode": "smart_orchestrated",
+                "out": pipeline.get("out"),
+                "selected_engine": pipeline.get("selected_engine"),
+                **report,
+            }
+    except Exception as exc:
+        report["steps"].append({
+            "step": "engine_orchestrator",
+            "ok": False,
+            "error": f"{type(exc).__name__}: {exc}",
+        })
 
     # ── Step 4: partial recovery ─────────────────────────────────────────────
     cr = extract_lua_constants(input_path, out_dir)
