@@ -32,6 +32,7 @@ _MAP = {
     "lua_engine.detector": "lua_engine_detector.alv",
     "lua_engine.multi_format": "lua_engine_multi_format.alv",
     "lua_engine.streaming_decompiler": "lua_engine_streaming_decompiler.alv",
+    "lua_engine.orchestrator": "lua_engine_orchestrator.alv",
     "lua_engine.vm_deobfuscator": "lua_engine_vm_deobfuscator.alv",
 }
 
