@@ -14,6 +14,15 @@ def _isr():
  except Exception:pass
 _CD=""
 def configure_diagnostic():return _CD
+def configure_unluac_rs(binary_path):
+ try:
+  path=os.path.realpath(_extract_str(binary_path).strip())
+  if not os.path.isfile(path) or not os.access(path,os.X_OK):
+   os.environ.pop("ALVSIA_UNLUAC_RS_BIN",None);return False
+  os.environ["ALVSIA_UNLUAC_RS_BIN"]=path
+  return True
+ except Exception:
+  os.environ.pop("ALVSIA_UNLUAC_RS_BIN",None);return False
 def _extract_str(v):
  if isinstance(v,str):return v
  try:return str(v.toString())
