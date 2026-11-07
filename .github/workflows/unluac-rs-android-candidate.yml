@@ -138,6 +138,7 @@ jobs:
           "$GITHUB_WORKSPACE/luau-build/luau-compile" --fflags=LuauCompileFastpcall=false --binary "$RUNNER_TEMP/lua-fixtures/sample.luau" > "$RUNNER_TEMP/lua-fixtures/input-luau.luau"
           test "$(od -An -tu1 -N1 "$RUNNER_TEMP/lua-fixtures/input-luau.luau" | tr -d ' ')" = "7"
           echo "PASS generated Luau bytecode version 7 (supported parser range 3-7)"
+          echo "Luau v7 fixture header: $(od -An -tx1 -N128 "$RUNNER_TEMP/lua-fixtures/input-luau.luau" | tr -s ' ')"
           "$GITHUB_WORKSPACE/luau-decompiler-src/target/release/luau-decompiler" "$RUNNER_TEMP/lua-fixtures/input-luau.luau" -o "$RUNNER_TEMP/lua-fixtures/output-luau.lua"
           "$GITHUB_WORKSPACE/luau-build/luau-compile" --fflags=LuauCompileFastpcall=false --binary "$RUNNER_TEMP/lua-fixtures/output-luau.lua" > "$RUNNER_TEMP/lua-fixtures/output-luau.bc"
           test -s "$RUNNER_TEMP/lua-fixtures/output-luau.bc"
