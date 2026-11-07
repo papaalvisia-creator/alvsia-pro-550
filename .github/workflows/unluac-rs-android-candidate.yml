@@ -6,7 +6,13 @@ on:
       - .github/workflows/unluac-rs-android-candidate.yml
       - tools/build_unluac_rs_android.sh
       - app/src/main/python/lua_engine/**
+      - app/src/main/python/alvsia_features.py
+      - app/src/main/python/alvsia_bridge.py
+      - app/src/main/java/com/alvsia/pro/tool/PythonBridgeRunner.kt
+      - app/src/main/AndroidManifest.xml
+      - tools/audit_release_apk.py
       - tests/test_lua*.py
+      - tests/test_streaming_decompiler.py
   pull_request:
     branches: [ feat/full-reference-source-registry-20261106 ]
   workflow_dispatch:
