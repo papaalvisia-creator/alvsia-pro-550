@@ -117,7 +117,7 @@ jobs:
           luajit -b "$RUNNER_TEMP/lua-fixtures/output-luajit.lua" "$RUNNER_TEMP/lua-fixtures/output-luajit.lj"
           test -s "$RUNNER_TEMP/lua-fixtures/output-luajit.lua"
           echo "PASS LuaJIT parse/decompile/re-compile"
-          LUA55="$GITHUB_WORKSPACE/lua-5.5.0/luac"
+          LUA55="$GITHUB_WORKSPACE/lua-5.5.0/src/luac"
           "$LUA55" -o "$RUNNER_TEMP/lua-fixtures/input-5.5.luac" "$RUNNER_TEMP/lua-fixtures/sample.lua"
           "$CLI" -i "$RUNNER_TEMP/lua-fixtures/input-5.5.luac" -o "$RUNNER_TEMP/lua-fixtures/output-5.5.lua" --generate-mode strict
           "$LUA55" -p "$RUNNER_TEMP/lua-fixtures/output-5.5.lua"
