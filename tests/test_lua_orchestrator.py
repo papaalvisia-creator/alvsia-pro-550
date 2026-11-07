@@ -89,7 +89,7 @@ def test_smart_pipeline_continues_after_partial_vm_diagnostics(tmp_path):
     source.write_bytes(b"\\x1bLua\\x53" + bytes(40))
     output = tmp_path / "protected_decompiled.lua"
 
-    def fake_pipeline(src, dst, info, jars_dir=None):
+    def fake_pipeline(src, dst, info, jars_dir=None, registry=None):
         Path(dst).write_text("return 42\\n", encoding="utf-8")
         return {
             "ok": True,
@@ -174,3 +174,15 @@ def test_bridge_registers_only_existing_executable_unluac_binary(tmp_path, monke
     binary.chmod(0o600)
     assert configure_unluac_rs(str(binary)) is False
     assert "ALVSIA_UNLUAC_RS_BIN" not in __import__("os").environ
+
+
+def test_smart_lua_plain_source_uses_shared_registry_and_validator(tmp_path):
+    source = tmp_path / "plain.lua"
+    source.write_text("local answer = 40 + 2\\nreturn answer\\n", encoding="utf-8")
+    result = alvsia_features.run_lua_smart(source, tmp_path / "out")
+
+    assert result["ok"] is True, result
+    assert result["selected_engine"] == "source_passthrough"
+    assert result["final_status"] == "SUCCESS"
+    assert result["source_recovered"] is True
+    assert Path(result["out"]).read_text(encoding="utf-8") == source.read_text(encoding="utf-8")
