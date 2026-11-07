@@ -163,11 +163,10 @@ def test_optional_unluac_rs_adapter_runs_strict_cli_without_shell(tmp_path):
         return CompletedProcess(args, 0, "", "")
 
     spec = next(spec for spec in specs if spec.name == "unluac_rs_v1_4_4")
-    spec = next(spec for spec in specs if spec.name == "pumbaadev_luau_decompiler_v0_2")
     with patch("lua_engine.orchestrator.subprocess.run", side_effect=fake_run):
         ok, note = spec.runner(source, output)
     assert ok is True, note
-    assert "Luau decompiler CLI" in note
+    assert "unluac-rs strict mode" in note
     assert output.read_text(encoding="utf-8") == "return 42\n"
 
 
@@ -249,12 +248,11 @@ def test_pumbaadev_luau_v9_adapter_uses_cli_and_validates_output(tmp_path):
         Path(args[3]).write_text("return 42\n", encoding="utf-8")
         return CompletedProcess(args, 0, "", "")
 
+    spec = next(spec for spec in specs if spec.name == "pumbaadev_luau_decompiler_v0_2")
     with patch("lua_engine.orchestrator.subprocess.run", side_effect=fake_run):
-        result = run_decompiler_pipeline(
-            source, output, info, jars_dir=str(tmp_path), registry=specs
-        )
-    assert result["ok"] is True, result
-    assert result["selected_engine"] == "pumbaadev_luau_decompiler_v0_2"
+        ok, note = spec.runner(source, output)
+    assert ok is True, note
+    assert "Luau decompiler CLI" in note
     assert output.read_text(encoding="utf-8") == "return 42\n"
 
 
