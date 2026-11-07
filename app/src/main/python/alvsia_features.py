@@ -374,6 +374,58 @@ def run_lua_smart(input_path, out_dir, jars_dir=None):
         except Exception as e:
             report["steps"].append({"step": "unwrap", "ok": False, "error": str(e)})
 
+    # ── Protected-format and streaming preflight ───────────────────────────
+    # Keep the legacy pattern registry in the same Smart Lua pipeline. A
+    # partial VM map is diagnostic evidence, never a successful decompile and
+    # never an early return: compatible ordinary engines still get a chance.
+    try:
+        from lua_engine.streaming_decompiler import decompile_large
+        stream_result = decompile_large(work_input, out_dir, jars_dir=jars_dir)
+        report["steps"].append({
+            "step": "streaming_pattern_preflight",
+            **stream_result,
+        })
+        stream_out = stream_result.get("out")
+        if stream_result.get("ok") and stream_out:
+            stream_path = Path(str(stream_out))
+            if stream_path.is_file() and stream_path.suffix.lower() == ".lua":
+                stream_valid, stream_note = validate_lua_source(stream_path)
+                report["steps"].append({
+                    "step": "validate_streaming_candidate",
+                    "ok": bool(stream_valid),
+                    "note": str(stream_note),
+                    "file": str(stream_path),
+                })
+                if stream_valid:
+                    report["ok"] = True
+                    report["final_status"] = "SUCCESS"
+                    return {
+                        "ok": True,
+                        "mode": "smart_streaming",
+                        "out": str(stream_path),
+                        "selected_engine": stream_result.get("pattern_id")
+                            or stream_result.get("mode")
+                            or "streaming_decompiler",
+                        **report,
+                    }
+                stream_path.unlink(missing_ok=True)
+        if stream_result.get("mode") == "bgmi_vm_partial" or stream_result.get("recovered") is False:
+            report["steps"].append({
+                "step": "vm_partial_not_final",
+                "ok": False,
+                "note": "VM structure/constants are partial diagnostics; continuing compatible engine routing",
+                "protos_parsed": stream_result.get("protos_parsed", 0),
+                "main_instructions": stream_result.get("main_code_count", 0),
+                "main_constants": stream_result.get("main_const_count", 0),
+                "parse_errors": stream_result.get("parse_errors", 0),
+            })
+    except Exception as exc:
+        report["steps"].append({
+            "step": "streaming_pattern_preflight",
+            "ok": False,
+            "error": f"{type(exc).__name__}: {exc}",
+        })
+
     # ── Unified engine orchestration ───────────────────────────────────────
     # The orchestrator selects compatible installed engines from the detected
     # format, validates each output, and retains valid alternatives for review.
