@@ -9,6 +9,7 @@ import alvsia_features
 from alvsia_bridge import configure_unluac_rs
 from lua_engine.orchestrator import EngineSpec, build_engine_registry, run_decompiler_pipeline
 from lua_engine.detector import LuaInfo
+from lua_engine.engine import validate_lua_source
 
 
 def _info(fmt="luac", version="Lua 5.3"):
@@ -211,3 +212,13 @@ def test_unknown_encrypted_payload_checks_pattern_recovery_before_nonlua_fallbac
     assert result["final_status"] == "SUCCESS"
     assert any(step.get("step") == "detect" and step.get("ok") is False for step in result["steps"])
     assert Path(result["out"]).read_text(encoding="utf-8") == "return 42\\n"
+
+
+def test_validator_marks_structural_fallback_when_matching_parser_missing(tmp_path):
+    source = tmp_path / "fallback.lua"
+    source.write_text("local answer = 42\\nreturn answer\\n", encoding="utf-8")
+    with patch("lua_engine.engine.shutil.which", return_value=None):
+        valid, note = validate_lua_source(source, expected_version="Lua 5.3")
+    assert valid is True
+    assert "structural heuristic accepted" in note
+    assert "matching Lua parser unavailable" in note
