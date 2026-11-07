@@ -46,7 +46,7 @@ jobs:
           git -C luau-src fetch --depth 1 origin 91acc8decfca5281fab4a8db46c894268fc70aac
           git -C luau-src checkout --detach FETCH_HEAD
           test "$(git -C luau-src rev-parse HEAD)" = "91acc8decfca5281fab4a8db46c894268fc70aac"
-          # unluac-rs v1.4.4 supports Luau bytecode v3-v7; generate a v7 fixture.
+          # Generate a Luau v7 fixture; PumbaaDev is the tested Luau backend.
           sed -i 's/LBC_VERSION_TARGET = 13,/LBC_VERSION_TARGET = 7,/' luau-src/Common/include/Luau/Bytecode.h
           grep -q 'LBC_VERSION_TARGET = 7,' luau-src/Common/include/Luau/Bytecode.h
           cmake -S luau-src -B luau-build -DCMAKE_BUILD_TYPE=Release -DLUAU_BUILD_CLI=ON -DLUAU_BUILD_TESTS=OFF
@@ -90,7 +90,7 @@ jobs:
           cargo build --locked --release -p luau-cli --manifest-path luau-decompiler-src/Cargo.toml
           test -x luau-decompiler-src/target/release/luau-decompiler
           luau-decompiler-src/target/release/luau-decompiler --help
-      - name: Verify Lua 5.1–5.5, LuaJIT 2.1 and Luau v7 fixtures
+      - name: Verify Lua 5.1–5.5, LuaJIT 2.1 and Luau v7/v9 fixtures
         working-directory: candidate
         run: |
           set -euo pipefail
@@ -138,7 +138,7 @@ jobs:
           "$GITHUB_WORKSPACE/luau-build/luau-compile" --fflags=LuauCompileFastpcall=false --binary "$RUNNER_TEMP/lua-fixtures/sample.luau" > "$RUNNER_TEMP/lua-fixtures/input-luau.luau"
           test "$(od -An -tu1 -N1 "$RUNNER_TEMP/lua-fixtures/input-luau.luau" | tr -d ' ')" = "7"
           echo "PASS generated Luau bytecode version 7 (supported parser range 3-7)"
-          "$CLI" -i "$RUNNER_TEMP/lua-fixtures/input-luau.luau" -o "$RUNNER_TEMP/lua-fixtures/output-luau.lua" --generate-mode strict
+          "$GITHUB_WORKSPACE/luau-decompiler-src/target/release/luau-decompiler" "$RUNNER_TEMP/lua-fixtures/input-luau.luau" -o "$RUNNER_TEMP/lua-fixtures/output-luau.lua"
           "$GITHUB_WORKSPACE/luau-build/luau-compile" --fflags=LuauCompileFastpcall=false --binary "$RUNNER_TEMP/lua-fixtures/output-luau.lua" > "$RUNNER_TEMP/lua-fixtures/output-luau.bc"
           test -s "$RUNNER_TEMP/lua-fixtures/output-luau.bc"
           echo "PASS Luau v7 parse/decompile/re-compile"
@@ -183,7 +183,7 @@ jobs:
             adb pull /data/local/tmp/output-5.3.lua "$RUNNER_TEMP/lua-fixtures/android-output-5.3.lua"
             luac5.3 -p "$RUNNER_TEMP/lua-fixtures/android-output-5.3.lua"
             adb push "$RUNNER_TEMP/lua-fixtures/input-luau.luau" /data/local/tmp/input-luau.luau
-            adb shell /data/local/tmp/libunluac-cli.so -i /data/local/tmp/input-luau.luau -o /data/local/tmp/output-luau.lua --generate-mode strict
+            adb shell /data/local/tmp/libluau-decompiler-cli.so /data/local/tmp/input-luau.luau -o /data/local/tmp/output-luau.lua
             adb pull /data/local/tmp/output-luau.lua "$RUNNER_TEMP/lua-fixtures/android-output-luau.lua"
             "$GITHUB_WORKSPACE/luau-build/luau-compile" --fflags=LuauCompileFastpcall=false --binary "$RUNNER_TEMP/lua-fixtures/android-output-luau.lua" > "$RUNNER_TEMP/lua-fixtures/android-output-luau.bc"
             test -s "$RUNNER_TEMP/lua-fixtures/android-output-luau.bc"
