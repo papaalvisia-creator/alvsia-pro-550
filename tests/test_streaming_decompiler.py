@@ -115,7 +115,7 @@ class TestVersionSpecificFallbacks(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as td:
             src = Path(td) / "sample.lj"
-            src.write_bytes(bytes.fromhex("1b4c75615300") + bytes(40))
+            src.write_bytes(bytes.fromhex("1b4c4a02") + bytes(20))
             out = Path(td) / "out"
             with patch("lua_engine.pattern_registry.get_registry",
                        return_value=EmptyRegistry()):
