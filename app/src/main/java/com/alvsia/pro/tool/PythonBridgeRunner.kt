@@ -197,6 +197,22 @@ object PythonBridgeRunner {
                     "Python configure stage: $pythonDiagnostic"
                 )
             }
+
+            // Register the bundled Android ARM64 CLI from nativeLibraryDir.
+            // Missing/incompatible binaries are non-fatal: Smart Lua retains its
+            // existing engines and reports their diagnostics normally.
+            try {
+                val nativeCli = File(context.applicationInfo.nativeLibraryDir, "libunluac-cli.so")
+                if (nativeCli.isFile && nativeCli.canExecute()) {
+                    callAttr.invoke(
+                        bridge,
+                        "configure_unluac_rs",
+                        arrayOf<Any?>(nativeCli.absolutePath)
+                    )
+                }
+            } catch (_: Throwable) {
+                // Optional engine only; do not block unrelated tools.
+            }
             val coreModule = getModule.invoke(py, "alvsia_core")
                 ?: return false to listOf("X AUTH: core session-binding helper unavailable")
             val identityResult = callAttr.invoke(
