@@ -160,6 +160,7 @@ def test_optional_unluac_rs_adapter_runs_strict_cli_without_shell(tmp_path):
         jars_dir=str(tmp_path),
     )
     assert not any(spec.name == "unluac_rs_v1_4_4" for spec in luau_v14_specs)
+    assert not any(spec.name == "pumbaadev_luau_decompiler_v0_2" for spec in luau_v14_specs)
     result = run_decompiler_pipeline(
         source, output, info, jars_dir=str(tmp_path)
     )
@@ -227,3 +228,29 @@ def test_validator_marks_structural_fallback_when_matching_parser_missing(tmp_pa
     assert valid is True
     assert "structural heuristic accepted" in note
     assert "matching Lua parser unavailable" in note
+
+
+def test_pumbaadev_luau_v9_adapter_uses_cli_and_validates_output(tmp_path):
+    binary = tmp_path / "luau-decompiler"
+    binary.write_text(
+        "#!/usr/bin/env python3\\n"
+        "import pathlib, sys\\n"
+        "args = sys.argv[1:]\\n"
+        "assert args[0].endswith('.luau') and args[1] == '-o'\\n"
+        "pathlib.Path(args[2]).write_text('return 42\\n', encoding='utf-8')\\n",
+        encoding="utf-8",
+    )
+    binary.chmod(0o700)
+    source = tmp_path / "input.luau"
+    source.write_bytes(bytes((9, 3, 0, 0, 1, 0, 0)))
+    output = tmp_path / "output.lua"
+    info = LuaInfo("bytecode", "Luau bytecode v9", "luau", 7, "09030001", 0.88)
+
+    specs = build_engine_registry(info, jars_dir=str(tmp_path))
+    assert specs[0].name == "pumbaadev_luau_decompiler_v0_2"
+    result = run_decompiler_pipeline(
+        source, output, info, jars_dir=str(tmp_path), registry=specs
+    )
+    assert result["ok"] is True, result
+    assert result["selected_engine"] == "pumbaadev_luau_decompiler_v0_2"
+    assert output.read_text(encoding="utf-8") == "return 42\\n"
