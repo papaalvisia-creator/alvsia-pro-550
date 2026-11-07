@@ -175,20 +175,20 @@ jobs:
           cat app/src/main/assets/engine_licenses/unluac-rs-android-arm64.manifest
           cat app/src/main/assets/engine_licenses/luau-decompiler-android-arm64.sha256
           cat app/src/main/assets/engine_licenses/luau-decompiler-android-arm64.manifest
-      - name: Execute Android ARM64 CLI on an ARM64 emulator
+      - name: Execute Android x86_64 CLI on an x86_64 emulator
         uses: reactivecircus/android-emulator-runner@v2
         with:
-          api-level: 30
+          api-level: 35
           target: google_apis
           # GitHub-hosted runners are x86_64; ARM64 Android emulators cannot boot on this host.
           # Keep ARM64 as the release artifact and use x86_64 only for Android runtime smoke tests.
           arch: x86_64
           cores: 2
-          ram-size: 2048M
+          ram-size: 3072M
           heap-size: 512M
           force-avd-creation: true
           disable-animations: true
-          emulator-options: -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect
+          emulator-options: -no-window -no-audio -no-boot-anim -no-snapshot -gpu swiftshader_indirect
           script: |
             set -euo pipefail
             cd "$GITHUB_WORKSPACE"
