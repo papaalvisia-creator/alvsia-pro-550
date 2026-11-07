@@ -22,11 +22,13 @@ class ProtectionProfile:
     encode_strings: bool = False
     compact: bool = False
     strip_comments: bool = False
+    string_min_length: int = 1
+    rename_prefix: str = "_a"
 
 PROFILES = {
-    "balanced": ProtectionProfile("balanced", True, False, True, False),
-    "strong": ProtectionProfile("strong", True, True, True, True),
-    "source": ProtectionProfile("source", False, False, False, False),
+    "balanced": ProtectionProfile("balanced", True, False, True, False, 1, "_a"),
+    "strong": ProtectionProfile("strong", True, True, True, True, 2, "_a"),
+    "source": ProtectionProfile("source", False, False, False, False, 1, "_a"),
 }
 
 _TOKEN = re.compile(
@@ -125,7 +127,40 @@ def _compact_tokens(tokens):
             result.append(("space", " "))
     return result
 
+def _function_parameter_indices(tokens, function_index):
+    """Find simple function parameters and return their token indices."""
+    j = _next_significant(tokens, function_index)
+    if j is None:
+        return []
+    while j is not None and tokens[j][1] != "(":
+        if tokens[j][1] in ("=", ";", "end"):
+            return []
+        j = _next_significant(tokens, j)
+    if j is None:
+        return []
+    indices = []
+    nesting = 1
+    j += 1
+    while j < len(tokens) and nesting:
+        kind, value = tokens[j]
+        if kind in ("string", "long", "comment"):
+            j += 1
+            continue
+        if value == "(":
+            nesting += 1
+        elif value == ")":
+            nesting -= 1
+        elif nesting == 1 and kind == "ident" and value != "self":
+            prev = _significant(tokens, j)
+            if prev is None or tokens[prev][1] not in (".", ":"):
+                indices.append(j)
+        j += 1
+    return indices
+
+
 def protect_source(source: str, profile: ProtectionProfile | str = "balanced") -> str:
+    if not isinstance(source, str):
+        raise TypeError("source must be str")
     if isinstance(profile, str):
         if profile not in PROFILES:
             raise ValueError(f"unknown protection profile: {profile}")
@@ -141,7 +176,7 @@ def protect_source(source: str, profile: ProtectionProfile | str = "balanced") -
     def fresh() -> str:
         nonlocal counter
         while True:
-            candidate = f"_a{counter:x}"
+            candidate = f"{profile.rename_prefix}{counter:x}"
             counter += 1
             if candidate not in used:
                 used.add(candidate)
@@ -191,6 +226,18 @@ def protect_source(source: str, profile: ProtectionProfile | str = "balanced") -
                 i = last_decl + 1
                 continue
 
+        if kind == "ident" and value == "function" and profile.rename_locals:
+            # Parameters are locals in the function scope. Register them at
+            # depth+1 before normal identifier resolution reaches the body.
+            function_depth = depth + 1
+            scope = active.setdefault(function_depth, {})
+            for pi in _function_parameter_indices(tokens, i):
+                name = tokens[pi][1]
+                if name not in KEYWORDS and name not in scope:
+                    replacement = fresh()
+                    scope[name] = replacement
+                    tokens[pi] = ("ident", replacement)
+
         if kind == "ident" and profile.rename_locals:
             replacement = resolve(value)
             if replacement:
@@ -199,7 +246,9 @@ def protect_source(source: str, profile: ProtectionProfile | str = "balanced") -
                     value = replacement
 
         if kind == "string" and profile.encode_strings:
-            value = _string_expr(value)
+            body_len = max(0, len(value) - 2)
+            if body_len >= profile.string_min_length:
+                value = _string_expr(value)
         if kind == "comment" and profile.strip_comments:
             value = ""
 
