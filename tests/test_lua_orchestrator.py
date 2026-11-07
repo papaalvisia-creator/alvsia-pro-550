@@ -143,6 +143,16 @@ def test_optional_unluac_rs_adapter_runs_strict_cli_without_shell(tmp_path):
 
     specs = build_engine_registry(info, jars_dir=str(tmp_path))
     assert any(spec.name == "unluac_rs_v1_4_4" for spec in specs)
+    lua55_specs = build_engine_registry(
+        LuaInfo("bytecode", "Lua 5.5", "luac", 45, "1b4c756155", 0.99),
+        jars_dir=str(tmp_path),
+    )
+    assert any(spec.name == "unluac_rs_v1_4_4" for spec in lua55_specs)
+    luau_specs = build_engine_registry(
+        LuaInfo("bytecode", "Luau bytecode v13", "luau", 45, "0d030001", 0.88),
+        jars_dir=str(tmp_path),
+    )
+    assert any(spec.name == "unluac_rs_v1_4_4" for spec in luau_specs)
     result = run_decompiler_pipeline(
         source, output, info, jars_dir=str(tmp_path)
     )
