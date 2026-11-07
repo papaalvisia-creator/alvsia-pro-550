@@ -73,6 +73,10 @@ def main():
         luau.write_bytes(bytes((13, 3, 0, 0, 1, 0, 0)))
         luau_info = detect_lua(luau)
         assert luau_info.format == "luau" and luau_info.version == "Luau bytecode v13", luau_info
+        luau_v7 = td / "sample_v7.luau"
+        luau_v7.write_bytes(bytes((7, 3, 0, 0, 1, 0, 0)))
+        luau_v7_info = detect_lua(luau_v7)
+        assert luau_v7_info.format == "luau" and luau_v7_info.version == "Luau bytecode v7", luau_v7_info
         truncated_luau = td / "truncated_luau.bin"
         truncated_luau.write_bytes(bytes((13, 3, 0, 1)))
         assert detect_lua(truncated_luau).format == "unknown"
