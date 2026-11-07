@@ -162,7 +162,9 @@ def test_optional_unluac_rs_adapter_runs_strict_cli_without_shell(tmp_path):
         Path(args[4]).write_text("return 42\\n", encoding="utf-8")
         return CompletedProcess(args, 0, "", "")
 
-    with patch("lua_engine.orchestrator.subprocess.run", side_effect=fake_run):
+    with patch("lua_engine.engine._find_lua_parser", return_value=None), patch(
+        "lua_engine.orchestrator.subprocess.run", side_effect=fake_run
+    ):
         result = run_decompiler_pipeline(
             source, output, info, jars_dir=str(tmp_path)
         )
