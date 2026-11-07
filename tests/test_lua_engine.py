@@ -42,7 +42,7 @@ def main():
             'end\n'
         )
         malformed_ok, malformed_msg = validate_lua_source(malformed_source)
-        assert not malformed_ok and "unclosed" in malformed_msg, malformed_msg
+        assert not malformed_ok and ("unclosed" in malformed_msg or "parser rejected" in malformed_msg), malformed_msg
 
         # When the matching compiler is installed, parser validation must
         # reject syntax errors that balanced block keywords cannot detect.
