@@ -10,15 +10,15 @@ Build one user-facing Smart Lua workflow inside the existing Lua Center. The use
 
 ## Current implementation verified in this branch
 
-- `lua_engine.detector` distinguishes standard Lua bytecode, LuaJIT bytecode, source, and wrapped containers.
-- `lua_engine.orchestrator` routes Lua 5.3 to the existing ALVSIA streaming decompiler, LuaJIT to its disassembler, and standard Lua bytecode to an available Unluac JAR when a Java runtime and configured JAR directory are present.
+- `lua_engine.detector` distinguishes standard Lua bytecode 5.1–5.5, LuaJIT bytecode, source, wrapped containers, and conservative Luau bytecode header candidates.
+- `lua_engine.orchestrator` retains the ALVSIA Lua 5.3 and LuaJIT routes and can route Lua 5.1–5.5, Luau, and unknown PUC-Lua versions to the optional pinned `unluac-rs` CLI when an Android-compatible executable is registered.
 - Each candidate writes to its own file. Validation now prefers a version-matched `luac -p` parser when available; if no matching parser exists, the structural fallback is explicitly reported as heuristic-only. Validated alternatives are retained and original input bytes are preserved.
 - Smart Lua runs protected-format/streaming preflight inside the same user-facing pipeline. Partial VM structure/constants reports cannot short-circuit engine routing or be labelled as recovered original source. If a standard engine only reconstructs a VM wrapper/interpreter, the result is marked `PARTIAL` and `vm_wrapper_source`.
-- Android Security Validation is excluded from this feature branch. A separate Python-only workflow checks module syntax, Lua 5.3 parser acceptance/rejection, Lua engine tests, orchestration tests and streaming decompiler tests; no APK build is part of this workflow.
+- Android Security Validation is excluded from this feature branch. A Python-only workflow checks module syntax, Lua 5.3 parser acceptance/rejection, Lua engine tests, orchestration tests and streaming decompiler tests; no APK build is part of this workflow.
 - Existing Unluac assets include three unique Git blobs (the generic and dated JAR names are identical content). They are not yet proven to be three independent engines.
 - Existing LuaDec source candidate is not yet compiled or shipped.
-- Current detector only has standard Lua version-byte mappings through Lua 5.4. Lua 5.5 and Luau are not yet wired.
-- The Java/JAR route is optional and depends on a runtime and the configured JAR directory. Native Android execution requires Android-compatible ARM64 builds; Windows executables and Linux/glibc binaries are not Android engines.
+- Lua 5.5 detection and Luau header recognition are now wired into the detector. Luau is kept distinct from PUC Lua; its conservative header check is not a substitute for full bytecode parsing.
+- The Java/JAR route is optional and depends on a runtime and the configured JAR directory. The pinned unluac-rs v1.4.4 candidate has been built for `aarch64-linux-android` (API 24, NDK r27) and its ELF interpreter is `/system/bin/linker64`; it is not yet packaged into ALVSIA or run on-device. `tools/build_unluac_rs_android.sh` now defines the reproducible app-integration build path. Windows executables and Linux/glibc binaries are not Android engines.
 
 ## Engine and format inventory
 
@@ -28,7 +28,7 @@ Build one user-facing Smart Lua workflow inside the existing Lua Center. The use
 | Existing ALVSIA Lua 5.3 streaming engine | Standard Lua 5.3 decompiler | Keep as preferred local engine where validated | Expand fixtures; compare semantic behavior, not just keyword balance |
 | Existing ALVSIA LuaJIT route | LuaJIT disassembly/analysis | Keep as dedicated dialect route | Clearly label disassembly versus source reconstruction; add LuaJIT 2.0/2.1 fixtures |
 | `zhangjiequan/luadec` | Native Lua 5.1 decompiler; 5.2/5.3 experimental | Build as a separate optional engine | Pin commit; MIT notice; Android ARM64 build; per-version fixtures and stripped-debug tests |
-| `x3zvawq/unluac-rs` | Multi-dialect Rust decompiler; claims Lua 5.1–5.5, LuaJIT 2.1 and Luau | Highest-priority new candidate for a unified engine | Verify exact upstream license/release/source; build Android ARM64; inspect dependency and binary size; validate every dialect against fixtures before enabling |
+| `x3zvawq/unluac-rs` | Multi-dialect Rust decompiler; upstream advertises Lua 5.1–5.5, LuaJIT 2.1 and Luau | Primary multi-dialect candidate behind Smart Lua | MIT notice retained; pinned v1.4.4; Android ARM64 candidate compiled and basic fixtures pass; finish Lua 5.5/Luau fixture run, size/runtime validation and on-device execution before production enablement |
 | `PumbaaDev/luau-decompiler` | Luau bytecode parser, lifter, AST and source emitter | Dedicated Luau engine | Verify upstream revision/license and build ARM64; use official Luau compiler/reference fixtures; test opcode-shuffle uncertainty reporting |
 | Tovek | Luau decompiler | Secondary Luau comparison engine | Pin source and MIT license; build/test; compare output against primary Luau engine |
 | luauDec | Luau decompiler / AST reconstruction | Research-only comparison candidate | Project is reported stale; assess source health and buildability before adoption |
@@ -36,8 +36,8 @@ Build one user-facing Smart Lua workflow inside the existing Lua Center. The use
 | `Coldzer0/LuaDecompiler` (cLuaDecompiler) | Lua 5.1–5.5 disassembly/decompilation, SSA and custom opcode tables | Research only; do not bundle by default | AGPL-3.0 obligations require a separate distribution decision; inspect implementation and Pascal/Lazarus Android feasibility |
 | ByteVeil | Static Lua 5.1/Luau inspection, IR/CFG/SSA and partial lifting | Optional analysis backend | Verify license/dependencies; use for diagnostics and partial recovery, not as a universal source decompiler |
 | ChunkSpy / LuaAssemblyTools | Bytecode inspection/disassembly | Diagnostic backend | Pin provenance/license and test parser compatibility; never label as full source decompilers |
-| Lua 5.5 | New standard Lua dialect | Future first-class dialect | Confirm official bytecode header/opcode format; add detector, parser, compiler fixtures and compatible engine before routing |
-| Luau | Roblox Lua dialect, distinct from PUC Lua | First-class separate dialect | Separate header/version/opcode model and fixture corpus; never feed blindly to standard Unluac |
+| Lua 5.5 | New standard Lua dialect | First-class dialect through the unluac-rs candidate | Run official Lua 5.5 compiler fixture and re-parse output; retain parser-backed validation when available |
+| Luau | Roblox Lua dialect, distinct from PUC Lua | First-class separate dialect through the unluac-rs candidate | Verify full serialized header and compile/decompile/re-compile with the pinned official Luau compiler; never feed blindly to PUC Lua tools |
 | Luraph (user's earlier “Luaraph”) | Commercial Lua/Luau obfuscator and VM virtualizer | Recognize and report protection family; separate authorized static-analysis workflow | Version fingerprints and lawful test fixtures required. No claim of generic devirtualization or universal recovery |
 | “Lua ART” | Unidentified name | Keep unresolved in inventory | Do not invent a tool identity; add only after exact project, APK, link or artifact is identified |
 
@@ -78,7 +78,7 @@ Build one user-facing Smart Lua workflow inside the existing Lua Center. The use
 
 ## Current CI state at time of this plan
 
-The latest recorded Android Security Validation run for the branch's PR merge commit completed the source security checks, Python compilation/dispatch tests, Telegram notifier contract checks, sealed-payload tests, Lua decompiler safety tests, Lua Protector tests, Android debug build/test and Gradle release APK build. It then failed at **Sign internal baseline for XopProtector input**; subsequent XopProtector/sign/upload steps were skipped. Therefore this run does not establish a signed APK or a releasable artifact. Re-run signing only after diagnosing the signing-step failure and confirming the required repository secrets/configuration without exposing secret values.
+The latest recorded Smart Lua Python validation run passed. The initial native ARM64 candidate build also passed host fixtures for Lua 5.1–5.4 and LuaJIT 2.1, and produced an Android ARM64 ELF artifact with provenance and checksum. The expanded workflow now adds Lua 5.5 and Luau fixtures and strips the native binary before artifact upload; those expanded checks are pending. No ALVSIA APK build or release is part of this phase.
 
 ## Licensing and attribution
 
