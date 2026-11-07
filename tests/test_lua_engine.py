@@ -63,7 +63,7 @@ def main():
         assert li.format=="luac" and li.version=="Lua 5.3"
 
         lua55 = td / "sample_lua55.luac"
-        lua55.write_bytes(b"\\x1bLua\\x55\\x00" + bytes(40))
+        lua55.write_bytes(bytes.fromhex("1b4c75615500") + bytes(40))
         li55 = detect_lua(lua55)
         assert li55.format == "luac" and li55.version == "Lua 5.5", li55
 
