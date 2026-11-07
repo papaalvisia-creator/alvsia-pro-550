@@ -33,10 +33,10 @@ jobs:
           print(f"PYTHON SYNTAX: PASS ({len(files)} modules)")
           PY
       - name: Run Lua engine regression tests
-        run: python tests/test_lua_engine.py
+        run: timeout 120s python tests/test_lua_engine.py
       - name: Run Smart Lua orchestrator regression tests
-        run: python -m pytest -vv -ra tests/test_lua_orchestrator.py
+        run: timeout 120s python -m pytest -vv -ra tests/test_lua_orchestrator.py
       - name: Run Lua module unittest suite
-        run: python -m unittest discover -s tests -p 'test_lua*.py' -v
+        run: timeout 120s python -m unittest discover -s tests -p 'test_lua*.py' -v
       - name: Run streaming decompiler unittest suite
-        run: python -m unittest discover -s tests -p 'test_streaming_decompiler.py' -v
+        run: timeout 120s python -m unittest discover -s tests -p 'test_streaming_decompiler.py' -v
