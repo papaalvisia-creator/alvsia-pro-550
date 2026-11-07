@@ -3,7 +3,7 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 TAG="v1.4.4"
-TARGET="aarch64-linux-android"
+TARGET="${ALVSIA_ANDROID_TARGET:-aarch64-linux-android}"
 API="24"
 NDK="${ANDROID_NDK_HOME:-}"
 if [[ -z "$NDK" && -n "${ANDROID_HOME:-}" && -n "${ANDROID_NDK_VERSION:-}" ]]; then
@@ -14,9 +14,9 @@ if [[ -z "$NDK" || ! -d "$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin" ]]; the
   exit 2
 fi
 TOOLCHAIN="$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin"
-LINKER="$TOOLCHAIN/aarch64-linux-android${API}-clang"
+LINKER="$TOOLCHAIN/${TARGET}${API}-clang"
 if [[ ! -x "$LINKER" || ! -x "$TOOLCHAIN/llvm-strip" ]]; then
-  echo "Android ARM64 linker/strip tools are missing from $TOOLCHAIN" >&2
+  echo "Android linker/strip tools are missing from $TOOLCHAIN for target $TARGET" >&2
   exit 2
 fi
 
@@ -35,15 +35,16 @@ cargo build --locked --release -p unluac-cli --target "$TARGET"
 BIN="$WORK/unluac-rs/target/$TARGET/release/unluac-cli"
 test -s "$BIN"
 "$TOOLCHAIN/llvm-strip" --strip-all "$BIN"
-readelf -h "$BIN" | grep -q 'AArch64'
+if [[ "$TARGET" == "aarch64-linux-android" ]]; then readelf -h "$BIN" | grep -q "AArch64"; elif [[ "$TARGET" == "x86_64-linux-android" ]]; then readelf -h "$BIN" | grep -Eq "Advanced Micro Devices X86-64|X86-64"; else echo "Unsupported Android target: $TARGET" >&2; exit 2; fi
 readelf -l "$BIN" | grep -q '/system/bin/linker64'
 
-DEST="$ROOT/app/src/main/jniLibs/arm64-v8a"
+if [[ "$TARGET" == "aarch64-linux-android" ]]; then ABI="arm64-v8a"; LICENSE_SUFFIX="arm64"; elif [[ "$TARGET" == "x86_64-linux-android" ]]; then ABI="x86_64"; LICENSE_SUFFIX="x86_64"; else echo "Unsupported Android target: $TARGET" >&2; exit 2; fi
+DEST="$ROOT/app/src/main/jniLibs/$ABI"
 mkdir -p "$DEST" "$ROOT/app/src/main/assets/engine_licenses"
 install -m 0755 "$BIN" "$DEST/libunluac-cli.so"
 install -m 0644 LICENSE.txt "$ROOT/app/src/main/assets/engine_licenses/unluac-rs-MIT.txt"
-sha256sum "$DEST/libunluac-cli.so" > "$ROOT/app/src/main/assets/engine_licenses/unluac-rs-android-arm64.sha256"
-cat > "$ROOT/app/src/main/assets/engine_licenses/unluac-rs-android-arm64.manifest" <<EOF
+sha256sum "$DEST/libunluac-cli.so" > "$ROOT/app/src/main/assets/engine_licenses/unluac-rs-android-${LICENSE_SUFFIX}.sha256"
+cat > "$ROOT/app/src/main/assets/engine_licenses/unluac-rs-android-${LICENSE_SUFFIX}.manifest" <<EOF
 upstream=https://github.com/x3zvawq/unluac-rs
 tag=$TAG
 crate_version=1.4.4
@@ -55,4 +56,4 @@ rust=$(rustc --version)
 stripped=yes
 EOF
 file "$DEST/libunluac-cli.so"
-echo "Installed pinned unluac-rs $TAG for Android ARM64."
+echo "Installed pinned unluac-rs $TAG for Android $ABI."
