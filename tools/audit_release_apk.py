@@ -42,7 +42,7 @@ PROTECTED_MODULES = {
     "lua_output_validator", "lua_string_recover",
     "lua_engine/engine", "lua_engine/decompiler53", "lua_engine/bgmi", "lua_engine/t24",
     "lua_engine/luajit_decompiler", "lua_engine/container", "lua_engine/detector",
-    "lua_engine/multi_format", "lua_engine/streaming_decompiler", "lua_engine/vm_deobfuscator",
+    "lua_engine/multi_format", "lua_engine/streaming_decompiler", "lua_engine/orchestrator", "lua_engine/vm_deobfuscator",
 }
 SEAL_MAGIC = b"ALVSEAL2"
 ASSET_MAGIC = b"ALVSA1\x00"
