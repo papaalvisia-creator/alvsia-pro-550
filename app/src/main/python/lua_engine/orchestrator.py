@@ -121,8 +121,18 @@ def build_engine_registry(info, jars_dir: Optional[str] = None) -> list[EngineSp
             "source_passthrough", ("lua-source",), _copy_lua_source, 0,
         ))
     unluac_rs = _find_unluac_rs(jars_dir)
+    luau_version = None
+    if info.format == "luau":
+        try:
+            luau_version = int(str(info.version).rsplit("v", 1)[-1])
+        except (TypeError, ValueError):
+            luau_version = None
+    # The pinned v1.4.4 parser accepts Luau bytecode v3-v7 only. Newer
+    # versions are reported unsupported rather than sent to an incompatible parser.
+    luau_supported = luau_version is not None and 3 <= luau_version <= 7
     if unluac_rs and (
-        info.format in ("luac", "luac-unknown", "luau")
+        info.format in ("luac", "luac-unknown")
+        or luau_supported
         or (info.format == "luajit" and info.version == "LuaJIT 2.1")
     ):
         # Keep the proven local Lua 5.3 engine first; use unluac-rs as the
