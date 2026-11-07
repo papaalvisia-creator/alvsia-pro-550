@@ -162,6 +162,18 @@ def main() -> int:
                     and b"/system/bin/linker64\\x00" in native_cli
                 )
                 check(is_arm64_elf, "unluac-rs executable is Android ARM64 ELF")
+            luau_entry = "lib/arm64-v8a/libluau-decompiler-cli.so"
+            check(luau_entry in names, "Android ARM64 Luau v3-v9 decompiler packaged")
+            check("assets/engine_licenses/luau-decompiler-MIT.txt" in names,
+                  "PumbaaDev Luau decompiler MIT license attribution packaged")
+            if luau_entry in names:
+                luau_native = outer.read(luau_entry)
+                is_luau_arm64_elf = (
+                    len(luau_native) > 20 and luau_native[:4] == b"\\x7fELF"
+                    and luau_native[18:20] == b"\\xb7\\x00"
+                    and b"/system/bin/linker64\\x00" in luau_native
+                )
+                check(is_luau_arm64_elf, "Luau decompiler executable is Android ARM64 ELF")
             check("assets/chaquopy/app.imy" in names, "Chaquopy app bundle packaged")
             check("assets/nx/i.dat" in names, "sealed JAR index packaged")
             check(not any(n.startswith("assets/unluac/") and n.lower().endswith(".jar") for n in names),
