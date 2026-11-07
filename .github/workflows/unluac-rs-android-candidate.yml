@@ -27,6 +27,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 75
     steps:
+      - name: Checkout ALVSIA PRO source
+        uses: actions/checkout@v4
       - name: Install host Lua compilers and LuaJIT
         run: |
           sudo apt-get update
@@ -34,7 +36,7 @@ jobs:
       - name: Build Lua 5.5 reference compiler
         run: |
           set -euo pipefail
-          curl -fsSL https://www.lua.org/ftp/lua-5.5.0.tar.gz | tar -xz
+          git clone --depth 1 --branch v5.5.0 https://github.com/lua/lua.git lua-5.5.0
           make -C lua-5.5.0 linux -j2
           test -x lua-5.5.0/src/luac
           lua-5.5.0/src/luac -v
