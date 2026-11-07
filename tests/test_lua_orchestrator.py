@@ -147,7 +147,15 @@ def test_optional_unluac_rs_adapter_runs_strict_cli_without_shell(tmp_path):
         LuaInfo("bytecode", "Luau bytecode v7", "luau", 45, "07030001", 0.88),
         jars_dir=str(tmp_path),
     )
-    assert any(spec.name == "unluac_rs_v1_4_4" for spec in luau_v7_specs)
+    assert not any(spec.name == "unluac_rs_v1_4_4" for spec in luau_v7_specs)
+    luau_binary = tmp_path / "luau-decompiler"
+    luau_binary.write_bytes(b"fixture executable placeholder")
+    luau_binary.chmod(0o700)
+    luau_v7_with_primary = build_engine_registry(
+        LuaInfo("bytecode", "Luau bytecode v7", "luau", 45, "07030001", 0.88),
+        jars_dir=str(tmp_path),
+    )
+    assert luau_v7_with_primary[0].name == "pumbaadev_luau_decompiler_v0_2"
     luau_v14_specs = build_engine_registry(
         LuaInfo("bytecode", "Luau bytecode v14", "luau", 45, "0e030001", 0.88),
         jars_dir=str(tmp_path),
