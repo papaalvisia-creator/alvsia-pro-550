@@ -12,9 +12,13 @@ on:
   workflow_dispatch:
 permissions:
   contents: read
+concurrency:
+  group: unluac-rs-candidate-${{ github.ref }}
+  cancel-in-progress: true
 jobs:
   build-and-fixture-verify:
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     steps:
       - name: Install host Lua compilers and LuaJIT
         run: |
