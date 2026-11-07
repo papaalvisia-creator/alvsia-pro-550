@@ -100,6 +100,11 @@ jobs:
           distribution: temurin
           java-version: '17'
 
+      - name: Install Rust stable and Android ARM64 target
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android
+
       - name: Install pinned Android NDK and CMake
         run: |
           set -euo pipefail
@@ -107,6 +112,18 @@ jobs:
           "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "ndk;27.0.12077973" "cmake;3.22.1"
           test -d "$ANDROID_HOME/ndk/27.0.12077973"
           test -x "$ANDROID_HOME/cmake/3.22.1/bin/cmake"
+
+      - name: Build pinned native Smart Lua engines
+        env:
+          ANDROID_NDK_VERSION: 27.0.12077973
+        run: |
+          set -euo pipefail
+          bash tools/build_unluac_rs_android.sh
+          bash tools/build_luau_decompiler_android.sh
+          test -s app/src/main/jniLibs/arm64-v8a/libunluac-cli.so
+          test -s app/src/main/jniLibs/arm64-v8a/libluau-decompiler-cli.so
+          test -s app/src/main/assets/engine_licenses/unluac-rs-MIT.txt
+          test -s app/src/main/assets/engine_licenses/luau-decompiler-MIT.txt
 
       - name: Build and test Android debug variant
         run: |
