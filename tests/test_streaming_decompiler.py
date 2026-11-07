@@ -247,6 +247,25 @@ class TestStandardZlib(unittest.TestCase):
                 self.assertEqual(preflight_magic(src), "zlib")
 
 class TestProtectionPatternFallback(unittest.TestCase):
+    def test_preflight_only_never_runs_standard_decompiler_backends(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            src = root / "plain.luac"
+            src.write_bytes(b"\\x1bLua\\x53\\x00" + bytes(40))
+            out = root / "out"
+            with patch(
+                "lua_engine.streaming_decompiler.stream_unluac_jar",
+                side_effect=AssertionError("standard engine must be orchestrator-owned"),
+            ):
+                with patch(
+                    "lua_engine.streaming_decompiler.stream_decompile_lua53",
+                    side_effect=AssertionError("standard engine must be orchestrator-owned"),
+                ):
+                    result = decompile_large(src, out, preflight_only=True)
+            self.assertFalse(result["ok"])
+            self.assertEqual(result["mode"], "pattern_preflight")
+            self.assertFalse((out / "plain_decompiled.lua").exists())
+
     def test_partial_or_invalid_pattern_results_do_not_stop_fallback(self):
         """Only a validated full source artifact may count as recovery."""
         calls = []
