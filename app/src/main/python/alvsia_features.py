@@ -442,6 +442,8 @@ def run_lua_smart(input_path, out_dir, jars_dir=None):
             work_input, out_lua, normalized_info,
             jars_dir=jars_dir, registry=registry,
         )
+        if pattern_candidate is not None:
+            pattern_candidate.unlink(missing_ok=True)
         report["steps"].append({"step": "engine_orchestrator", **pipeline})
         if pipeline.get("ok"):
             report["ok"] = True
