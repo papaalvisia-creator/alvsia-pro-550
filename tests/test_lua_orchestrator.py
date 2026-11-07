@@ -1,4 +1,5 @@
 from pathlib import Path
+from subprocess import CompletedProcess
 import sys
 from unittest.mock import patch
 
@@ -128,15 +129,7 @@ def test_smart_pipeline_continues_after_partial_vm_diagnostics(tmp_path):
 
 def test_optional_unluac_rs_adapter_runs_strict_cli_without_shell(tmp_path):
     binary = tmp_path / "unluac-cli"
-    binary.write_text(
-        "#!/usr/bin/env python3\\n"
-        "import pathlib, sys\\n"
-        "args = sys.argv[1:]\\n"
-        "assert args[0] == '-i' and args[2] == '-o'\\n"
-        "assert args[-2:] == ['--generate-mode', 'strict']\\n"
-        "pathlib.Path(args[3]).write_text('return 42\\n', encoding='utf-8')\\n",
-        encoding="utf-8",
-    )
+    binary.write_bytes(b"fixture executable placeholder")
     binary.chmod(0o700)
     source = tmp_path / "input.luac"
     source.write_bytes(b"\\x1bLua\\x51" + bytes(40))
@@ -161,9 +154,18 @@ def test_optional_unluac_rs_adapter_runs_strict_cli_without_shell(tmp_path):
     )
     assert not any(spec.name == "unluac_rs_v1_4_4" for spec in luau_v14_specs)
     assert not any(spec.name == "pumbaadev_luau_decompiler_v0_2" for spec in luau_v14_specs)
-    result = run_decompiler_pipeline(
-        source, output, info, jars_dir=str(tmp_path)
-    )
+    def fake_run(args, **kwargs):
+        assert args[0] == str(binary)
+        assert args[1:4] == ["-i", str(source), "-o"]
+        assert args[-2:] == ["--generate-mode", "strict"]
+        assert kwargs.get("timeout") == 180 and kwargs.get("check") is False
+        Path(args[4]).write_text("return 42\\n", encoding="utf-8")
+        return CompletedProcess(args, 0, "", "")
+
+    with patch("lua_engine.orchestrator.subprocess.run", side_effect=fake_run):
+        result = run_decompiler_pipeline(
+            source, output, info, jars_dir=str(tmp_path)
+        )
 
     assert result["ok"] is True, result
     assert result["selected_engine"] == "unluac_rs_v1_4_4"
@@ -232,14 +234,7 @@ def test_validator_marks_structural_fallback_when_matching_parser_missing(tmp_pa
 
 def test_pumbaadev_luau_v9_adapter_uses_cli_and_validates_output(tmp_path):
     binary = tmp_path / "luau-decompiler"
-    binary.write_text(
-        "#!/usr/bin/env python3\\n"
-        "import pathlib, sys\\n"
-        "args = sys.argv[1:]\\n"
-        "assert args[0].endswith('.luau') and args[1] == '-o'\\n"
-        "pathlib.Path(args[2]).write_text('return 42\\n', encoding='utf-8')\\n",
-        encoding="utf-8",
-    )
+    binary.write_bytes(b"fixture executable placeholder")
     binary.chmod(0o700)
     source = tmp_path / "input.luau"
     source.write_bytes(bytes((9, 3, 0, 0, 1, 0, 0)))
@@ -248,9 +243,17 @@ def test_pumbaadev_luau_v9_adapter_uses_cli_and_validates_output(tmp_path):
 
     specs = build_engine_registry(info, jars_dir=str(tmp_path))
     assert specs[0].name == "pumbaadev_luau_decompiler_v0_2"
-    result = run_decompiler_pipeline(
-        source, output, info, jars_dir=str(tmp_path), registry=specs
-    )
+    def fake_run(args, **kwargs):
+        assert args[0] == str(binary)
+        assert args[1:] == [str(source), "-o", args[3]]
+        assert kwargs.get("timeout") == 180 and kwargs.get("check") is False
+        Path(args[3]).write_text("return 42\\n", encoding="utf-8")
+        return CompletedProcess(args, 0, "", "")
+
+    with patch("lua_engine.orchestrator.subprocess.run", side_effect=fake_run):
+        result = run_decompiler_pipeline(
+            source, output, info, jars_dir=str(tmp_path), registry=specs
+        )
     assert result["ok"] is True, result
     assert result["selected_engine"] == "pumbaadev_luau_decompiler_v0_2"
     assert output.read_text(encoding="utf-8") == "return 42\\n"
