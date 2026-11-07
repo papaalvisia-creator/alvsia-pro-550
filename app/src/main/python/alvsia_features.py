@@ -316,11 +316,12 @@ def run_lua_multi_xor(input_path, out_dir, keys=None):
 
 def run_lua_smart(input_path, out_dir, jars_dir=None):
     """
-    Unified LUA pipeline:
-    1) detect LuaS header / unwrap container
-    2) pure-Python Lua 5.3 decompiler (no Java needed — works on Android)
-    3) try unluac jar if Java available
-    4) on failure → constants + strings + multi-xor
+    Unified Smart Lua pipeline:
+    1) identify source, bytecode dialect, container and confidence
+    2) run protection-pattern detection only (no standard engine execution)
+    3) pass pattern recovery and compatible engines into one candidate selector
+    4) validate candidates, retain valid alternatives, and report partial recovery honestly
+    5) use constants/strings/XOR only as clearly labelled fallback diagnostics
     """
     input_path = Path(input_path)
     out_dir = Path(out_dir)
