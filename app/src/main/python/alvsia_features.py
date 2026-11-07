@@ -389,7 +389,7 @@ def run_lua_smart(input_path, out_dir, jars_dir=None):
         if stream_result.get("ok") and stream_out:
             stream_path = Path(str(stream_out))
             if stream_path.is_file() and stream_path.suffix.lower() == ".lua":
-                stream_valid, stream_note = validate_lua_source(stream_path)
+                stream_valid, stream_note = validate_lua_source(stream_path, expected_version=info.version)
                 report["steps"].append({
                     "step": "validate_streaming_candidate",
                     "ok": bool(stream_valid),
