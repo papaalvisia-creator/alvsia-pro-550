@@ -304,9 +304,9 @@ jobs:
                           info.compress_type = zipfile.ZIP_STORED
                       out.writestr(info, src.read(name))
           os.replace(temp, candidate)
-          with zipfile.ZipFile(candidate, "r") as check:
+          with zipfile.ZipFile(base, "r") as original, zipfile.ZipFile(candidate, "r") as check:
               for name in native:
-                  if check.read(name) != zipfile.ZipFile(base, "r").read(name):
+                  if check.read(name) != original.read(name):
                       raise SystemExit(f"Native engine changed during Xop restore: {name}")
           print("PASS: native Smart Lua executables and notices restored byte-identically")
           PY
