@@ -1,5 +1,11 @@
 from pathlib import Path
+import sys
+from unittest.mock import patch
 
+PY_ROOT = Path(__file__).resolve().parents[1] / "app" / "src" / "main" / "python"
+sys.path.insert(0, str(PY_ROOT))
+
+import alvsia_features
 from lua_engine.orchestrator import EngineSpec, run_decompiler_pipeline
 from lua_engine.detector import LuaInfo
 
@@ -74,3 +80,39 @@ def test_pipeline_reports_engine_failures_without_fake_output(tmp_path):
     assert result["ok"] is False
     assert not output.exists()
     assert result["results"][0]["note"] == "unsupported bytecode"
+
+
+
+def test_smart_pipeline_continues_after_partial_vm_diagnostics(tmp_path):
+    source = tmp_path / "protected.luac"
+    source.write_bytes(b"\\x1bLua\\x53" + bytes(40))
+    output = tmp_path / "protected_decompiled.lua"
+
+    def fake_pipeline(src, dst, info, jars_dir=None):
+        Path(dst).write_text("return 42\\n", encoding="utf-8")
+        return {
+            "ok": True,
+            "out": str(dst),
+            "selected_engine": "fixture_engine",
+            "engines_attempted": ["fixture_engine"],
+            "results": [],
+        }
+
+    partial = {
+        "ok": False,
+        "mode": "bgmi_vm_partial",
+        "recovered": False,
+        "protos_parsed": 3,
+        "main_code_count": 12,
+        "main_const_count": 4,
+        "parse_errors": 1,
+        "note": "partial VM structure only",
+    }
+    with patch("lua_engine.streaming_decompiler.decompile_large", return_value=partial):
+        with patch("lua_engine.orchestrator.run_decompiler_pipeline", side_effect=fake_pipeline):
+            result = alvsia_features.run_lua_smart(source, tmp_path)
+
+    assert result["ok"] is True
+    assert result["selected_engine"] == "fixture_engine"
+    assert Path(result["out"]).read_text(encoding="utf-8") == "return 42\\n"
+    assert any(step.get("step") == "vm_partial_not_final" for step in result["steps"])
