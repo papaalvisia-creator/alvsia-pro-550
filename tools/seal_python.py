@@ -53,6 +53,7 @@ MODULES = (
     "lua_engine/detector.py",
     "lua_engine/multi_format.py",
     "lua_engine/streaming_decompiler.py",
+    "lua_engine/orchestrator.py",
     "lua_engine/vm_deobfuscator.py",
 )
 
