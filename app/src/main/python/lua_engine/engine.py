@@ -86,19 +86,86 @@ def _looks_like_lua_source(text: str) -> bool:
     return bool(re.search(r"\b(?:local|function|return|if|for|while|repeat|do|end)\b", code))
 
 
-def validate_lua_source(path_or_text) -> tuple[bool, str]:
-    if isinstance(path_or_text, (str, Path)) and Path(str(path_or_text)).is_file():
+def _find_lua_parser(expected_version=None):
+    """Find a matching PUC Lua compiler for syntax-only validation."""
+    version = str(expected_version or "").lower()
+    candidates = {
+        "lua 5.1": ("luac5.1", "luac51"),
+        "lua 5.2": ("luac5.2", "luac52"),
+        "lua 5.3": ("luac5.3", "luac53"),
+        "lua 5.4": ("luac5.4", "luac54"),
+        "lua 5.5": ("luac5.5", "luac55"),
+    }
+    names = candidates.get(version, ())
+    if not expected_version:
+        names = ("luac", "luac5.5", "luac5.4", "luac5.3", "luac5.2", "luac5.1")
+    for name in names:
+        found = shutil.which(name)
+        if found:
+            return found
+    return None
+
+
+def validate_lua_source(path_or_text, expected_version=None) -> tuple[bool, str]:
+    source_path = None
+    temporary = None
+    if isinstance(path_or_text, Path):
+        source_path = path_or_text
+    elif isinstance(path_or_text, str):
+        try:
+            candidate_path = Path(path_or_text)
+            if "\\n" not in path_or_text and candidate_path.is_file():
+                source_path = candidate_path
+        except (OSError, ValueError):
+            source_path = None
+
+    if source_path is not None:
         from .detector import read_lua_text_strict
         try:
-            text = read_lua_text_strict(path_or_text)
+            text = read_lua_text_strict(source_path)
         except ValueError as exc:
             return False, f"not decodable as Lua source: {exc}"
     else:
         text = str(path_or_text)
+
     if not _looks_like_lua_source(text):
         return False, "output does not look like Lua source"
+
+    # Prefer a real parser whenever the matching compiler is installed.
+    # Never claim parser validation when only the structural fallback ran.
+    parser = _find_lua_parser(expected_version)
+    if parser:
+        try:
+            if source_path is None:
+                temporary = tempfile.NamedTemporaryFile(
+                    mode="w", encoding="utf-8", suffix=".lua", delete=False
+                )
+                temporary.write(text)
+                temporary.close()
+                parse_path = temporary.name
+            else:
+                parse_path = str(source_path)
+            proc = subprocess.run(
+                [parser, "-p", parse_path],
+                capture_output=True, text=True, timeout=8,
+            )
+            if proc.returncode != 0:
+                detail = (proc.stderr or proc.stdout or "syntax rejected").strip()
+                return False, "Lua parser rejected source: " + detail[:500]
+            return True, f"{expected_version or 'Lua'} parser accepted source"
+        except subprocess.TimeoutExpired:
+            return False, "Lua parser validation timed out"
+        except Exception as exc:
+            return False, f"Lua parser validation failed: {type(exc).__name__}: {exc}"
+        finally:
+            if temporary is not None:
+                try:
+                    Path(temporary.name).unlink(missing_ok=True)
+                except Exception:
+                    pass
+
     code = _lua_code_without_literals(text)
-    tokens = re.findall(r'(?<![%\w_])(function|if|for|while|repeat|do|end|until)(?![\w_])', code)
+    tokens = re.findall(r'(?<![%\\w_])(function|if|for|while|repeat|do|end|until)(?![\\w_])', code)
     stack = []
     for tok in tokens:
         if tok in ("function", "if", "repeat"):
@@ -124,7 +191,7 @@ def validate_lua_source(path_or_text) -> tuple[bool, str]:
         return False, "unclosed Lua block(s): " + ",".join(
             entry["kind"] for entry in stack[-8:]
         )
-    return True, "syntax structure looks consistent"
+    return True, "structural heuristic accepted; matching Lua parser unavailable"
 
 
 def _extract_strings(data: bytes, minimum=4):
