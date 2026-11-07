@@ -38,11 +38,12 @@ jobs:
         # Lua 5.5 upstream keeps the compiler Makefile under src/; build the luac target directly.
         run: |
           set -euo pipefail
-          curl -fsSL https://github.com/lua/lua/archive/refs/tags/v5.5.0.tar.gz -o lua-5.5.0.tar.gz
+          curl --retry 5 --retry-delay 2 --fail --silent --show-error --location https://github.com/lua/lua/archive/refs/tags/v5.5.0.tar.gz -o lua-5.5.0.tar.gz
           tar -xzf lua-5.5.0.tar.gz
-          tar -tzf lua-5.5.0.tar.gz > lua-5.5.0.manifest
           LUA55_ROOT="lua-5.5.0"
+          test -d "$LUA55_ROOT"
           test -f "$LUA55_ROOT/src/Makefile"
+          test -f "$LUA55_ROOT/src/luac.c"
           make -C "$LUA55_ROOT/src" -j2 luac
           test -x "$LUA55_ROOT/src/luac"
           "$LUA55_ROOT/src/luac" -v
