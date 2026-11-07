@@ -145,6 +145,7 @@ jobs:
           test -s "$RUNNER_TEMP/lua-fixtures/output-luau-v9.bc"
           echo "PASS Luau v9 PumbaaDev parse/decompile/re-compile"
       - name: Build and stage Android ARM64 app candidate
+        working-directory: ${{ github.workspace }}
         env:
           ANDROID_NDK_VERSION: 27.0.12077973
         run: |
@@ -167,6 +168,7 @@ jobs:
           disable-animations: true
           script: |
             set -euo pipefail
+            cd "$GITHUB_WORKSPACE"
             adb wait-for-device
             adb push app/src/main/jniLibs/arm64-v8a/libunluac-cli.so /data/local/tmp/libunluac-cli.so
             adb shell chmod 755 /data/local/tmp/libunluac-cli.so
