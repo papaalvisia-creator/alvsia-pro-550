@@ -374,80 +374,89 @@ def run_lua_smart(input_path, out_dir, jars_dir=None):
         except Exception as e:
             report["steps"].append({"step": "unwrap", "ok": False, "error": str(e)})
 
-    # ── Protected-format and streaming preflight ───────────────────────────
+    # ── Protected-format preflight (diagnostics only) ────────────────────
     vm_partial_seen = False
-    # Keep the legacy pattern registry in the same Smart Lua pipeline. A
-    # partial VM map is diagnostic evidence, never a successful decompile and
-    # never an early return: compatible ordinary engines still get a chance.
+    protected_partial_seen = False
+    pattern_candidate = None
     try:
         from lua_engine.streaming_decompiler import decompile_large
-        stream_result = decompile_large(work_input, out_dir, jars_dir=jars_dir)
+        pattern_result = decompile_large(
+            work_input, out_dir, jars_dir=jars_dir, preflight_only=True
+        )
         report["steps"].append({
-            "step": "streaming_pattern_preflight",
-            **stream_result,
+            "step": "protected_pattern_preflight",
+            **pattern_result,
         })
-        stream_out = stream_result.get("out")
-        if stream_result.get("ok") and stream_out:
-            stream_path = Path(str(stream_out))
-            if stream_path.is_file() and stream_path.suffix.lower() == ".lua":
-                stream_valid, stream_note = validate_lua_source(stream_path, expected_version=info.version)
+        if pattern_result.get("ok") and pattern_result.get("recovered") is True:
+            candidate = Path(str(pattern_result.get("out") or ""))
+            if candidate.is_file() and candidate.suffix.lower() == ".lua":
+                pattern_candidate = candidate
                 report["steps"].append({
-                    "step": "validate_streaming_candidate",
-                    "ok": bool(stream_valid),
-                    "note": str(stream_note),
-                    "file": str(stream_path),
+                    "step": "pattern_candidate_staged",
+                    "ok": True,
+                    "pattern_id": pattern_result.get("pattern_id"),
+                    "file": str(candidate),
                 })
-                if stream_valid:
-                    report["ok"] = True
-                    report["final_status"] = "SUCCESS"
-                    return {
-                        "ok": True,
-                        "mode": "smart_streaming",
-                        "out": str(stream_path),
-                        "selected_engine": stream_result.get("pattern_id")
-                            or stream_result.get("mode")
-                            or "streaming_decompiler",
-                        **report,
-                    }
-                stream_path.unlink(missing_ok=True)
-        if stream_result.get("mode") == "bgmi_vm_partial" or stream_result.get("recovered") is False:
-            vm_partial_seen = True
+        if pattern_result.get("recovered") is False:
+            protected_partial_seen = True
+            vm_partial_seen = pattern_result.get("mode") == "bgmi_vm_partial"
             report["steps"].append({
-                "step": "vm_partial_not_final",
+                "step": "vm_partial_not_final" if vm_partial_seen else "protected_partial_not_final",
                 "ok": False,
-                "note": "VM structure/constants are partial diagnostics; continuing compatible engine routing",
-                "protos_parsed": stream_result.get("protos_parsed", 0),
-                "main_instructions": stream_result.get("main_code_count", 0),
-                "main_constants": stream_result.get("main_const_count", 0),
-                "parse_errors": stream_result.get("parse_errors", 0),
+                "note": "Protection analysis is diagnostic only; compatible decompiler engines will still be tried",
+                "pattern_id": pattern_result.get("pattern_id"),
+                "protos_parsed": pattern_result.get("protos_parsed", 0),
+                "main_instructions": pattern_result.get("main_code_count", 0),
+                "main_constants": pattern_result.get("main_const_count", 0),
+                "parse_errors": pattern_result.get("parse_errors", 0),
             })
     except Exception as exc:
         report["steps"].append({
-            "step": "streaming_pattern_preflight",
+            "step": "protected_pattern_preflight",
             "ok": False,
             "error": f"{type(exc).__name__}: {exc}",
         })
 
-    # ── Unified engine orchestration ───────────────────────────────────────
-    # The orchestrator selects compatible installed engines from the detected
-    # format, validates each output, and retains valid alternatives for review.
+    # ── One engine registry and one candidate-selection pipeline ──────────
     try:
-        from lua_engine.orchestrator import run_decompiler_pipeline
+        from lua_engine.orchestrator import (
+            EngineSpec, build_engine_registry, run_decompiler_pipeline,
+        )
         normalized_info = detect_lua(work_input)
+        registry = build_engine_registry(normalized_info, jars_dir=jars_dir)
+        if pattern_candidate is not None:
+            def _run_pattern_candidate(_src, dst, candidate=pattern_candidate):
+                shutil.copy2(candidate, dst)
+                return True, "protection-pattern recovery candidate"
+            registry.append(EngineSpec(
+                "protected_pattern_recovery",
+                (normalized_info.format,),
+                _run_pattern_candidate,
+                0,
+            ))
         out_lua = out_dir / (input_path.stem + "_decompiled.lua")
         pipeline = run_decompiler_pipeline(
-            work_input, out_lua, normalized_info, jars_dir=jars_dir
+            work_input, out_lua, normalized_info,
+            jars_dir=jars_dir, registry=registry,
         )
         report["steps"].append({"step": "engine_orchestrator", **pipeline})
         if pipeline.get("ok"):
             report["ok"] = True
             report["vm_obfuscated"] = bool(vm_partial_seen)
-            report["source_recovered"] = not vm_partial_seen
-            report["artifact_kind"] = "vm_wrapper_source" if vm_partial_seen else "lua_source"
-            report["final_status"] = "PARTIAL" if vm_partial_seen else "SUCCESS"
+            report["source_recovered"] = not protected_partial_seen
+            report["artifact_kind"] = (
+                "vm_wrapper_source" if vm_partial_seen
+                else "protected_wrapper_source" if protected_partial_seen
+                else "lua_source"
+            )
+            report["final_status"] = "PARTIAL" if protected_partial_seen else "SUCCESS"
             return {
                 "ok": True,
-                "mode": "smart_orchestrated_vm_wrapper" if vm_partial_seen else "smart_orchestrated",
+                "mode": (
+                    "smart_orchestrated_vm_wrapper" if vm_partial_seen
+                    else "smart_orchestrated_partial" if protected_partial_seen
+                    else "smart_orchestrated"
+                ),
                 "out": pipeline.get("out"),
                 "selected_engine": pipeline.get("selected_engine"),
                 **report,
