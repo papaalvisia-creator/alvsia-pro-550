@@ -7,6 +7,7 @@ on:
       - tools/build_unluac_rs_android.sh
       - tools/build_luau_decompiler_android.sh
       - app/src/main/python/lua_engine/**
+      - tests/test_lua_protection_core.py
       - app/src/main/python/alvsia_features.py
       - app/src/main/python/alvsia_bridge.py
       - app/src/main/java/com/alvsia/pro/tool/PythonBridgeRunner.kt
