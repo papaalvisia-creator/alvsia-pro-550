@@ -1,4 +1,4 @@
-name: Unluac-rs Android ARM64 Candidate
+name: Smart Lua Native Engines Android ARM64 Candidate
 on:
   push:
     branches: [ feat/lua-intelligence-orchestrator-20261107 ]
@@ -195,7 +195,7 @@ jobs:
       - name: Upload Android ARM64 candidate and provenance
         uses: actions/upload-artifact@v4
         with:
-          name: unluac-rs-v1.4.4-android-arm64-candidate
+          name: smart-lua-native-engines-arm64-candidate
           path: |
             app/src/main/jniLibs/arm64-v8a/libunluac-cli.so
             app/src/main/jniLibs/arm64-v8a/libluau-decompiler-cli.so
