@@ -212,6 +212,14 @@ object PythonBridgeRunner {
                             arrayOf<Any?>(nativeCli.absolutePath)
                         )
                     }
+                    val luauCli = File(nativeLibDir, "libluau-decompiler-cli.so")
+                    if (luauCli.isFile && luauCli.canExecute()) {
+                        callAttr.invoke(
+                            bridge,
+                            "configure_luau_decompiler",
+                            arrayOf<Any?>(luauCli.absolutePath)
+                        )
+                    }
                 }
             } catch (_: Throwable) {
                 // Optional engine only; do not block unrelated tools.
