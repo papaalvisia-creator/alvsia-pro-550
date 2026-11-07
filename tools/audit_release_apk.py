@@ -171,7 +171,8 @@ def main() -> int:
                     check("tag=v1.4.4" in manifest and "target=aarch64-linux-android" in manifest,
                           "unluac-rs pinned release/target provenance verified")
                 if checksum_name in names:
-                    expected_hash = outer.read(checksum_name).decode("ascii", errors="ignore").split()[0]
+                    checksum_parts = outer.read(checksum_name).decode("ascii", errors="ignore").split()
+                    expected_hash = checksum_parts[0] if checksum_parts else ""
                     check(expected_hash == hashlib.sha256(native_cli).hexdigest(),
                           "unluac-rs Android executable checksum verified")
             luau_entry = "lib/arm64-v8a/libluau-decompiler-cli.so"
@@ -196,7 +197,8 @@ def main() -> int:
                           and "supported_luau_bytecode=3-9" in manifest,
                           "PumbaaDev pinned commit/compatibility provenance verified")
                 if checksum_name in names:
-                    expected_hash = outer.read(checksum_name).decode("ascii", errors="ignore").split()[0]
+                    checksum_parts = outer.read(checksum_name).decode("ascii", errors="ignore").split()
+                    expected_hash = checksum_parts[0] if checksum_parts else ""
                     check(expected_hash == hashlib.sha256(luau_native).hexdigest(),
                           "PumbaaDev Android executable checksum verified")
             check("assets/chaquopy/app.imy" in names, "Chaquopy app bundle packaged")
