@@ -412,7 +412,7 @@ def probe_lua_header(path: Path) -> Dict[str, Any]:
         result["header_complete"] = len(chunk) >= 33
     return result
 
-def decompile_large(path: Path, out_dir: Path, jars_dir: Optional[str] = None) -> Dict[str, Any]:
+def decompile_large(path: Path, out_dir: Path, jars_dir: Optional[str] = None,\n                    preflight_only: bool = False) -> Dict[str, Any]:
     """Top-level entry for streaming decompilation of large Lua inputs.
 
     Pipeline:
@@ -487,6 +487,19 @@ def decompile_large(path: Path, out_dir: Path, jars_dir: Optional[str] = None) -
             else:
                 artifact_error = str(deob_result.get("error", "unknown"))
 
+            if deob_result.get("recovered") is False:
+                result["recovered"] = False
+                result["mode"] = deob_result.get("mode") or "protected_partial"
+                result["pattern_id"] = pattern.id
+                result["pattern_label"] = pattern.label
+                for key in (
+                    "protos_parsed", "main_code_count", "main_const_count",
+                    "main_nested_count", "parse_errors", "structure_out",
+                    "constants_out", "report_out", "note",
+                ):
+                    if key in deob_result:
+                        result[key] = deob_result[key]
+
             if deob_result.get("ok") and deob_result.get("recovered") is True and artifact_error is None:
                 deob_result["pattern_id"] = pattern.id
                 deob_result["pattern_label"] = pattern.label
@@ -522,6 +535,14 @@ def decompile_large(path: Path, out_dir: Path, jars_dir: Optional[str] = None) -
             )[:1000]
     except Exception as exc:
         result["pattern_registry_exception"] = str(exc)[:200]
+
+    # Smart Lua asks this function for protection-pattern triage only. Standard
+    # decompilation is owned by lua_engine.orchestrator so engines are not run
+    # twice or allowed to short-circuit the shared selection/validation path.
+    if preflight_only:
+        if not result.get("mode"):
+            result["mode"] = "pattern_preflight"
+        return result
 
     # ── Stage 2: unwrap comment-prefixed bytecode without touching input ─
     work_file = p
