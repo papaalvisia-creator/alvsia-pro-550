@@ -334,6 +334,13 @@ jobs:
           PY
           AAPT="$(find "$ANDROID_HOME/build-tools" -type f -name aapt | sort -V | tail -n 1)"
           test -x "$AAPT"
+          for APK_CHECK in "$BASE_APK" "$CANDIDATE"; do
+            MANIFEST_XML="$("$AAPT" dump xmltree "$APK_CHECK" AndroidManifest.xml)"
+            printf '%s\\n' "$MANIFEST_XML" | grep -E 'android:extractNativeLibs.*(true|0xffffffff)' >/dev/null || {
+              echo "ERROR: extractNativeLibs must remain true so native Smart Lua CLIs can execute from nativeLibraryDir"
+              exit 1
+            }
+          done
           BASE_BADGING="$("$AAPT" dump badging "$BASE_APK" | grep '^package:' | head -n 1)"
           CAND_BADGING="$("$AAPT" dump badging "$CANDIDATE" | grep '^package:' | head -n 1)"
           test -n "$BASE_BADGING" && test "$BASE_BADGING" = "$CAND_BADGING" || { echo "ERROR: package/version changed"; exit 1; }
