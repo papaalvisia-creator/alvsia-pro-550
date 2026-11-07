@@ -181,9 +181,11 @@ def build_engine_registry(info, jars_dir: Optional[str] = None) -> list[EngineSp
             lambda src, dst, binary=luau_decompiler: _run_luau_decompiler_cli(binary, src, dst),
             5,
         ))
+    # CI fixture evidence: unluac-rs v1.4.4 rejects a generated Luau v7
+    # chunk (invalid constant tag). Keep Luau on the independently tested
+    # PumbaaDev engine until unluac-rs Luau support passes real fixtures.
     if unluac_rs and (
         info.format in ("luac", "luac-unknown")
-        or (info.format == "luau" and luau_version is not None and 3 <= luau_version <= 7)
         or (info.format == "luajit" and info.version == "LuaJIT 2.1")
     ):
         # Keep the proven local Lua 5.3 engine first; use unluac-rs as the
@@ -191,7 +193,7 @@ def build_engine_registry(info, jars_dir: Optional[str] = None) -> list[EngineSp
         priority = 20 if info.format == "luac" and info.version == "Lua 5.3" else 10
         specs.append(EngineSpec(
             "unluac_rs_v1_4_4",
-            ("luac", "luac-unknown", "luajit", "luau"),
+            ("luac", "luac-unknown", "luajit"),
             lambda src, dst, binary=unluac_rs: _run_unluac_rs(binary, src, dst),
             priority,
         ))
