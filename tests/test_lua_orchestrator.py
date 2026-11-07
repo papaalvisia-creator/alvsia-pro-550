@@ -208,4 +208,5 @@ def test_unknown_encrypted_payload_checks_pattern_recovery_before_nonlua_fallbac
     assert result["ok"] is True, result
     assert result["selected_engine"] == "protected_pattern_recovery"
     assert result["final_status"] == "SUCCESS"
+    assert any(step.get("step") == "detect" and step.get("ok") is False for step in result["steps"])
     assert Path(result["out"]).read_text(encoding="utf-8") == "return 42\\n"
