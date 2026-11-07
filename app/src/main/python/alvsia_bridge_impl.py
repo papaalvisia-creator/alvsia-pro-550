@@ -356,6 +356,18 @@ def run_tool(module_id, sub_id, input_path, out_root, engine_dir, jars_dir):
                     lines.append("OUT -> %s" % result.get("out"))
                     if result.get("final_status"):
                         lines.append("FINAL STATUS: %s" % result.get("final_status"))
+                    if result.get("source_recovered") is not None:
+                        lines.append("ORIGINAL SOURCE RECOVERED: %s" % (
+                            "YES" if result.get("source_recovered") else "NO / NOT CONFIRMED",
+                        ))
+                    for step in (result.get("steps") or []):
+                        if step.get("step") == "engine_orchestrator":
+                            engine_results = step.get("results") or []
+                            if engine_results and engine_results[0].get("note"):
+                                lines.append("VALIDATION: %s" % str(engine_results[0].get("note"))[:420])
+                            break
+                    if result.get("source_recovered") is False and not result.get("vm_obfuscated"):
+                        lines.append("NOTE: Output is a protected wrapper or partial reconstruction, not confirmed original source")
                     if result.get("vm_obfuscated"):
                         lines.append("NOTE: VM protection detected; output type=%s" % (
                             result.get("artifact_kind", "analysis"),
