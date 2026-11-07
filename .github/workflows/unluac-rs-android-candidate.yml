@@ -12,7 +12,26 @@ jobs:
       - name: Install host Lua compilers and LuaJIT
         run: |
           sudo apt-get update
-          sudo apt-get install -y lua5.1 lua5.2 lua5.3 lua5.4 luajit binutils
+          sudo apt-get install -y lua5.1 lua5.2 lua5.3 lua5.4 luajit binutils build-essential cmake
+      - name: Build Lua 5.5 reference compiler
+        run: |
+          set -euo pipefail
+          curl -fsSL https://www.lua.org/ftp/lua-5.5.0.tar.gz | tar -xz
+          make -C lua-5.5.0 linux -j2
+          test -x lua-5.5.0/src/luac
+          lua-5.5.0/src/luac -v
+      - name: Build pinned Luau reference compiler
+        run: |
+          set -euo pipefail
+          git init luau-src
+          git -C luau-src remote add origin https://github.com/luau-lang/luau.git
+          git -C luau-src fetch --depth 1 origin 91acc8decfca5281fab4a8db46c894268fc70aac
+          git -C luau-src checkout --detach FETCH_HEAD
+          test "$(git -C luau-src rev-parse HEAD)" = "91acc8decfca5281fab4a8db46c894268fc70aac"
+          cmake -S luau-src -B luau-build -DCMAKE_BUILD_TYPE=Release -DLUAU_BUILD_CLI=ON -DLUAU_BUILD_TESTS=OFF
+          cmake --build luau-build --target Luau.Compile.CLI --parallel 2
+          test -x luau-build/luau-compile
+          luau-build/luau-compile --help
       - name: Install Rust stable and Android target
         uses: dtolnay/rust-toolchain@stable
         with:
@@ -30,7 +49,7 @@ jobs:
       - name: Build host CLI
         working-directory: candidate
         run: cargo build --locked --release -p unluac-cli
-      - name: Verify Lua 5.1–5.4 and LuaJIT 2.1 fixtures
+      - name: Verify Lua 5.1–5.5, LuaJIT 2.1 and Luau fixtures
         working-directory: candidate
         run: |
           set -euo pipefail
@@ -59,6 +78,27 @@ jobs:
           luajit -b "$RUNNER_TEMP/lua-fixtures/output-luajit.lua" "$RUNNER_TEMP/lua-fixtures/output-luajit.lj"
           test -s "$RUNNER_TEMP/lua-fixtures/output-luajit.lua"
           echo "PASS LuaJIT parse/decompile/re-compile"
+          LUA55="$GITHUB_WORKSPACE/lua-5.5.0/src/luac"
+          "$LUA55" -o "$RUNNER_TEMP/lua-fixtures/input-5.5.luac" "$RUNNER_TEMP/lua-fixtures/sample.lua"
+          "$CLI" -i "$RUNNER_TEMP/lua-fixtures/input-5.5.luac" -o "$RUNNER_TEMP/lua-fixtures/output-5.5.lua" --generate-mode strict
+          "$LUA55" -p "$RUNNER_TEMP/lua-fixtures/output-5.5.lua"
+          test -s "$RUNNER_TEMP/lua-fixtures/output-5.5.lua"
+          echo "PASS Lua 5.5 parse/decompile/re-parse"
+          cat > "$RUNNER_TEMP/lua-fixtures/sample.luau" <<'LUAU'
+          local function combine(a: number, b: number): number
+              local value = a + b
+              if value > 10 then
+                  return value * 2
+              end
+              return value
+          end
+          return combine(7, 9)
+          LUAU
+          "$GITHUB_WORKSPACE/luau-build/luau-compile" --binary "$RUNNER_TEMP/lua-fixtures/sample.luau" > "$RUNNER_TEMP/lua-fixtures/input-luau.luau"
+          "$CLI" -i "$RUNNER_TEMP/lua-fixtures/input-luau.luau" -o "$RUNNER_TEMP/lua-fixtures/output-luau.lua" --generate-mode strict
+          "$GITHUB_WORKSPACE/luau-build/luau-compile" --binary "$RUNNER_TEMP/lua-fixtures/output-luau.lua" > "$RUNNER_TEMP/lua-fixtures/output-luau.bc"
+          test -s "$RUNNER_TEMP/lua-fixtures/output-luau.bc"
+          echo "PASS Luau parse/decompile/re-compile"
       - name: Cross-compile Android ARM64 CLI
         working-directory: candidate
         env:
@@ -74,6 +114,7 @@ jobs:
           cargo build --locked --release -p unluac-cli --target aarch64-linux-android
           BIN="target/aarch64-linux-android/release/unluac-cli"
           test -s "$BIN"
+          "$TOOLCHAIN/llvm-strip" --strip-all "$BIN"
           file "$BIN"
           readelf -h "$BIN" | grep -q 'AArch64'
           readelf -l "$BIN" | grep -q '/system/bin/linker64'
@@ -90,7 +131,7 @@ jobs:
           android_api=24
           ndk=27.0.12077973
           rust=$(rustc --version)
-          status=compiled_candidate_not_yet_integrated
+          stripped=yes\nstatus=compiled_candidate_not_yet_integrated
           EOF
       - name: Upload Android ARM64 candidate and provenance
         uses: actions/upload-artifact@v4
