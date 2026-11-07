@@ -336,7 +336,7 @@ jobs:
           test -x "$AAPT"
           for APK_CHECK in "$BASE_APK" "$CANDIDATE"; do
             MANIFEST_XML="$("$AAPT" dump xmltree "$APK_CHECK" AndroidManifest.xml)"
-            printf '%s\\n' "$MANIFEST_XML" | grep -E 'android:extractNativeLibs.*(true|0xffffffff)' >/dev/null || {
+            printf '%s\n' "$MANIFEST_XML" | grep -E 'android:extractNativeLibs.*(true|0xffffffff)' >/dev/null || {
               echo "ERROR: extractNativeLibs must remain true so native Smart Lua CLIs can execute from nativeLibraryDir"
               exit 1
             }
