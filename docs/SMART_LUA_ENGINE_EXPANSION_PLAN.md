@@ -12,7 +12,9 @@ Build one user-facing Smart Lua workflow inside the existing Lua Center. The use
 
 - `lua_engine.detector` distinguishes standard Lua bytecode, LuaJIT bytecode, source, and wrapped containers.
 - `lua_engine.orchestrator` routes Lua 5.3 to the existing ALVSIA streaming decompiler, LuaJIT to its disassembler, and standard Lua bytecode to an available Unluac JAR when a Java runtime and configured JAR directory are present.
-- Each candidate writes to its own file. The existing structural Lua-source validator gates selection; validated alternatives are retained and original input bytes are preserved.
+- Each candidate writes to its own file. Validation now prefers a version-matched `luac -p` parser when available; if no matching parser exists, the structural fallback is explicitly reported as heuristic-only. Validated alternatives are retained and original input bytes are preserved.
+- Smart Lua runs protected-format/streaming preflight inside the same user-facing pipeline. Partial VM structure/constants reports cannot short-circuit engine routing or be labelled as recovered original source. If a standard engine only reconstructs a VM wrapper/interpreter, the result is marked `PARTIAL` and `vm_wrapper_source`.
+- Android Security Validation is excluded from this feature branch. A separate Python-only workflow checks module syntax, Lua 5.3 parser acceptance/rejection, Lua engine tests, orchestration tests and streaming decompiler tests; no APK build is part of this workflow.
 - Existing Unluac assets include three unique Git blobs (the generic and dated JAR names are identical content). They are not yet proven to be three independent engines.
 - Existing LuaDec source candidate is not yet compiled or shipped.
 - Current detector only has standard Lua version-byte mappings through Lua 5.4. Lua 5.5 and Luau are not yet wired.
