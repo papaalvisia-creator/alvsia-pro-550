@@ -162,6 +162,18 @@ def main() -> int:
                     and b"/system/bin/linker64\\x00" in native_cli
                 )
                 check(is_arm64_elf, "unluac-rs executable is Android ARM64 ELF")
+                manifest_name = "assets/engine_licenses/unluac-rs-android-arm64.manifest"
+                checksum_name = "assets/engine_licenses/unluac-rs-android-arm64.sha256"
+                check(manifest_name in names and checksum_name in names,
+                      "unluac-rs Android build provenance and checksum packaged")
+                if manifest_name in names:
+                    manifest = outer.read(manifest_name).decode("utf-8", errors="replace")
+                    check("tag=v1.4.4" in manifest and "target=aarch64-linux-android" in manifest,
+                          "unluac-rs pinned release/target provenance verified")
+                if checksum_name in names:
+                    expected_hash = outer.read(checksum_name).decode("ascii", errors="ignore").split()[0]
+                    check(expected_hash == hashlib.sha256(native_cli).hexdigest(),
+                          "unluac-rs Android executable checksum verified")
             luau_entry = "lib/arm64-v8a/libluau-decompiler-cli.so"
             check(luau_entry in names, "Android ARM64 Luau v3-v9 decompiler packaged")
             check("assets/engine_licenses/luau-decompiler-MIT.txt" in names,
@@ -174,6 +186,19 @@ def main() -> int:
                     and b"/system/bin/linker64\\x00" in luau_native
                 )
                 check(is_luau_arm64_elf, "Luau decompiler executable is Android ARM64 ELF")
+                manifest_name = "assets/engine_licenses/luau-decompiler-android-arm64.manifest"
+                checksum_name = "assets/engine_licenses/luau-decompiler-android-arm64.sha256"
+                check(manifest_name in names and checksum_name in names,
+                      "PumbaaDev Android build provenance and checksum packaged")
+                if manifest_name in names:
+                    manifest = outer.read(manifest_name).decode("utf-8", errors="replace")
+                    check("commit=ee07098c31e11601a9ca434bc12932a4ded65f7b" in manifest
+                          and "supported_luau_bytecode=3-9" in manifest,
+                          "PumbaaDev pinned commit/compatibility provenance verified")
+                if checksum_name in names:
+                    expected_hash = outer.read(checksum_name).decode("ascii", errors="ignore").split()[0]
+                    check(expected_hash == hashlib.sha256(luau_native).hexdigest(),
+                          "PumbaaDev Android executable checksum verified")
             check("assets/chaquopy/app.imy" in names, "Chaquopy app bundle packaged")
             check("assets/nx/i.dat" in names, "sealed JAR index packaged")
             check(not any(n.startswith("assets/unluac/") and n.lower().endswith(".jar") for n in names),
