@@ -170,8 +170,8 @@ def build_engine_registry(info, jars_dir: Optional[str] = None) -> list[EngineSp
             luau_version = int(str(info.version).rsplit("v", 1)[-1])
         except (TypeError, ValueError):
             luau_version = None
-    # The pinned v1.4.4 parser accepts Luau bytecode v3-v7 only. Newer
-    # versions are reported unsupported rather than sent to an incompatible parser.
+    # The pinned PumbaaDev parser handles Luau bytecode v3-v9. Versions
+    # 10+ remain opt-in upstream because opcode semantics can diverge.
     luau_supported = luau_version is not None and 3 <= luau_version <= 9
     luau_decompiler = _find_luau_decompiler_cli(jars_dir)
     if info.format == "luau" and luau_supported and luau_decompiler:
@@ -181,9 +181,8 @@ def build_engine_registry(info, jars_dir: Optional[str] = None) -> list[EngineSp
             lambda src, dst, binary=luau_decompiler: _run_luau_decompiler_cli(binary, src, dst),
             5,
         ))
-    # CI fixture evidence: unluac-rs v1.4.4 rejects a generated Luau v7
-    # chunk (invalid constant tag). Keep Luau on the independently tested
-    # PumbaaDev engine until unluac-rs Luau support passes real fixtures.
+    # Luau stays on the dedicated PumbaaDev backend. The unluac-rs CLI is
+    # not a Luau engine and is never selected for this format.
     if unluac_rs and (
         info.format in ("luac", "luac-unknown")
         or (info.format == "luajit" and info.version == "LuaJIT 2.1")
