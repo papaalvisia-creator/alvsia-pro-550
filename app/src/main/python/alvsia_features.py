@@ -481,13 +481,13 @@ def run_lua_smart(input_path, out_dir, jars_dir=None):
         })
 
     # ── Step 4: partial recovery ─────────────────────────────────────────────
-    cr = extract_lua_constants(input_path, out_dir)
+    cr = extract_lua_constants(work_input, out_dir)
     report["steps"].append({"step": "constants", **cr})
 
-    sr = run_lua_bytecode_strings(input_path, out_dir)
+    sr = run_lua_bytecode_strings(work_input, out_dir)
     report["steps"].append({"step": "strings", **sr})
 
-    xr = run_lua_multi_xor(input_path, out_dir)
+    xr = run_lua_multi_xor(work_input, out_dir)
     report["steps"].append({"step": "multi_xor", **{k: xr[k] for k in ("ok", "mode", "best") if k in xr}})
 
     # Honest final status: never SUCCESS decompile without validated source
