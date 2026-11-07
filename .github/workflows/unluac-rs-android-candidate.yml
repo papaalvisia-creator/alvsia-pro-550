@@ -38,7 +38,7 @@ jobs:
           set -euo pipefail
           curl -fsSL https://github.com/lua/lua/archive/refs/tags/v5.5.0.tar.gz -o lua-5.5.0.tar.gz
           tar -xzf lua-5.5.0.tar.gz
-          make -C lua-5.5.0 linux -j2
+          make -C lua-5.5.0/src -j2 luac
           test -x lua-5.5.0/src/luac
           lua-5.5.0/src/luac -v
       - name: Build genuine Luau v7 reference compiler
