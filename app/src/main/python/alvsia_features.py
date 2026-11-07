@@ -375,6 +375,7 @@ def run_lua_smart(input_path, out_dir, jars_dir=None):
             report["steps"].append({"step": "unwrap", "ok": False, "error": str(e)})
 
     # ── Protected-format and streaming preflight ───────────────────────────
+    vm_partial_seen = False
     # Keep the legacy pattern registry in the same Smart Lua pipeline. A
     # partial VM map is diagnostic evidence, never a successful decompile and
     # never an early return: compatible ordinary engines still get a chance.
@@ -410,6 +411,7 @@ def run_lua_smart(input_path, out_dir, jars_dir=None):
                     }
                 stream_path.unlink(missing_ok=True)
         if stream_result.get("mode") == "bgmi_vm_partial" or stream_result.get("recovered") is False:
+            vm_partial_seen = True
             report["steps"].append({
                 "step": "vm_partial_not_final",
                 "ok": False,
@@ -439,10 +441,13 @@ def run_lua_smart(input_path, out_dir, jars_dir=None):
         report["steps"].append({"step": "engine_orchestrator", **pipeline})
         if pipeline.get("ok"):
             report["ok"] = True
-            report["final_status"] = "SUCCESS"
+            report["vm_obfuscated"] = bool(vm_partial_seen)
+            report["source_recovered"] = not vm_partial_seen
+            report["artifact_kind"] = "vm_wrapper_source" if vm_partial_seen else "lua_source"
+            report["final_status"] = "PARTIAL" if vm_partial_seen else "SUCCESS"
             return {
                 "ok": True,
-                "mode": "smart_orchestrated",
+                "mode": "smart_orchestrated_vm_wrapper" if vm_partial_seen else "smart_orchestrated",
                 "out": pipeline.get("out"),
                 "selected_engine": pipeline.get("selected_engine"),
                 **report,
