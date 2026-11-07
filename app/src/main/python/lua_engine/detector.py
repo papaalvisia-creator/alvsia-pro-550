@@ -189,6 +189,19 @@ def _luau_header_version(data: bytes):
         if length > 1024 * 1024 or offset + length > len(data):
             return None
         offset += length
+    # Optional userdata type-name mapping: byte id + varint string-table
+    # index pairs, terminated by a zero byte.
+    while offset < len(data):
+        type_id = data[offset]
+        offset += 1
+        if type_id == 0:
+            break
+        parsed = _read_luau_varint(data, offset)
+        if parsed is None:
+            return None
+        _name_index, offset = parsed
+    else:
+        return None
     parsed = _read_luau_varint(data, offset)
     if parsed is None:
         return None
