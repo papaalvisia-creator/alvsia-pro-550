@@ -32,3 +32,26 @@ def test_strong_preserves_escaped_strings_and_comments():
     assert "string.char(" in out
     assert "keep this comment" not in out
     assert "msg" not in out
+
+def test_function_parameters_are_renamed_inside_function_only():
+    src = "local function add(left, right)\n  local total = left + right\n  return total\nend\nreturn add\n"
+    out = protect_source(src, "balanced")
+    assert "function add(" in out
+    assert "left" not in out
+    assert "right" not in out
+    assert "total" not in out
+    assert "return add" in out
+
+
+def test_member_names_and_labels_are_not_renamed():
+    src = "local value = 7\nobj.value = value\nobj:value()\n::value:: goto value\n"
+    out = protect_source(src, "balanced")
+    assert "obj.value" in out
+    assert "obj:value" in out
+    assert "::value::" in out
+
+
+def test_strong_can_leave_one_character_strings_readable():
+    src = 'local x = "a"\nreturn x\n'
+    out = protect_source(src, "strong")
+    assert '"a"' in out
