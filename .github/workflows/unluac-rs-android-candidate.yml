@@ -106,47 +106,23 @@ jobs:
           "$GITHUB_WORKSPACE/luau-build/luau-compile" --binary "$RUNNER_TEMP/lua-fixtures/output-luau.lua" > "$RUNNER_TEMP/lua-fixtures/output-luau.bc"
           test -s "$RUNNER_TEMP/lua-fixtures/output-luau.bc"
           echo "PASS Luau parse/decompile/re-compile"
-      - name: Cross-compile Android ARM64 CLI
-        working-directory: candidate
+      - name: Build and stage Android ARM64 app candidate
         env:
           ANDROID_NDK_VERSION: 27.0.12077973
         run: |
           set -euo pipefail
-          NDK="$ANDROID_HOME/ndk/$ANDROID_NDK_VERSION"
-          TOOLCHAIN="$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin"
-          test -x "$TOOLCHAIN/aarch64-linux-android24-clang"
-          export ANDROID_NDK_HOME="$NDK"
-          export CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER="$TOOLCHAIN/aarch64-linux-android24-clang"
-          rustc --version
-          cargo build --locked --release -p unluac-cli --target aarch64-linux-android
-          BIN="target/aarch64-linux-android/release/unluac-cli"
-          test -s "$BIN"
-          "$TOOLCHAIN/llvm-strip" --strip-all "$BIN"
-          file "$BIN"
-          readelf -h "$BIN" | grep -q 'AArch64'
-          readelf -l "$BIN" | grep -q '/system/bin/linker64'
-          mkdir -p "$RUNNER_TEMP/unluac-rs-android-arm64"
-          cp "$BIN" "$RUNNER_TEMP/unluac-rs-android-arm64/unluac-cli"
-          cp LICENSE.txt "$RUNNER_TEMP/unluac-rs-android-arm64/LICENSE.txt"
-          sha256sum "$RUNNER_TEMP/unluac-rs-android-arm64/unluac-cli" > "$RUNNER_TEMP/unluac-rs-android-arm64/SHA256SUMS"
-          cat > "$RUNNER_TEMP/unluac-rs-android-arm64/BUILD-MANIFEST.txt" <<EOF
-          upstream=https://github.com/x3zvawq/unluac-rs
-          tag=v1.4.4
-          crate_version=1.4.4
-          license=MIT
-          target=aarch64-linux-android
-          android_api=24
-          ndk=27.0.12077973
-          rust=$(rustc --version)
-          stripped=yes\nstatus=compiled_candidate_not_yet_integrated
-          EOF
+          tools/build_unluac_rs_android.sh
+          test -s app/src/main/jniLibs/arm64-v8a/libunluac-cli.so
+          test -s app/src/main/assets/engine_licenses/unluac-rs-MIT.txt
+          cat app/src/main/assets/engine_licenses/unluac-rs-android-arm64.sha256
+          cat app/src/main/assets/engine_licenses/unluac-rs-android-arm64.manifest
       - name: Upload Android ARM64 candidate and provenance
         uses: actions/upload-artifact@v4
         with:
           name: unluac-rs-v1.4.4-android-arm64-candidate
           path: |
-            ${{ runner.temp }}/unluac-rs-android-arm64/unluac-cli
-            ${{ runner.temp }}/unluac-rs-android-arm64/LICENSE.txt
-            ${{ runner.temp }}/unluac-rs-android-arm64/SHA256SUMS
-            ${{ runner.temp }}/unluac-rs-android-arm64/BUILD-MANIFEST.txt
+            app/src/main/jniLibs/arm64-v8a/libunluac-cli.so
+            app/src/main/assets/engine_licenses/unluac-rs-MIT.txt
+            app/src/main/assets/engine_licenses/unluac-rs-android-arm64.sha256
+            app/src/main/assets/engine_licenses/unluac-rs-android-arm64.manifest
           if-no-files-found: error
