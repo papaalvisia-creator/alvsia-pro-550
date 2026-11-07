@@ -435,7 +435,7 @@ def run_lua_smart(input_path, out_dir, jars_dir=None):
                 "protected_pattern_recovery",
                 (normalized_info.format,),
                 _run_pattern_candidate,
-                0,
+                -10,
             ))
         out_lua = out_dir / (input_path.stem + "_decompiled.lua")
         pipeline = run_decompiler_pipeline(
