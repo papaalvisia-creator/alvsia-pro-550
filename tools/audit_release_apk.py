@@ -150,6 +150,18 @@ def main() -> int:
                   "sensitive local rebrand/build metadata absent from APK" if not packaged_forbidden
                   else "forbidden APK metadata entries: " + ", ".join(packaged_forbidden))
             check("lib/arm64-v8a/librasp_guard.so" in names, "native RASP library packaged")
+            unluac_entry = "lib/arm64-v8a/libunluac-cli.so"
+            check(unluac_entry in names, "Android ARM64 Smart Lua native decompiler packaged")
+            check("assets/engine_licenses/unluac-rs-MIT.txt" in names,
+                  "unluac-rs MIT license attribution packaged")
+            if unluac_entry in names:
+                native_cli = outer.read(unluac_entry)
+                is_arm64_elf = (
+                    len(native_cli) > 20 and native_cli[:4] == b"\\x7fELF"
+                    and native_cli[18:20] == b"\\xb7\\x00"
+                    and b"/system/bin/linker64\\x00" in native_cli
+                )
+                check(is_arm64_elf, "unluac-rs executable is Android ARM64 ELF")
             check("assets/chaquopy/app.imy" in names, "Chaquopy app bundle packaged")
             check("assets/nx/i.dat" in names, "sealed JAR index packaged")
             check(not any(n.startswith("assets/unluac/") and n.lower().endswith(".jar") for n in names),
