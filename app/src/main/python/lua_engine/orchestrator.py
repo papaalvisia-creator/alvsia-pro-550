@@ -201,7 +201,10 @@ def run_decompiler_pipeline(
                 spec.name, False, note=("output rejected: " + validation_note)[:800]
             ))
             continue
-        valid_candidates.append((spec, candidate, str(note)[:400]))
+        valid_candidates.append((
+            spec, candidate,
+            (str(note) + "; " + str(validation_note))[:700],
+        ))
 
     selected_name = None
     if valid_candidates:
