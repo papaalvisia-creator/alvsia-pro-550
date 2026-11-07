@@ -69,7 +69,7 @@ jobs:
       - name: Build host CLI
         working-directory: candidate
         run: cargo build --locked --release -p unluac-cli
-      - name: Verify Lua 5.1–5.5, LuaJIT 2.1 and Luau fixtures
+      - name: Verify Lua 5.1–5.5, LuaJIT 2.1 and Luau v7 fixtures
         working-directory: candidate
         run: |
           set -euo pipefail
@@ -116,6 +116,7 @@ jobs:
           LUAU
           "$GITHUB_WORKSPACE/luau-build/luau-compile" --fflags=LuauCompileFastpcall=false --binary "$RUNNER_TEMP/lua-fixtures/sample.luau" > "$RUNNER_TEMP/lua-fixtures/input-luau.luau"
           test "$(od -An -tu1 -N1 "$RUNNER_TEMP/lua-fixtures/input-luau.luau" | tr -d ' ')" = "7"
+          echo "PASS generated Luau bytecode version 7 (supported parser range 3-7)"
           "$CLI" -i "$RUNNER_TEMP/lua-fixtures/input-luau.luau" -o "$RUNNER_TEMP/lua-fixtures/output-luau.lua" --generate-mode strict
           "$GITHUB_WORKSPACE/luau-build/luau-compile" --fflags=LuauCompileFastpcall=false --binary "$RUNNER_TEMP/lua-fixtures/output-luau.lua" > "$RUNNER_TEMP/lua-fixtures/output-luau.bc"
           test -s "$RUNNER_TEMP/lua-fixtures/output-luau.bc"
