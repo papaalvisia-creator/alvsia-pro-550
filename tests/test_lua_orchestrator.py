@@ -268,3 +268,25 @@ def test_bridge_registers_only_existing_executable_luau_decompiler(tmp_path, mon
     binary.chmod(0o600)
     assert configure_luau_decompiler(str(binary)) is False
     assert "ALVSIA_LUAU_DECOMPILER_BIN" not in __import__("os").environ
+
+
+def test_verified_pattern_recovery_beats_source_passthrough_candidate(tmp_path):
+    source = tmp_path / "wrapped.lua"
+    source.write_text("local wrapper = true\\nreturn wrapper\\n", encoding="utf-8")
+    out = tmp_path / "out"
+    out.mkdir()
+    recovered = out / "wrapped_recovered.lua"
+    recovered.write_text("return 42\\n", encoding="utf-8")
+    pattern = {
+        "ok": True,
+        "recovered": True,
+        "mode": "alvseal3_source",
+        "pattern_id": "ALVSEAL3_SOURCE",
+        "out": str(recovered),
+    }
+    with patch("lua_engine.streaming_decompiler.decompile_large", return_value=pattern):
+        result = alvsia_features.run_lua_smart(source, out)
+
+    assert result["ok"] is True, result
+    assert result["selected_engine"] == "protected_pattern_recovery"
+    assert Path(result["out"]).read_text(encoding="utf-8") == "return 42\\n"
