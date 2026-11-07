@@ -354,10 +354,13 @@ def run_tool(module_id, sub_id, input_path, out_root, engine_dir, jars_dir):
                         result.get("selected_engine", result.get("pattern_id", "auto")),
                     ))
                     lines.append("OUT -> %s" % result.get("out"))
+                    if result.get("final_status"):
+                        lines.append("FINAL STATUS: %s" % result.get("final_status"))
                     if result.get("vm_obfuscated"):
                         lines.append("NOTE: VM protection detected; output type=%s" % (
                             result.get("artifact_kind", "analysis"),
                         ))
+                        lines.append("NOTE: VM wrapper/interpreter source is not the original protected script")
                 else:
                     lines.append("X No validated Lua source was produced")
                     lines.append("FINAL STATUS: %s" % result.get("final_status", "PARTIAL"))
