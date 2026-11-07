@@ -35,25 +35,22 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y lua5.1 lua5.2 lua5.3 lua5.4 luajit binutils build-essential cmake
       - name: Build Lua 5.5 reference compiler
-        # Lua 5.5 upstream keeps the compiler Makefile under src/; build the luac target directly.
+        # Use the official Lua 5.5.0 release archive; unlike the GitHub development
+        # tree, the release archive keeps the compiler Makefile under src/.
         run: |
           set -euo pipefail
-          curl --retry 5 --retry-delay 2 --fail --silent --show-error --location https://github.com/lua/lua/archive/refs/tags/v5.5.0.tar.gz -o lua-5.5.0.tar.gz
+          curl --retry 10 --retry-delay 3 --connect-timeout 20 --max-time 120 --fail --silent --show-error --location https://www.lua.org/ftp/lua-5.5.0.tar.gz -o lua-5.5.0.tar.gz
+          echo "57ccc32bbbd005cab75bcc52444052535af691789dba2b9016d5c50640d68b3d  lua-5.5.0.tar.gz" | sha256sum -c -
           tar -xzf lua-5.5.0.tar.gz
-          ls -lh lua-5.5.0.tar.gz
-          tar -tzf lua-5.5.0.tar.gz > lua-5.5.0.manifest
-          echo "Lua 5.5 archive entries:"
-          awk 'NR <= 12 { print }' lua-5.5.0.manifest
-          echo "Extracted roots:"
-          find . -maxdepth 2 -type f -name Makefile -print
           LUA55_ROOT="lua-5.5.0"
-          test -d "$LUA55_ROOT"
-          test -f "$LUA55_ROOT/Makefile"
-          test -f "$LUA55_ROOT/luac.c"
-          make -C "$LUA55_ROOT" -j2 linux V=1
-          test -x "$LUA55_ROOT/luac"
-          "$LUA55_ROOT/luac" -v
+          test -d "$LUA55_ROOT/src"
+          test -f "$LUA55_ROOT/src/Makefile"
+          test -f "$LUA55_ROOT/src/luac.c"
+          make -C "$LUA55_ROOT/src" -j2 linux
+          test -x "$LUA55_ROOT/src/luac"
+          "$LUA55_ROOT/src/luac" -v
           echo "Lua 5.5 reference root: $LUA55_ROOT"
+
       - name: Build genuine Luau v7 reference compiler
         run: |
           set -euo pipefail
@@ -129,7 +126,7 @@ jobs:
           luajit -b "$RUNNER_TEMP/lua-fixtures/output-luajit.lua" "$RUNNER_TEMP/lua-fixtures/output-luajit.lj"
           test -s "$RUNNER_TEMP/lua-fixtures/output-luajit.lua"
           echo "PASS LuaJIT parse/decompile/re-compile"
-          LUA55="$GITHUB_WORKSPACE/lua-5.5.0/luac"
+          LUA55="$GITHUB_WORKSPACE/lua-5.5.0/src/luac"
           "$LUA55" -o "$RUNNER_TEMP/lua-fixtures/input-5.5.luac" "$RUNNER_TEMP/lua-fixtures/sample.lua"
           "$CLI" -i "$RUNNER_TEMP/lua-fixtures/input-5.5.luac" -o "$RUNNER_TEMP/lua-fixtures/output-5.5.lua" --generate-mode strict
           "$LUA55" -p "$RUNNER_TEMP/lua-fixtures/output-5.5.lua"
