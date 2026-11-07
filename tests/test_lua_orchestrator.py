@@ -93,7 +93,7 @@ def test_smart_pipeline_continues_after_partial_vm_diagnostics(tmp_path):
     output = tmp_path / "protected_decompiled.lua"
 
     def fake_pipeline(src, dst, info, jars_dir=None, registry=None):
-        Path(dst).write_text("return 42\\n", encoding="utf-8")
+        Path(dst).write_text("return 42\n", encoding="utf-8")
         return {
             "ok": True,
             "out": str(dst),
@@ -122,7 +122,7 @@ def test_smart_pipeline_continues_after_partial_vm_diagnostics(tmp_path):
     assert result["vm_obfuscated"] is True
     assert result["source_recovered"] is False
     assert result["artifact_kind"] == "vm_wrapper_source"
-    assert Path(result["out"]).read_text(encoding="utf-8") == "return 42\\n"
+    assert Path(result["out"]).read_text(encoding="utf-8") == "return 42\n"
     assert any(step.get("step") == "vm_partial_not_final" for step in result["steps"])
 
 
@@ -159,19 +159,16 @@ def test_optional_unluac_rs_adapter_runs_strict_cli_without_shell(tmp_path):
         assert args[1:4] == ["-i", str(source), "-o"]
         assert args[-2:] == ["--generate-mode", "strict"]
         assert kwargs.get("timeout") == 180 and kwargs.get("check") is False
-        Path(args[4]).write_text("return 42\\n", encoding="utf-8")
+        Path(args[4]).write_text("return 42\n", encoding="utf-8")
         return CompletedProcess(args, 0, "", "")
 
-    with patch("lua_engine.engine._find_lua_parser", return_value=None), patch(
-        "lua_engine.orchestrator.subprocess.run", side_effect=fake_run
-    ):
-        result = run_decompiler_pipeline(
-            source, output, info, jars_dir=str(tmp_path)
-        )
-
-    assert result["ok"] is True, result
-    assert result["selected_engine"] == "unluac_rs_v1_4_4"
-    assert output.read_text(encoding="utf-8") == "return 42\\n"
+    spec = next(spec for spec in specs if spec.name == "unluac_rs_v1_4_4")
+    spec = next(spec for spec in specs if spec.name == "pumbaadev_luau_decompiler_v0_2")
+    with patch("lua_engine.orchestrator.subprocess.run", side_effect=fake_run):
+        ok, note = spec.runner(source, output)
+    assert ok is True, note
+    assert "Luau decompiler CLI" in note
+    assert output.read_text(encoding="utf-8") == "return 42\n"
 
 
 def test_bridge_registers_only_existing_executable_unluac_binary(tmp_path, monkeypatch):
@@ -190,7 +187,7 @@ def test_bridge_registers_only_existing_executable_unluac_binary(tmp_path, monke
 
 def test_smart_lua_plain_source_uses_shared_registry_and_validator(tmp_path):
     source = tmp_path / "plain.lua"
-    source.write_text("local answer = 40 + 2\\nreturn answer\\n", encoding="utf-8")
+    source.write_text("local answer = 40 + 2\nreturn answer\n", encoding="utf-8")
     result = alvsia_features.run_lua_smart(source, tmp_path / "out")
 
     assert result["ok"] is True, result
@@ -206,7 +203,7 @@ def test_unknown_encrypted_payload_checks_pattern_recovery_before_nonlua_fallbac
     out = tmp_path / "out"
     out.mkdir()
     recovered = out / "encrypted_recovered.lua"
-    recovered.write_text("return 42\\n", encoding="utf-8")
+    recovered.write_text("return 42\n", encoding="utf-8")
     pattern = {
         "ok": True,
         "recovered": True,
@@ -221,12 +218,12 @@ def test_unknown_encrypted_payload_checks_pattern_recovery_before_nonlua_fallbac
     assert result["selected_engine"] == "protected_pattern_recovery"
     assert result["final_status"] == "SUCCESS"
     assert any(step.get("step") == "detect" and step.get("ok") is False for step in result["steps"])
-    assert Path(result["out"]).read_text(encoding="utf-8") == "return 42\\n"
+    assert Path(result["out"]).read_text(encoding="utf-8") == "return 42\n"
 
 
 def test_validator_marks_structural_fallback_when_matching_parser_missing(tmp_path):
     source = tmp_path / "fallback.lua"
-    source.write_text("local answer = 42\\nreturn answer\\n", encoding="utf-8")
+    source.write_text("local answer = 42\nreturn answer\n", encoding="utf-8")
     with patch("lua_engine.engine.shutil.which", return_value=None):
         valid, note = validate_lua_source(source, expected_version="Lua 5.3")
     assert valid is True
@@ -249,7 +246,7 @@ def test_pumbaadev_luau_v9_adapter_uses_cli_and_validates_output(tmp_path):
         assert args[0] == str(binary)
         assert args[1:] == [str(source), "-o", args[3]]
         assert kwargs.get("timeout") == 180 and kwargs.get("check") is False
-        Path(args[3]).write_text("return 42\\n", encoding="utf-8")
+        Path(args[3]).write_text("return 42\n", encoding="utf-8")
         return CompletedProcess(args, 0, "", "")
 
     with patch("lua_engine.orchestrator.subprocess.run", side_effect=fake_run):
@@ -258,7 +255,7 @@ def test_pumbaadev_luau_v9_adapter_uses_cli_and_validates_output(tmp_path):
         )
     assert result["ok"] is True, result
     assert result["selected_engine"] == "pumbaadev_luau_decompiler_v0_2"
-    assert output.read_text(encoding="utf-8") == "return 42\\n"
+    assert output.read_text(encoding="utf-8") == "return 42\n"
 
 
 def test_bridge_registers_only_existing_executable_luau_decompiler(tmp_path, monkeypatch):
@@ -277,11 +274,11 @@ def test_bridge_registers_only_existing_executable_luau_decompiler(tmp_path, mon
 
 def test_verified_pattern_recovery_beats_source_passthrough_candidate(tmp_path):
     source = tmp_path / "wrapped.lua"
-    source.write_text("local wrapper = true\\nreturn wrapper\\n", encoding="utf-8")
+    source.write_text("local wrapper = true\nreturn wrapper\n", encoding="utf-8")
     out = tmp_path / "out"
     out.mkdir()
     recovered = out / "wrapped_recovered.lua"
-    recovered.write_text("return 42\\n", encoding="utf-8")
+    recovered.write_text("return 42\n", encoding="utf-8")
     pattern = {
         "ok": True,
         "recovered": True,
@@ -294,12 +291,12 @@ def test_verified_pattern_recovery_beats_source_passthrough_candidate(tmp_path):
 
     assert result["ok"] is True, result
     assert result["selected_engine"] == "protected_pattern_recovery"
-    assert Path(result["out"]).read_text(encoding="utf-8") == "return 42\\n"
+    assert Path(result["out"]).read_text(encoding="utf-8") == "return 42\n"
 
 
 def test_invalid_pattern_candidate_falls_back_as_explicit_partial_wrapper(tmp_path):
     source = tmp_path / "wrapped.lua"
-    source.write_text("local wrapper = true\\nreturn wrapper\\n", encoding="utf-8")
+    source.write_text("local wrapper = true\nreturn wrapper\n", encoding="utf-8")
     out = tmp_path / "out"
     out.mkdir()
     recovered = out / "wrapped_recovered.lua"
