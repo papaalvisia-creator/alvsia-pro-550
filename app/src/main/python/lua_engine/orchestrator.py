@@ -88,6 +88,48 @@ def _run_unluac_rs(binary: Path, src: Path, dst: Path) -> tuple[bool, str]:
     return True, f"unluac-rs strict mode: {detail[:400]}"
 
 
+def _find_luau_decompiler_cli(jars_dir: Optional[str]) -> Optional[Path]:
+    configured = os.environ.get("ALVSIA_LUAU_DECOMPILER_BIN", "").strip()
+    candidates = [Path(configured)] if configured else []
+    if jars_dir:
+        root = Path(jars_dir)
+        candidates.extend((
+            root / "luau-decompiler-cli",
+            root / "bin" / "luau-decompiler",
+        ))
+    found = shutil.which("luau-decompiler")
+    if found:
+        candidates.append(Path(found))
+    for candidate in candidates:
+        if candidate.is_file() and os.access(candidate, os.X_OK):
+            return candidate
+    return None
+
+
+def _run_luau_decompiler_cli(binary: Path, src: Path, dst: Path) -> tuple[bool, str]:
+    dst.unlink(missing_ok=True)
+    try:
+        proc = subprocess.run(
+            [str(binary), str(src), "-o", str(dst)],
+            capture_output=True, text=True, timeout=180, check=False,
+        )
+    except subprocess.TimeoutExpired:
+        dst.unlink(missing_ok=True)
+        return False, "Luau decompiler CLI timed out after 180 seconds"
+    except Exception as exc:
+        dst.unlink(missing_ok=True)
+        return False, f"Luau decompiler CLI launch failed: {type(exc).__name__}: {exc}"
+    if proc.returncode != 0:
+        dst.unlink(missing_ok=True)
+        detail = (proc.stderr or proc.stdout or "no diagnostic").strip()
+        return False, f"Luau decompiler CLI exit={proc.returncode}: {detail[:700]}"
+    if not dst.is_file() or dst.stat().st_size == 0:
+        dst.unlink(missing_ok=True)
+        return False, "Luau decompiler CLI exited successfully but produced no source file"
+    detail = (proc.stderr or "Luau source emitted").strip()
+    return True, f"Luau decompiler CLI: {detail[:400]}"
+
+
 def _available_unluac(jars_dir: Optional[str]) -> bool:
     if not jars_dir or not _find_java():
         return False
@@ -129,10 +171,18 @@ def build_engine_registry(info, jars_dir: Optional[str] = None) -> list[EngineSp
             luau_version = None
     # The pinned v1.4.4 parser accepts Luau bytecode v3-v7 only. Newer
     # versions are reported unsupported rather than sent to an incompatible parser.
-    luau_supported = luau_version is not None and 3 <= luau_version <= 7
+    luau_supported = luau_version is not None and 3 <= luau_version <= 9
+    luau_decompiler = _find_luau_decompiler_cli(jars_dir)
+    if info.format == "luau" and luau_supported and luau_decompiler:
+        specs.append(EngineSpec(
+            "pumbaadev_luau_decompiler_v0_2",
+            ("luau",),
+            lambda src, dst, binary=luau_decompiler: _run_luau_decompiler_cli(binary, src, dst),
+            5,
+        ))
     if unluac_rs and (
         info.format in ("luac", "luac-unknown")
-        or luau_supported
+        or (info.format == "luau" and luau_version is not None and 3 <= luau_version <= 7)
         or (info.format == "luajit" and info.version == "LuaJIT 2.1")
     ):
         # Keep the proven local Lua 5.3 engine first; use unluac-rs as the
