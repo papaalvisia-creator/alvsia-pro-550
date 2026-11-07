@@ -38,6 +38,8 @@ jobs:
           set -euo pipefail
           git clone --depth 1 --branch v5.5.0 https://github.com/lua/lua.git lua-5.5.0
           make -C lua-5.5.0 -j2
+          # Lua 5.5 source builds the interpreter and compiler as separate targets.
+          make -C lua-5.5.0/src luac -j2
           test -x lua-5.5.0/src/luac
           lua-5.5.0/src/luac -v
       - name: Build genuine Luau v7 reference compiler
