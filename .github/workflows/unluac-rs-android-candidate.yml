@@ -41,7 +41,7 @@ jobs:
           curl -fsSL https://github.com/lua/lua/archive/refs/tags/v5.5.0.tar.gz -o lua-5.5.0.tar.gz
           tar -xzf lua-5.5.0.tar.gz
           tar -tzf lua-5.5.0.tar.gz > lua-5.5.0.manifest
-          LUA55_ROOT="$(grep -m1 -o '^[^/]*' lua-5.5.0.manifest)"
+          LUA55_ROOT="$(find . -maxdepth 1 -mindepth 1 -type d -name 'lua-*' -print -quit)"
           test -n "$LUA55_ROOT"
           test -f "$LUA55_ROOT/src/Makefile"
           make -C "$LUA55_ROOT/src" -j2 luac
