@@ -45,6 +45,9 @@ jobs:
           git -C luau-src fetch --depth 1 origin 91acc8decfca5281fab4a8db46c894268fc70aac
           git -C luau-src checkout --detach FETCH_HEAD
           test "$(git -C luau-src rev-parse HEAD)" = "91acc8decfca5281fab4a8db46c894268fc70aac"
+          # unluac-rs v1.4.4 supports Luau bytecode v3-v7; generate a v7 fixture.
+          sed -i 's/LBC_VERSION_TARGET = 13,/LBC_VERSION_TARGET = 7,/' luau-src/Common/include/Luau/Bytecode.h
+          grep -q 'LBC_VERSION_TARGET = 7,' luau-src/Common/include/Luau/Bytecode.h
           cmake -S luau-src -B luau-build -DCMAKE_BUILD_TYPE=Release -DLUAU_BUILD_CLI=ON -DLUAU_BUILD_TESTS=OFF
           cmake --build luau-build --target Luau.Compile.CLI --parallel 2
           test -x luau-build/luau-compile
@@ -111,11 +114,12 @@ jobs:
           end
           return combine(7, 9)
           LUAU
-          "$GITHUB_WORKSPACE/luau-build/luau-compile" --binary "$RUNNER_TEMP/lua-fixtures/sample.luau" > "$RUNNER_TEMP/lua-fixtures/input-luau.luau"
+          "$GITHUB_WORKSPACE/luau-build/luau-compile" --fflags=LuauCompileFastpcall=false --binary "$RUNNER_TEMP/lua-fixtures/sample.luau" > "$RUNNER_TEMP/lua-fixtures/input-luau.luau"
+          test "$(od -An -tu1 -N1 "$RUNNER_TEMP/lua-fixtures/input-luau.luau" | tr -d ' ')" = "7"
           "$CLI" -i "$RUNNER_TEMP/lua-fixtures/input-luau.luau" -o "$RUNNER_TEMP/lua-fixtures/output-luau.lua" --generate-mode strict
-          "$GITHUB_WORKSPACE/luau-build/luau-compile" --binary "$RUNNER_TEMP/lua-fixtures/output-luau.lua" > "$RUNNER_TEMP/lua-fixtures/output-luau.bc"
+          "$GITHUB_WORKSPACE/luau-build/luau-compile" --fflags=LuauCompileFastpcall=false --binary "$RUNNER_TEMP/lua-fixtures/output-luau.lua" > "$RUNNER_TEMP/lua-fixtures/output-luau.bc"
           test -s "$RUNNER_TEMP/lua-fixtures/output-luau.bc"
-          echo "PASS Luau parse/decompile/re-compile"
+          echo "PASS Luau v7 parse/decompile/re-compile"
       - name: Build and stage Android ARM64 app candidate
         env:
           ANDROID_NDK_VERSION: 27.0.12077973
@@ -145,7 +149,7 @@ jobs:
             adb push "$RUNNER_TEMP/lua-fixtures/input-luau.luau" /data/local/tmp/input-luau.luau
             adb shell /data/local/tmp/libunluac-cli.so -i /data/local/tmp/input-luau.luau -o /data/local/tmp/output-luau.lua --generate-mode strict
             adb pull /data/local/tmp/output-luau.lua "$RUNNER_TEMP/lua-fixtures/android-output-luau.lua"
-            "$GITHUB_WORKSPACE/luau-build/luau-compile" --binary "$RUNNER_TEMP/lua-fixtures/android-output-luau.lua" > "$RUNNER_TEMP/lua-fixtures/android-output-luau.bc"
+            "$GITHUB_WORKSPACE/luau-build/luau-compile" --fflags=LuauCompileFastpcall=false --binary "$RUNNER_TEMP/lua-fixtures/android-output-luau.lua" > "$RUNNER_TEMP/lua-fixtures/android-output-luau.bc"
             test -s "$RUNNER_TEMP/lua-fixtures/android-output-luau.bc"
       - name: Upload Android ARM64 candidate and provenance
         uses: actions/upload-artifact@v4
