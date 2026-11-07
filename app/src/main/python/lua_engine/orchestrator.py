@@ -1,0 +1,170 @@
+"""Unified, format-aware Lua decompiler orchestration.
+
+This module coordinates the decompiler engines already shipped by ALVSIA.
+It deliberately does not invent command-line flags for tools that have not
+been inventoried or licensed. Missing engines are reported as unavailable.
+"""
+from __future__ import annotations
+
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Callable, Iterable, Optional
+import shutil
+
+from .engine import validate_lua_source
+
+
+@dataclass(frozen=True)
+class EngineResult:
+    engine: str
+    ok: bool
+    output: Optional[str] = None
+    note: str = ""
+    selected: bool = False
+
+
+@dataclass(frozen=True)
+class EngineSpec:
+    name: str
+    formats: tuple[str, ...]
+    runner: Callable[[Path, Path], tuple[bool, str]]
+    priority: int = 100
+
+
+def _available_unluac(jars_dir: Optional[str]) -> bool:
+    if not jars_dir or not shutil.which("java"):
+        return False
+    root = Path(jars_dir)
+    names = (
+        "unluac_2025_12_23.jar",
+        "unluac_pro.jar",
+        "unluac_patched.jar",
+        "unluac.jar",
+    )
+    return any((root / name).is_file() and (root / name).stat().st_size > 1000
+               for name in names)
+
+
+def build_engine_registry(info, jars_dir: Optional[str] = None) -> list[EngineSpec]:
+    """Return only engines compatible with the detected format/version."""
+    from .streaming_decompiler import (
+        stream_decompile_lua53,
+        stream_decompile_luajit,
+        stream_unluac_jar,
+    )
+
+    specs: list[EngineSpec] = []
+    if info.format == "luac" and info.version == "Lua 5.3":
+        specs.append(EngineSpec(
+            "alvsia_lua53", ("luac",),
+            lambda src, dst: stream_decompile_lua53(src, dst), 10,
+        ))
+    elif info.format == "luajit":
+        specs.append(EngineSpec(
+            "alvsia_luajit_disassembler", ("luajit",),
+            lambda src, dst: stream_decompile_luajit(src, dst), 10,
+        ))
+
+    if info.format in ("luac", "luac-unknown") and _available_unluac(jars_dir):
+        specs.append(EngineSpec(
+            "unluac_jar", ("luac", "luac-unknown"),
+            lambda src, dst: stream_unluac_jar(src, dst, jars_dir=jars_dir),
+            30,
+        ))
+    return sorted(specs, key=lambda item: item.priority)
+
+
+def run_decompiler_pipeline(
+    input_path: str | Path,
+    output_path: str | Path,
+    info,
+    jars_dir: Optional[str] = None,
+    *,
+    registry: Optional[Iterable[EngineSpec]] = None,
+) -> dict:
+    """Run compatible engines, validate each result, and select a real output.
+
+    Every engine receives a distinct candidate path. Failed/invalid candidates
+    are removed. The original input is never modified. Valid alternatives are
+    retained beside the selected output for transparent comparison.
+    """
+    source = Path(input_path)
+    destination = Path(output_path)
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    destination.unlink(missing_ok=True)
+    alternate_dir = destination.parent / (destination.stem + "_alternates")
+    specs = list(registry) if registry is not None else build_engine_registry(
+        info, jars_dir=jars_dir
+    )
+    specs = [spec for spec in specs if info.format in spec.formats]
+    specs.sort(key=lambda item: item.priority)
+
+    results: list[EngineResult] = []
+    valid_candidates: list[tuple[EngineSpec, Path, str]] = []
+    for index, spec in enumerate(specs, 1):
+        candidate = destination.parent / (
+            destination.stem + f".candidate_{index}_{spec.name}.lua"
+        )
+        candidate.unlink(missing_ok=True)
+        try:
+            ok, note = spec.runner(source, candidate)
+        except Exception as exc:
+            ok, note = False, f"{type(exc).__name__}: {exc}"
+        if not ok or not candidate.is_file() or candidate.stat().st_size == 0:
+            candidate.unlink(missing_ok=True)
+            results.append(EngineResult(spec.name, False, note=str(note)[:800]))
+            continue
+        valid, validation_note = validate_lua_source(candidate)
+        if not valid:
+            candidate.unlink(missing_ok=True)
+            results.append(EngineResult(
+                spec.name, False, note=("output rejected: " + validation_note)[:800]
+            ))
+            continue
+        valid_candidates.append((spec, candidate, str(note)[:400]))
+
+    selected_name = None
+    if valid_candidates:
+        selected_spec, selected_path, selected_note = valid_candidates[0]
+        selected_path.replace(destination)
+        selected_name = selected_spec.name
+        results.append(EngineResult(
+            selected_spec.name, True, str(destination),
+            selected_note + "; " + "validated Lua source", True,
+        ))
+        if len(valid_candidates) > 1:
+            alternate_dir.mkdir(parents=True, exist_ok=True)
+            for spec, candidate, note in valid_candidates[1:]:
+                retained = alternate_dir / (spec.name + ".lua")
+                candidate.replace(retained)
+                results.append(EngineResult(
+                    spec.name, True, str(retained),
+                    note + "; validated alternate",
+                ))
+    else:
+        for spec, candidate, note in valid_candidates:
+            candidate.unlink(missing_ok=True)
+
+    for result in results:
+        if result.selected:
+            continue
+    return {
+        "ok": selected_name is not None,
+        "out": str(destination) if selected_name else None,
+        "selected_engine": selected_name,
+        "engines_attempted": [item.name for item in specs],
+        "results": [
+            {
+                "engine": item.engine,
+                "ok": item.ok,
+                "output": item.output,
+                "note": item.note,
+                "selected": item.selected,
+            }
+            for item in results
+        ],
+        "alternates_dir": str(alternate_dir) if alternate_dir.is_dir() else None,
+        "error": None if selected_name else (
+            "no compatible installed decompiler produced validated Lua source"
+        ),
+    }
