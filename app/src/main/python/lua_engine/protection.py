@@ -160,24 +160,36 @@ def protect_source(source: str, profile: ProtectionProfile | str = "balanced") -
 
         if kind == "ident" and value == "local" and profile.rename_locals:
             out.append((kind, value))
-            names = _declared_names(tokens, i)
             j = _next_significant(tokens, i)
-            # Apply each declaration only after its lexical name is emitted.
-            for name in names:
-                while j is not None and tokens[j][1] != name:
-                    out.append(tokens[j])
-                    j = _next_significant(tokens, j)
-                if j is None:
-                    break
-                replacement = active.setdefault(depth, {}).get(name)
-                if replacement is None:
-                    replacement = fresh()
-                    active[depth][name] = replacement
-                out.append(("ident", replacement))
-                i = j
+            declaration_indices = []
+            if j is not None and tokens[j] == ("ident", "function"):
                 j = _next_significant(tokens, j)
-            i += 1
-            continue
+                if j is not None and tokens[j][0] == "ident":
+                    declaration_indices.append(j)
+            else:
+                while j is not None:
+                    tk, tv = tokens[j]
+                    if tk != "ident":
+                        break
+                    declaration_indices.append(j)
+                    k = _next_significant(tokens, j)
+                    if k is None or tokens[k][1] != ",":
+                        break
+                    j = _next_significant(tokens, k)
+            if declaration_indices:
+                last_decl = declaration_indices[-1]
+                declared_by_index = {}
+                for di in declaration_indices:
+                    name = tokens[di][1]
+                    if name not in KEYWORDS:
+                        declared_by_index[di] = active.setdefault(depth, {}).setdefault(name, fresh())
+                for k in range(i + 1, last_decl + 1):
+                    tk, tv = tokens[k]
+                    if k in declared_by_index:
+                        tv = declared_by_index[k]
+                    out.append((tk, tv))
+                i = last_decl + 1
+                continue
 
         if kind == "ident" and profile.rename_locals:
             replacement = resolve(value)
