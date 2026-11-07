@@ -175,6 +175,9 @@ jobs:
             adb push app/src/main/jniLibs/arm64-v8a/libunluac-cli.so /data/local/tmp/libunluac-cli.so
             adb shell chmod 755 /data/local/tmp/libunluac-cli.so
             adb shell /data/local/tmp/libunluac-cli.so --help
+            adb push app/src/main/jniLibs/arm64-v8a/libluau-decompiler-cli.so /data/local/tmp/libluau-decompiler-cli.so
+            adb shell chmod 755 /data/local/tmp/libluau-decompiler-cli.so
+            adb shell /data/local/tmp/libluau-decompiler-cli.so --help
             adb push "$RUNNER_TEMP/lua-fixtures/input-5.3.luac" /data/local/tmp/input-5.3.luac
             adb shell /data/local/tmp/libunluac-cli.so -i /data/local/tmp/input-5.3.luac -o /data/local/tmp/output-5.3.lua --generate-mode strict
             adb pull /data/local/tmp/output-5.3.lua "$RUNNER_TEMP/lua-fixtures/android-output-5.3.lua"
