@@ -343,7 +343,7 @@ def run_tool(module_id, sub_id, input_path, out_root, engine_dir, jars_dir):
             dest_lua = out_dir("LUA")
             if sid == "lua_decompile":
                 if not need_file():
-                    return "\\n".join(lines)
+                    return "\n".join(lines)
                 # One user-facing entry point: Smart Lua owns detection,
                 # container normalization, protected-format diagnostics,
                 # compatible engine selection and partial recovery.
@@ -376,7 +376,7 @@ def run_tool(module_id, sub_id, input_path, out_root, engine_dir, jars_dir):
                         artifact = result.get(key)
                         if artifact and Path(str(artifact)).is_file():
                             lines.append("OUT %s -> %s" % (label, artifact))
-                return "\\n".join(lines)
+                return "\n".join(lines)
             if sid == "lua_format_probe":
                 try:
                     from alvsia_reference_tools import probe_lua_file
@@ -469,7 +469,7 @@ def run_tool(module_id, sub_id, input_path, out_root, engine_dir, jars_dir):
                     lines.append("Original input preserved; output written atomically")
                 except Exception as exc:
                     lines.append("X metadata v39 decode failed: %s" % str(exc)[:500])
-                return "\\n".join(lines)
+                return "\n".join(lines)
             if sid == "string_scan":
                 r = feat.run_strings_scan(ip, dest_sc)
                 lines.append(str(r))
