@@ -43,5 +43,16 @@ mkdir -p "$DEST" "$ROOT/app/src/main/assets/engine_licenses"
 install -m 0755 "$BIN" "$DEST/libunluac-cli.so"
 install -m 0644 LICENSE.txt "$ROOT/app/src/main/assets/engine_licenses/unluac-rs-MIT.txt"
 sha256sum "$DEST/libunluac-cli.so" > "$ROOT/app/src/main/assets/engine_licenses/unluac-rs-android-arm64.sha256"
+cat > "$ROOT/app/src/main/assets/engine_licenses/unluac-rs-android-arm64.manifest" <<EOF
+upstream=https://github.com/x3zvawq/unluac-rs
+tag=$TAG
+crate_version=1.4.4
+license=MIT
+target=$TARGET
+android_api=$API
+ndk=$(basename "$NDK")
+rust=$(rustc --version)
+stripped=yes
+EOF
 file "$DEST/libunluac-cli.so"
 echo "Installed pinned unluac-rs $TAG for Android ARM64."
