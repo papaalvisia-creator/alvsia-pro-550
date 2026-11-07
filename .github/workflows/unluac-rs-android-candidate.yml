@@ -35,6 +35,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y lua5.1 lua5.2 lua5.3 lua5.4 luajit binutils build-essential cmake
       - name: Build Lua 5.5 reference compiler
+        # Lua 5.5 upstream keeps the compiler Makefile under src/; build the luac target directly.
         run: |
           set -euo pipefail
           curl -fsSL https://github.com/lua/lua/archive/refs/tags/v5.5.0.tar.gz -o lua-5.5.0.tar.gz
