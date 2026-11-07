@@ -113,7 +113,7 @@ def build_engine_registry(info, jars_dir: Optional[str] = None) -> list[EngineSp
     specs: list[EngineSpec] = []
     unluac_rs = _find_unluac_rs(jars_dir)
     if unluac_rs and (
-        info.format in ("luac", "luac-unknown")
+        info.format in ("luac", "luac-unknown", "luau")
         or (info.format == "luajit" and info.version == "LuaJIT 2.1")
     ):
         # Keep the proven local Lua 5.3 engine first; use unluac-rs as the
@@ -121,7 +121,7 @@ def build_engine_registry(info, jars_dir: Optional[str] = None) -> list[EngineSp
         priority = 20 if info.format == "luac" and info.version == "Lua 5.3" else 10
         specs.append(EngineSpec(
             "unluac_rs_v1_4_4",
-            ("luac", "luac-unknown", "luajit"),
+            ("luac", "luac-unknown", "luajit", "luau"),
             lambda src, dst, binary=unluac_rs: _run_unluac_rs(binary, src, dst),
             priority,
         ))
