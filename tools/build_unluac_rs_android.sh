@@ -30,7 +30,11 @@ grep -q '^license = "MIT"' Cargo.toml
 test -s LICENSE.txt
 
 export ANDROID_NDK_HOME="$NDK"
-export CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER="$LINKER"
+if [[ "$TARGET" == "aarch64-linux-android" ]]; then
+  export CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER="$LINKER"
+elif [[ "$TARGET" == "x86_64-linux-android" ]]; then
+  export CARGO_TARGET_X86_64_LINUX_ANDROID_LINKER="$LINKER"
+fi
 cargo build --locked --release -p unluac-cli --target "$TARGET"
 BIN="$WORK/unluac-rs/target/$TARGET/release/unluac-cli"
 test -s "$BIN"
