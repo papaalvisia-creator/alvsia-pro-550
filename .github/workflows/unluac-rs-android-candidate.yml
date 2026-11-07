@@ -180,7 +180,9 @@ jobs:
         with:
           api-level: 30
           target: google_apis
-          arch: arm64-v8a
+          # GitHub-hosted runners are x86_64; ARM64 Android emulators cannot boot on this host.
+          # Keep ARM64 as the release artifact and use x86_64 only for Android runtime smoke tests.
+          arch: x86_64
           cores: 2
           ram-size: 2048M
           heap-size: 512M
@@ -224,4 +226,10 @@ jobs:
             app/src/main/assets/engine_licenses/luau-decompiler-MIT.txt
             app/src/main/assets/engine_licenses/luau-decompiler-android-arm64.sha256
             app/src/main/assets/engine_licenses/luau-decompiler-android-arm64.manifest
+            app/src/main/jniLibs/x86_64/libunluac-cli.so
+            app/src/main/jniLibs/x86_64/libluau-decompiler-cli.so
+            app/src/main/assets/engine_licenses/unluac-rs-android-x86_64.sha256
+            app/src/main/assets/engine_licenses/unluac-rs-android-x86_64.manifest
+            app/src/main/assets/engine_licenses/luau-decompiler-android-x86_64.sha256
+            app/src/main/assets/engine_licenses/luau-decompiler-android-x86_64.manifest
           if-no-files-found: error
