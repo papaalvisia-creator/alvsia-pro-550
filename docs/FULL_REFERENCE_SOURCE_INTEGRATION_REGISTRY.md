@@ -336,3 +336,37 @@ Integration plan:
 The upstream README describes Lua 5.2/5.3 as experimental in the general
 project overview, so ALVSIA must keep per-version confidence and fixture
 results rather than assume all versions are equally reliable.
+
+
+### Additional Lua formats and protection families to inventory — 2026-11-07
+
+The user's "Luaraph" is likely **Luraph** (spelling to be confirmed). Luraph is
+a commercial Lua obfuscator/virtualizer, not a general-purpose bytecode
+decompiler. ALVSIA should identify likely Luraph-protected wrappers and route
+them to a dedicated, version-aware *static analysis / authorized recovery*
+workflow. Do not label ordinary Unluac/LuaDec as Luraph deobfuscators: their
+bytecode engines do not automatically undo a custom virtual machine.
+
+Candidate families and tools to investigate, with separate compatibility
+profiles and fixtures:
+
+- **Luraph** — wrapper / VM-family identification, version fingerprinting,
+  static payload and opcode-structure analysis; only enable recovery paths
+  where the format and authorized test fixtures are understood.
+- **Luau** — keep separate from standard PUC Lua bytecode; investigate
+  luauDec, Unluau, Tovek and other maintained candidates, then pin versions
+  and licenses before integration.
+- **Lua 5.4 / 5.5** — verify modern unluac-family support against real fixtures;
+  never infer compatibility from a tool's name.
+- **LuaJIT 2.1** — retain dedicated bytecode/disassembly route; do not pass
+  LuaJIT chunks to standard Lua 5.x decompilers as if formats were identical.
+- **ChunkSpy / LuaAssemblyTools** — investigate as disassembly and bytecode
+  inspection helpers, not source decompilers.
+- **Lua ART** — exact product/project name remains unresolved. Do not invent
+  an engine or claim support until the user supplies a spelling, link, APK
+  filename, or screenshot that identifies it.
+
+These candidates join the central inventory alongside Unluac, LuaDec, LuaC,
+LuaJIT, VM/T24/PUBG/DST analyzers, XOR layers and multi-XOR probes. Each item
+must record role, supported dialect/version, platform/ABI, source/license,
+SHA-256, invocation contract, fixtures and verified result.
