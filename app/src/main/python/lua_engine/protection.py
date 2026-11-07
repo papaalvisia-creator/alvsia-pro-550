@@ -131,64 +131,56 @@ def protect_source(source: str, profile: ProtectionProfile | str = "balanced") -
             raise ValueError(f"unknown protection profile: {profile}")
         profile = PROFILES[profile]
 
-    raw = [(m.lastgroup, m.group()) for m in _TOKEN.finditer(source)]
-    # Every declaration receives a unique name. Scope is represented by block
-    # depth; nested blocks inherit outer mappings, while shadowing is local.
+    tokens = [(m.lastgroup, m.group()) for m in _TOKEN.finditer(source)]
     active: dict[int, dict[str, str]] = {}
+    used = set(KEYWORDS)
     counter = 0
-    tokens = raw[:]
+    out = []
+    depth = 0
 
-    def fresh(used):
+    def fresh() -> str:
         nonlocal counter
         while True:
             candidate = f"_a{counter:x}"
             counter += 1
-            if candidate not in KEYWORDS and candidate not in used:
+            if candidate not in used:
+                used.add(candidate)
                 return candidate
 
-    depth = 0
-    for i, (kind, value) in enumerate(tokens):
-        if kind == "ident" and value == "local" and profile.rename_locals:
-            for name in _declared_names(tokens, i):
-                if name in KEYWORDS:
-                    continue
-                mapping = active.setdefault(depth, {})
-                if name not in mapping:
-                    inherited = {v for d in active.values() for v in d.values()}
-                    mapping[name] = fresh(inherited)
+    def resolve(name: str):
+        for d in range(depth, -1, -1):
+            value = active.get(d, {}).get(name)
+            if value:
+                return value
+        return None
 
-        # Function/block terminators close the current mapping after all
-        # identifiers in the block have been processed.
-        if kind == "ident":
-            if value in ("end", "until") and depth > 0:
-                depth -= 1
-                continue
-            if value in ("do", "function", "repeat") or value == "then":
-                # 'then' opens a block; 'function' opens its body.
-                depth += 1
+    i = 0
+    while i < len(tokens):
+        kind, value = tokens[i]
 
-    # Re-run with the computed declaration mappings. A declaration becomes
-    # visible after its name; references resolve from innermost to outer scope.
-    out = []
-    depth = 0
-    declaration_positions = set()
-    for i, (kind, value) in enumerate(tokens):
         if kind == "ident" and value == "local" and profile.rename_locals:
+            out.append((kind, value))
             names = _declared_names(tokens, i)
             j = _next_significant(tokens, i)
+            # Apply each declaration only after its lexical name is emitted.
             for name in names:
                 while j is not None and tokens[j][1] != name:
+                    out.append(tokens[j])
                     j = _next_significant(tokens, j)
-                if j is not None:
-                    declaration_positions.add(j)
-                    j = _next_significant(tokens, j)
-
-        if kind == "ident" and profile.rename_locals and i not in declaration_positions:
-            replacement = None
-            for d in range(depth, -1, -1):
-                replacement = active.get(d, {}).get(value)
-                if replacement:
+                if j is None:
                     break
+                replacement = active.setdefault(depth, {}).get(name)
+                if replacement is None:
+                    replacement = fresh()
+                    active[depth][name] = replacement
+                out.append(("ident", replacement))
+                i = j
+                j = _next_significant(tokens, j)
+            i += 1
+            continue
+
+        if kind == "ident" and profile.rename_locals:
+            replacement = resolve(value)
             if replacement:
                 prev = _significant(tokens, i)
                 if prev is None or tokens[prev][1] not in (".", ":"):
@@ -198,13 +190,16 @@ def protect_source(source: str, profile: ProtectionProfile | str = "balanced") -
             value = _string_expr(value)
         if kind == "comment" and profile.strip_comments:
             value = ""
+
         out.append((kind, value))
 
         if kind == "ident":
-            if value in ("end", "until") and depth > 0:
-                depth -= 1
+            if value in ("end", "until"):
+                active.pop(depth, None)
+                depth = max(0, depth - 1)
             elif value in ("do", "function", "repeat", "then"):
                 depth += 1
+        i += 1
 
     if profile.compact:
         out = _compact_tokens(out)
