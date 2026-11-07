@@ -44,7 +44,7 @@ jobs:
           test -d "$LUA55_ROOT"
           test -f "$LUA55_ROOT/src/Makefile"
           test -f "$LUA55_ROOT/src/luac.c"
-          make -C "$LUA55_ROOT/src" -j2 luac
+          make -C "$LUA55_ROOT/src" -j2 linux
           test -x "$LUA55_ROOT/src/luac"
           "$LUA55_ROOT/src/luac" -v
           echo "Lua 5.5 reference root: $LUA55_ROOT"
