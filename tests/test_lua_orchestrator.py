@@ -35,7 +35,9 @@ def test_pipeline_runs_compatible_engines_and_keeps_valid_alternates(tmp_path):
         EngineSpec("wrong_format", ("luajit",), second, 1),
     ]
     output = tmp_path / "result.lua"
-    result = run_decompiler_pipeline(source, output, _info(), registry=specs)
+    result = run_decompiler_pipeline(
+        source, output, _info(), registry=specs, deep_scan=True
+    )
 
     assert result["ok"] is True
     assert result["selected_engine"] == "first"
@@ -45,6 +47,37 @@ def test_pipeline_runs_compatible_engines_and_keeps_valid_alternates(tmp_path):
     assert "Lua 5.3 parser accepted source" in result["results"][0]["note"]
     alternate = Path(result["alternates_dir"]) / "second.lua"
     assert alternate.read_text(encoding="utf-8") == "return 2\n"
+
+
+def test_pipeline_stops_after_first_valid_engine_by_default(tmp_path):
+    source = tmp_path / "input.luac"
+    source.write_bytes(b"\\x1bLua\\x53\\x00\\x00\\x00")
+    called = []
+
+    def first(_src, dst):
+        called.append("first")
+        Path(dst).write_text("return 7\\n", encoding="utf-8")
+        return True, "first engine"
+
+    def should_not_run(_src, dst):
+        called.append("second")
+        Path(dst).write_text("return 8\\n", encoding="utf-8")
+        return True, "second engine"
+
+    output = tmp_path / "result.lua"
+    result = run_decompiler_pipeline(
+        source, output, _info(),
+        registry=[
+            EngineSpec("first", ("luac",), first, 10),
+            EngineSpec("second", ("luac",), should_not_run, 20),
+        ],
+    )
+
+    assert result["ok"] is True
+    assert result["selected_engine"] == "first"
+    assert called == ["first"]
+    assert result["engines_attempted"] == ["first"]
+    assert output.read_text(encoding="utf-8") == "return 7\\n"
 
 
 def test_pipeline_rejects_invalid_output_and_removes_candidate(tmp_path):
