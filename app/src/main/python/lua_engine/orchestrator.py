@@ -60,6 +60,13 @@ def _find_unluac_rs(jars_dir: Optional[str]) -> Optional[Path]:
     return None
 
 
+def _engine_timeout(default: int = 180) -> int:
+    """Use tighter limits in the Android app so a stalled parser cannot hold the UI job."""
+    if os.environ.get("ALVSIA_SEALED_RUNTIME") == "1":
+        return min(default, 90)
+    return default
+
+
 def _run_unluac_rs(binary: Path, src: Path, dst: Path) -> tuple[bool, str]:
     """Run the pinned CLI without a shell and require its requested output file."""
     dst.unlink(missing_ok=True)
@@ -69,11 +76,11 @@ def _run_unluac_rs(binary: Path, src: Path, dst: Path) -> tuple[bool, str]:
                 str(binary), "-i", str(src), "-o", str(dst),
                 "--generate-mode", "strict",
             ],
-            capture_output=True, text=True, timeout=180, check=False,
+            capture_output=True, text=True, timeout=_engine_timeout(), check=False,
         )
     except subprocess.TimeoutExpired:
         dst.unlink(missing_ok=True)
-        return False, "unluac-rs timed out after 180 seconds"
+        return False, f"unluac-rs timed out after {_engine_timeout()} seconds"
     except Exception as exc:
         dst.unlink(missing_ok=True)
         return False, f"unluac-rs launch failed: {type(exc).__name__}: {exc}"
@@ -116,7 +123,7 @@ def _run_luau_decompiler_cli(binary: Path, src: Path, dst: Path) -> tuple[bool, 
         )
     except subprocess.TimeoutExpired:
         dst.unlink(missing_ok=True)
-        return False, "Luau decompiler CLI timed out after 180 seconds"
+        return False, f"Luau decompiler CLI timed out after {_engine_timeout()} seconds"
     except Exception as exc:
         dst.unlink(missing_ok=True)
         return False, f"Luau decompiler CLI launch failed: {type(exc).__name__}: {exc}"
@@ -223,6 +230,7 @@ def run_decompiler_pipeline(
     jars_dir: Optional[str] = None,
     *,
     registry: Optional[Iterable[EngineSpec]] = None,
+    deep_scan: Optional[bool] = None,
 ) -> dict:
     """Run compatible engines, validate each result, and select a real output.
 
@@ -230,6 +238,11 @@ def run_decompiler_pipeline(
     are removed. The original input is never modified. Valid alternatives are
     retained beside the selected output for transparent comparison.
     """
+    if deep_scan is None:
+        # The installed Android app prefers a quick, memory-bounded result.
+        # Deep comparison remains opt-in for explicit diagnostics.
+        deep_scan = os.environ.get("ALVSIA_LUA_DEEP_SCAN", "0") == "1"
+
     source = Path(input_path)
     destination = Path(output_path)
     destination.parent.mkdir(parents=True, exist_ok=True)
@@ -267,6 +280,12 @@ def run_decompiler_pipeline(
             spec, candidate,
             (str(note) + "; " + str(validation_note))[:700],
         ))
+        # In normal app operation, stop as soon as a real, validated source
+        # exists. Running every compatible parser after success can waste
+        # minutes and trigger Android low-memory process kills. Deep scan is
+        # explicitly opt-in and retains alternate engine outputs.
+        if not deep_scan:
+            break
 
     selected_name = None
     if valid_candidates:
