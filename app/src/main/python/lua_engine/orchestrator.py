@@ -313,7 +313,7 @@ def run_decompiler_pipeline(
         "ok": selected_name is not None,
         "out": str(destination) if selected_name else None,
         "selected_engine": selected_name,
-        "engines_attempted": [item.name for item in specs],
+        "engines_attempted": [item.engine for item in results],
         "results": [
             {
                 "engine": item.engine,
