@@ -35,8 +35,8 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y lua5.1 lua5.2 lua5.3 lua5.4 luajit binutils build-essential cmake
       - name: Build Lua 5.5 reference compiler
-        # Use the official Lua 5.5.0 release archive; unlike the GitHub development
-        # tree, the release archive keeps the compiler Makefile under src/.
+        # Re-run native candidate validation against the pinned official Lua 5.5.0 release archive.
+        # Verify the archive checksum and src/Makefile before compiling the reference luac.
         run: |
           set -euo pipefail
           curl --retry 10 --retry-delay 3 --connect-timeout 20 --max-time 120 --fail --silent --show-error --location https://www.lua.org/ftp/lua-5.5.0.tar.gz -o lua-5.5.0.tar.gz
