@@ -250,6 +250,10 @@ object SubMenus {
 
         // ── 18 Lua Protector ──────────────────────────────────────────────
         18 -> listOf(
+            SubTool("lua_smart_protect", "Smart Lua Protect", "Validated lexical local renaming and source compaction",
+                "Select UTF-8 .lua source → OUT/LPROTECT/*_protected.lua (balanced profile)"),
+            SubTool("lua_smart_protect_strong", "Smart Lua Protect Strong", "Local renaming, string encoding and comment stripping with validation",
+                "Select UTF-8 .lua source → OUT/LPROTECT/*_protected.lua (strong profile)"),
             SubTool("lua_protect_encrypt", "Protect Lua Source", "AES-256-GCM authenticated encryption",
                 "Create WORK/lua_protect_key.txt with a 64-character hex key. Select .lua → OUT/LPROTECT/*.alvlua"),
             SubTool("lua_protect_decrypt", "Restore Protected Lua", "Authenticate and decrypt an ALVLUA1 payload",

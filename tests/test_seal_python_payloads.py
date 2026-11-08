@@ -49,7 +49,7 @@ class ProductionSealPayloadTests(unittest.TestCase):
                 _seed()
 
     def test_module_manifest_is_nonempty_and_unique(self):
-        self.assertEqual(len(MODULES), 25, "release sealing inventory must include all 25 reviewed modules")
+        self.assertEqual(len(MODULES), 27, "release sealing inventory must include all 27 reviewed modules")
         self.assertIn("alvsia_metadata.py", MODULES)
         self.assertEqual(len(MODULES), len(set(MODULES)))
         self.assertTrue(all((ROOT / "app/src/main/python" / rel).is_file() for rel in MODULES))
@@ -74,6 +74,15 @@ class ProductionSealPayloadTests(unittest.TestCase):
         audit = (ROOT / "tools/audit_release_apk.py").read_text(encoding="utf-8")
         self.assertIn('"lua_engine.orchestrator": "lua_engine_orchestrator.alv"', loader)
         self.assertIn('"lua_engine_orchestrator.alv"', audit)
+
+    def test_smart_lua_protection_modules_are_sealed_and_mapped(self):
+        loader = (ROOT / "app/src/main/python/sealed_loader.py").read_text(encoding="utf-8")
+        for rel, module, blob in (
+            ("lua_engine/protection.py", "lua_engine.protection", "lua_engine_protection.alv"),
+            ("lua_engine/protection_pipeline.py", "lua_engine.protection_pipeline", "lua_engine_protection_pipeline.alv"),
+        ):
+            self.assertIn(rel, MODULES)
+            self.assertIn(f'"{module}": "{blob}"', loader)
 
     def test_large_lua_streaming_module_is_sealed_and_mapped(self):
         rel = "lua_engine/streaming_decompiler.py"

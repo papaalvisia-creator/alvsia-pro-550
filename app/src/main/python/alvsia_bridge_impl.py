@@ -940,6 +940,22 @@ def run_tool(module_id, sub_id, input_path, out_root, engine_dir, jars_dir):
                 return "\n".join(lines)
             dest_dir = out_dir("LPROTECT")
 
+            if sid in ("lua_smart_protect", "lua_smart_protect_strong"):
+                try:
+                    from lua_engine.protection_pipeline import protect_file
+                    profile = "strong" if sid == "lua_smart_protect_strong" else "balanced"
+                    dest = dest_dir / (Path(ip).stem + "_protected.lua")
+                    result = protect_file(ip, dest, profile)
+                    if not result.get("ok"):
+                        lines.append("X Smart Lua Protect failed: %s" % result.get("error", "validation failed"))
+                        return "\n".join(lines)
+                    lines.append("OK SMART LUA PROTECT profile=%s" % profile)
+                    lines.append("SHA-256 %s" % result.get("sha256", ""))
+                    lines.append("OUT -> %s" % result.get("out", dest))
+                except Exception as exc:
+                    lines.append("X Smart Lua Protect failed: %s" % (str(exc)[:300] or type(exc).__name__))
+                return "\n".join(lines)
+
             # ── 18 / VM-protect: BGMI-style self-executing Lua source ────
             if sid == "lua_vm_protect":
                 try:
