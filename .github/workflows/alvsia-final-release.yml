@@ -192,3 +192,5 @@ jobs:
             validation-artifacts/ALVISIA_PRO_5.5.2-xop_candidate_signed.apk
             release_security_audit.txt
           if-no-files-found: error
+
+# release pipeline trigger checkpoint
