@@ -27,8 +27,8 @@ def configure_runtime(token,sealed_runtime="1"):
  try:
   token=_extract_str(token).strip()
   if not re.fullmatch(r"[0-9A-Fa-f]{64}",token):_CD="error";return False
-  from com.alvsia.pro.sec import SessionGate
-  if not bool(SessionGate.isTokenCurrent(token)):_CD="error";return False
+  from com.alvsia.pro.sec import SessionGate as gate
+  if not bool(gate.isTokenCurrent(token)):_CD="error";return False
   os.environ.pop("ALVSIA_SESSION_TOKEN",None);os.environ["ALVSIA_APK_SESSION"]="1"
   os.environ["ALVSIA_SEALED_RUNTIME"]="1" if str(sealed_runtime).strip()=="1" else "0"
   _isr();_CD="ok";return True
