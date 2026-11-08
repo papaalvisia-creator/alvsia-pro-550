@@ -251,6 +251,11 @@ jobs:
           set -euo pipefail
           BASE_APK="$RUNNER_TEMP/ALVISIA_PRO_5.5.2-hardened_xop_input_signed.apk"
           test -s "$BASE_APK"
+          # Keep an immutable copy: the upstream packer may rewrite its input while packing.
+          BASELINE_SNAPSHOT="$RUNNER_TEMP/ALVISIA_PRO_5.5.2-hardened_xop_baseline_snapshot.apk"
+          XOP_INPUT="$RUNNER_TEMP/ALVISIA_PRO_5.5.2-hardened_xop_working_input.apk"
+          cp "$BASE_APK" "$BASELINE_SNAPSHOT"
+          cp "$BASELINE_SNAPSHOT" "$XOP_INPUT"
           XOP_DIR="$RUNNER_TEMP/xopprotector-src"
           rm -rf "$XOP_DIR"
           git clone --filter=blob:none https://github.com/xopJack/XopProtector.git "$XOP_DIR"
@@ -299,7 +304,7 @@ jobs:
           test -n "$PACKER_JAR" && test -s "$PACKER_JAR"
           test -d "$XOP_DIR/executable/shell-files"
           CANDIDATE="$RUNNER_TEMP/ALVISIA_PRO_5.5.2-xop_candidate_unsigned.apk"
-          java -jar "$PACKER_JAR" "$BASE_APK" \
+          java -jar "$PACKER_JAR" "$XOP_INPUT" \
             -o "$CANDIDATE" \
             --shell-dir "$XOP_DIR/executable/shell-files" \
             --profile industry \
@@ -308,7 +313,7 @@ jobs:
           # These standalone CLI executables must remain byte-identical and executable;
           # XopProtector may rewrite ordinary .so payloads, so restore only these
           # two audited open-source engines and their license notices from baseline.
-          python3 - "$BASE_APK" "$CANDIDATE" <<'PY'
+          python3 - "$BASELINE_SNAPSHOT" "$CANDIDATE" <<'PY'
           import os, sys, zipfile
           base, candidate = sys.argv[1:3]
           native = {
@@ -356,7 +361,7 @@ jobs:
                       raise SystemExit(f"Native engine changed during Xop restore: {name}")
           print("PASS: native Smart Lua executables and notices restored byte-identically")
           PY
-          python3 - "$BASE_APK" "$CANDIDATE" <<'PY'
+          python3 - "$BASELINE_SNAPSHOT" "$CANDIDATE" <<'PY'
           import sys, zipfile
           base, candidate = sys.argv[1:3]
           base_required = {
@@ -380,17 +385,17 @@ jobs:
           PY
           AAPT="$(find "$ANDROID_HOME/build-tools" -type f -name aapt | sort -V | tail -n 1)"
           test -x "$AAPT"
-          for APK_CHECK in "$BASE_APK" "$CANDIDATE"; do
+          for APK_CHECK in "$BASELINE_SNAPSHOT" "$CANDIDATE"; do
             MANIFEST_XML="$("$AAPT" dump xmltree "$APK_CHECK" AndroidManifest.xml)"
             printf '%s\n' "$MANIFEST_XML" | grep -E 'android:extractNativeLibs.*(true|0xffffffff)' >/dev/null || {
               echo "ERROR: extractNativeLibs must remain true so native Smart Lua CLIs can execute from nativeLibraryDir"
               exit 1
             }
           done
-          BASE_BADGING="$("$AAPT" dump badging "$BASE_APK" | grep '^package:' | head -n 1)"
+          BASE_BADGING="$("$AAPT" dump badging "$BASELINE_SNAPSHOT" | grep '^package:' | head -n 1)"
           CAND_BADGING="$("$AAPT" dump badging "$CANDIDATE" | grep '^package:' | head -n 1)"
           test -n "$BASE_BADGING" && test "$BASE_BADGING" = "$CAND_BADGING" || { echo "ERROR: package/version changed"; exit 1; }
-          BASE_PERMS="$("$AAPT" dump permissions "$BASE_APK" | sort)"
+          BASE_PERMS="$("$AAPT" dump permissions "$BASELINE_SNAPSHOT" | sort)"
           CAND_PERMS="$("$AAPT" dump permissions "$CANDIDATE" | sort)"
           test "$BASE_PERMS" = "$CAND_PERMS" || { echo "ERROR: manifest permission set changed"; diff -u <(printf '%s\n' "$BASE_PERMS") <(printf '%s\n' "$CAND_PERMS") || true; exit 1; }
           python3 tools/audit_release_apk.py "$CANDIDATE"
