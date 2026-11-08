@@ -175,6 +175,7 @@ jobs:
           test -s "$PACKER"
           java -jar "$PACKER" "$RUNNER_TEMP/alvsia-xop-input.apk"             -o "$RUNNER_TEMP/alvsia-xop-candidate.apk"             --shell-dir "$XOP/executable/shell-files" --profile industry --protect-so
           test -s "$RUNNER_TEMP/alvsia-xop-candidate.apk"
+          python3 tools/prepare_xop_final.py "$RUNNER_TEMP/alvsia-xop-input.apk" "$RUNNER_TEMP/alvsia-xop-candidate.apk"
 
       - name: Sign final XOP APK and verify
         env:
