@@ -163,6 +163,10 @@ jobs:
           PY
 
       - name: Build release APK
+        env:
+          # This job audits the unsigned baseline before XopProtector runs.
+          # Final XOP provenance is mandatory in the post-packaging audit.
+          ALVSIA_REQUIRE_XOP_PROVENANCE: "0"
         run: |
           set -euo pipefail
           bash tools/run_gradle_with_retry.sh ./gradlew assembleRelease --no-daemon --stacktrace
