@@ -53,7 +53,7 @@ LICENSES="$ROOT/app/src/main/assets/engine_licenses"
 mkdir -p "$DEST" "$LICENSES"
 install -m 0755 "$BIN" "$DEST/libluau-decompiler-cli.so"
 install -m 0644 LICENSE "$LICENSES/luau-decompiler-MIT.txt"
-sha256sum "$DEST/libluau-decompiler-cli.so" > "$LICENSES/luau-decompiler-android-${LICENSE_SUFFIX}.sha256"
+(cd "$ROOT" && sha256sum "app/src/main/jniLibs/$ABI/libluau-decompiler-cli.so") > "$LICENSES/luau-decompiler-android-${LICENSE_SUFFIX}.sha256"
 cat > "$LICENSES/luau-decompiler-android-${LICENSE_SUFFIX}.manifest" <<EOF
 upstream=https://github.com/PumbaaDev/luau-decompiler
 commit=$COMMIT
