@@ -326,29 +326,29 @@ jobs:
           replacements = {**native, **notices}
           temp = candidate + ".restored"
           # XopProtector encrypts selected ELF payload bytes in-place without
-          # refreshing the enclosing ZIP entry CRC. The compressed stream remains
-          # readable, but the original CRC is stale. Disable CRC validation on
-          # each packed entry handle only; reconstructed entries get fresh CRCs.
-          def read_packed(zf, name):
-              with zf.open(name, "r") as entry:
-                  entry._expected_crc = None
-                  return entry.read()
+          # refreshing the enclosing ZIP entry CRC. Suppress CRC comparison only
+          # while reading the packed candidate; writing a new ZIP recalculates it.
           with zipfile.ZipFile(base, "r") as src, zipfile.ZipFile(candidate, "r") as packed:
               base_names = set(src.namelist())
               missing = sorted(set(replacements) - base_names)
               if missing:
                   raise SystemExit(f"Baseline missing native engine entries: {missing}")
-              with zipfile.ZipFile(temp, "w") as out:
-                  for info in packed.infolist():
-                      if info.filename in replacements:
-                          continue
-                      out.writestr(info, read_packed(packed, info.filename))
-                  for name, mode in replacements.items():
-                      info = src.getinfo(name)
-                      info.external_attr = mode << 16
-                      if name in native:
-                          info.compress_type = zipfile.ZIP_STORED
-                      out.writestr(info, src.read(name))
+              update_crc = zipfile.ZipExtFile._update_crc
+              try:
+                  zipfile.ZipExtFile._update_crc = lambda self, data: None
+                  with zipfile.ZipFile(temp, "w") as out:
+                      for info in packed.infolist():
+                          if info.filename in replacements:
+                              continue
+                          out.writestr(info, packed.read(info.filename))
+                      for name, mode in replacements.items():
+                          info = src.getinfo(name)
+                          info.external_attr = mode << 16
+                          if name in native:
+                              info.compress_type = zipfile.ZIP_STORED
+                          out.writestr(info, src.read(name))
+              finally:
+                  zipfile.ZipExtFile._update_crc = update_crc
           os.replace(temp, candidate)
           with zipfile.ZipFile(base, "r") as original, zipfile.ZipFile(candidate, "r") as check:
               for name in native:
