@@ -36,11 +36,11 @@ def test_strong_preserves_escaped_strings_and_comments():
 def test_function_parameters_are_renamed_inside_function_only():
     src = "local function add(left, right)\n  local total = left + right\n  return total\nend\nreturn add\n"
     out = protect_source(src, "balanced")
-    assert "function add(" in out
+    assert "function _a" in out
     assert "left" not in out
     assert "right" not in out
     assert "total" not in out
-    assert "return add" in out
+    assert "return _a" in out
 
 
 def test_member_names_and_labels_are_not_renamed():
