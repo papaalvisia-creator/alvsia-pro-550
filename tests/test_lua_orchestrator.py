@@ -51,17 +51,17 @@ def test_pipeline_runs_compatible_engines_and_keeps_valid_alternates(tmp_path):
 
 def test_pipeline_stops_after_first_valid_engine_by_default(tmp_path):
     source = tmp_path / "input.luac"
-    source.write_bytes(b"\\x1bLua\\x53\\x00\\x00\\x00")
+    source.write_bytes(b"\x1bLua\x53\x00\x00\x00")
     called = []
 
     def first(_src, dst):
         called.append("first")
-        Path(dst).write_text("return 7\\n", encoding="utf-8")
+        Path(dst).write_text("return 7\n", encoding="utf-8")
         return True, "first engine"
 
     def should_not_run(_src, dst):
         called.append("second")
-        Path(dst).write_text("return 8\\n", encoding="utf-8")
+        Path(dst).write_text("return 8\n", encoding="utf-8")
         return True, "second engine"
 
     output = tmp_path / "result.lua"
@@ -77,7 +77,7 @@ def test_pipeline_stops_after_first_valid_engine_by_default(tmp_path):
     assert result["selected_engine"] == "first"
     assert called == ["first"]
     assert result["engines_attempted"] == ["first"]
-    assert output.read_text(encoding="utf-8") == "return 7\\n"
+    assert output.read_text(encoding="utf-8") == "return 7\n"
 
 
 def test_pipeline_rejects_invalid_output_and_removes_candidate(tmp_path):
@@ -122,7 +122,7 @@ def test_pipeline_reports_engine_failures_without_fake_output(tmp_path):
 
 def test_smart_pipeline_continues_after_partial_vm_diagnostics(tmp_path):
     source = tmp_path / "protected.luac"
-    source.write_bytes(b"\\x1bLua\\x53" + bytes(40))
+    source.write_bytes(b"\x1bLua\x53" + bytes(40))
     output = tmp_path / "protected_decompiled.lua"
 
     def fake_pipeline(src, dst, info, jars_dir=None, registry=None):
@@ -165,7 +165,7 @@ def test_optional_unluac_rs_adapter_runs_strict_cli_without_shell(tmp_path):
     binary.write_bytes(b"fixture executable placeholder")
     binary.chmod(0o700)
     source = tmp_path / "input.luac"
-    source.write_bytes(b"\\x1bLua\\x51" + bytes(40))
+    source.write_bytes(b"\x1bLua\\x51" + bytes(40))
     output = tmp_path / "output.lua"
     info = LuaInfo("bytecode", "Lua 5.1", "luac", 45, "1b4c7561", 0.99)
 
