@@ -82,6 +82,12 @@ jobs:
           python3 -m pip install --disable-pip-version-check cryptography
           python3 tests/test_seal_python_payloads.py
 
+      - name: Install Lua 5.3 parser for syntax regression tests
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y lua5.3
+          command -v luac5.3
+
       - name: Run Lua decompiler safety regression tests
         run: |
           python3 -m pip install --disable-pip-version-check pycryptodome pytest
