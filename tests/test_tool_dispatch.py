@@ -41,7 +41,7 @@ def test_python_auth_normalizes_java_string_and_lua_avoids_art_oom():
     assert "fun lock(@Suppress(\"UNUSED_PARAMETER\") ctx: Context)" in gate
     lock_body = gate.split("fun lock(@Suppress(\"UNUSED_PARAMETER\") ctx: Context)", 1)[1].split("\n    }", 1)[0]
     assert "synchronized(this)" in lock_body, "RASP lock must serialize with Python token validation"
-    assert "ART_SAFE_LIMIT = 1L * 1024L * 1024L" in unluac
+    assert "ART_SAFE_LIMIT = 256L * 1024L" in unluac
     lua_branch = impl.split("# ── 5  LUA Tools", 1)[1].split('if sid == "lua_format_probe":', 1)[0]
     assert "result = feat.run_lua_smart(ip, dest_lua, jars_dir=jars)" in lua_branch
     features = (ROOT / "app/src/main/python/alvsia_features.py").read_text(encoding="utf-8")
