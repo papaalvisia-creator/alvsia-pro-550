@@ -172,6 +172,9 @@ def main() -> int:
                     manifest = outer.read(manifest_name).decode("utf-8", errors="replace")
                     check("tag=v1.4.4" in manifest and "target=aarch64-linux-android" in manifest,
                           "unluac-rs pinned release/target provenance verified")
+                    check(re.search(r"(?m)^source_sha256=[0-9a-f]{64}$", manifest) is not None
+                          and re.search(r"(?m)^xop_protected_sha256=[0-9a-f]{64}$", manifest) is not None,
+                          "unluac-rs original and XOP-protected hashes recorded")
                 if checksum_name in names:
                     checksum_parts = outer.read(checksum_name).decode("ascii", errors="ignore").split()
                     expected_hash = checksum_parts[0] if checksum_parts else ""
@@ -198,6 +201,9 @@ def main() -> int:
                     check("commit=ee07098c31e11601a9ca434bc12932a4ded65f7b" in manifest
                           and "supported_luau_bytecode=3-9" in manifest,
                           "PumbaaDev pinned commit/compatibility provenance verified")
+                    check(re.search(r"(?m)^source_sha256=[0-9a-f]{64}$", manifest) is not None
+                          and re.search(r"(?m)^xop_protected_sha256=[0-9a-f]{64}$", manifest) is not None,
+                          "Luau original and XOP-protected hashes recorded")
                 if checksum_name in names:
                     checksum_parts = outer.read(checksum_name).decode("ascii", errors="ignore").split()
                     expected_hash = checksum_parts[0] if checksum_parts else ""
