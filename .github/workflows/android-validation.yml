@@ -135,7 +135,7 @@ jobs:
       - name: Build and test Android debug variant
         run: |
           chmod +x ./gradlew
-          ./gradlew testDebugUnitTest assembleDebug --no-daemon --stacktrace
+          bash tools/run_gradle_with_retry.sh ./gradlew testDebugUnitTest assembleDebug --no-daemon --stacktrace
 
       - name: Prepare sealed release inputs
         run: |
@@ -165,7 +165,7 @@ jobs:
       - name: Build release APK
         run: |
           set -euo pipefail
-          ./gradlew assembleRelease --no-daemon --stacktrace
+          bash tools/run_gradle_with_retry.sh ./gradlew assembleRelease --no-daemon --stacktrace
           APK="$(find app/build/outputs/apk/release -type f -name '*.apk' | head -n 1)"
           test -n "$APK"
           # Strip non-runtime metadata and the plaintext rebrand template before auditing.
@@ -262,7 +262,7 @@ jobs:
           print("PASS: optional machine-specific UniMP SDK lookup removed")
           PY
           chmod +x "$XOP_DIR/gradlew"
-          (cd "$XOP_DIR" && ./gradlew --no-daemon :packer:jar exportShellFiles)
+          (cd "$XOP_DIR" && bash "$GITHUB_WORKSPACE/tools/run_gradle_with_retry.sh" ./gradlew --no-daemon :packer:jar exportShellFiles)
           PACKER_JAR="$(find "$XOP_DIR/packer/build/libs" -maxdepth 1 -type f -name 'protector-packer-*.jar' ! -name '*-sources.jar' | head -n 1)"
           test -n "$PACKER_JAR" && test -s "$PACKER_JAR"
           test -d "$XOP_DIR/executable/shell-files"
