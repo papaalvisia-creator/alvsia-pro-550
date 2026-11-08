@@ -74,7 +74,10 @@ object RaspEngine {
         // ④⑤⑥⑨ Root / emulator / clone / ADB (soft — legitimate testers may use these)
         emulatorSignals().forEach { soft += it }
 
-        // ⑧ Network MITM
+        // ⑧ Network MITM / proxy guard. Guard health is distinct from
+        // whether a proxy is currently present on a legitimate clean network.
+        if (!NetworkGuard.net_guard(ctx)) soft += "net_guard_unavailable"
+        if (NetworkGuard.detect_proxy(ctx)) soft += "proxy_detected"
         NetworkGuard.signals(ctx).forEach { soft += it }
 
         // ⑩ Hook packages (legacy — kept for back-compat with FridaProbe)
