@@ -78,10 +78,11 @@ jobs:
         run: |
           set -euo pipefail
           python3 -m pip install --disable-pip-version-check cryptography pycryptodome pytest
-          python3 tools/seal_python.py --seal
-          python3 tools/seal_assets.py
           SEED=$(python3 -c "import secrets; print(secrets.token_hex(32))")
           echo "::add-mask::$SEED"
+          export ALVSIA_SEAL_SEED_HEX="$SEED"
+          python3 tools/seal_python.py --seal
+          python3 tools/seal_assets.py
           python3 - "$SEED" <<'PY'
           import pathlib, sys
           seed=sys.argv[1]
