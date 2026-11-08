@@ -33,15 +33,15 @@ def configure_runtime(token,sealed_runtime="1"):
   os.environ["ALVSIA_SEALED_RUNTIME"]="1" if str(sealed_runtime).strip()=="1" else "0"
   _isr();_CD="ok";return True
  except:_CD="error";return False
-def run_tool(m,s,i,o,e,j):
+def run_tool(m,s,i,out_root,e,j):
  if not _authorized() or os.environ.get("ALVSIA_APK_SESSION")!="1":return "X AUTH: login required"
  _isr()
  try:
   import alvsia_bridge_impl as impl
-  result=impl.run_tool(m,s,i,o,e,j)
+  result=impl.run_tool(m,s,i,out_root,e,j)
   try:
    from alvsia_features import scrub_foreign_branding,scrub_output_text_files
-   result,_=scrub_foreign_branding(result);scrub_output_text_files(o)
+   result,_=scrub_foreign_branding(result);scrub_output_text_files(out_root)
   except:pass
   return result
  except:return "X SEALED BRIDGE: operation failed"
