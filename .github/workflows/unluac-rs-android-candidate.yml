@@ -183,8 +183,12 @@ jobs:
             LUAU="app/src/main/jniLibs/$abi/libluau-decompiler-cli.so"
             test -s "$UNLUAC"
             test -s "$LUAU"
+            test -x "$UNLUAC"
+            test -x "$LUAU"
             readelf -h "$UNLUAC" | tee "$RUNNER_TEMP/$abi-unluac-elf.txt"
             readelf -h "$LUAU" | tee "$RUNNER_TEMP/$abi-luau-elf.txt"
+            readelf -l "$UNLUAC" | grep -q '/system/bin/linker64'
+            readelf -l "$LUAU" | grep -q '/system/bin/linker64'
             grep -q 'Type:[[:space:]]*DYN' "$RUNNER_TEMP/$abi-unluac-elf.txt"
             grep -q 'Type:[[:space:]]*DYN' "$RUNNER_TEMP/$abi-luau-elf.txt"
             if [[ "$abi" == "arm64-v8a" ]]; then
@@ -196,6 +200,10 @@ jobs:
             fi
             echo "PASS Android $abi native ELF validation"
           done
+          sha256sum -c app/src/main/assets/engine_licenses/unluac-rs-android-arm64.sha256
+          sha256sum -c app/src/main/assets/engine_licenses/luau-decompiler-android-arm64.sha256
+          sha256sum -c app/src/main/assets/engine_licenses/unluac-rs-android-x86_64.sha256
+          sha256sum -c app/src/main/assets/engine_licenses/luau-decompiler-android-x86_64.sha256
       - name: Upload Android ARM64 candidate and provenance
         uses: actions/upload-artifact@v4
         with:
