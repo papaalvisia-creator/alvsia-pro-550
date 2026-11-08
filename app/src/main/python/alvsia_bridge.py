@@ -3,67 +3,46 @@ def _authorized():
  try:
   from com.alvsia.pro.sec import SessionGate
   return bool(SessionGate.isSessionAuthorized())
- except Exception:return False
+ except:return False
 def _isr():
- if os.environ.get("ALVSIA_SEALED_RUNTIME")!="1" or not _authorized():return
  try:
-  import pkgutil
-  if pkgutil.get_data("sealed","alvsia_bridge_impl.alv"):
-   import sealed_loader
-   sealed_loader.install()
- except Exception:pass
+  import pkgutil,sealed_loader
+  if os.environ.get("ALVSIA_SEALED_RUNTIME")=="1" and pkgutil.get_data("sealed","alvsia_bridge_impl.alv"):sealed_loader.install()
+ except:pass
 _CD=""
 def configure_diagnostic():return _CD
-def configure_unluac_rs(binary_path):
- try:
-  path=os.path.realpath(_extract_str(binary_path).strip())
-  if not os.path.isfile(path) or not os.access(path,os.X_OK):
-   os.environ.pop("ALVSIA_UNLUAC_RS_BIN",None);return False
-  os.environ["ALVSIA_UNLUAC_RS_BIN"]=path
-  return True
- except Exception:
-  os.environ.pop("ALVSIA_UNLUAC_RS_BIN",None);return False
-def configure_luau_decompiler(binary_path):
- try:
-  path=os.path.realpath(_extract_str(binary_path).strip())
-  if not os.path.isfile(path) or not os.access(path,os.X_OK):
-   os.environ.pop("ALVSIA_LUAU_DECOMPILER_BIN",None);return False
-  os.environ["ALVSIA_LUAU_DECOMPILER_BIN"]=path
-  return True
- except Exception:
-  os.environ.pop("ALVSIA_LUAU_DECOMPILER_BIN",None);return False
 def _extract_str(v):
- if isinstance(v,str):return v
- try:return str(v.toString())
- except Exception:return str(v)
+ try:return v if isinstance(v,str) else str(v.toString())
+ except:return str(v)
+def _bin(k,v):
+ try:
+  p=os.path.realpath(_extract_str(v).strip())
+  if not os.path.isfile(p) or not os.access(p,os.X_OK):raise ValueError()
+  os.environ[k]=p;return True
+ except:os.environ.pop(k,None);return False
+def configure_unluac_rs(v):return _bin("ALVSIA_UNLUAC_RS_BIN",v)
+def configure_luau_decompiler(v):return _bin("ALVSIA_LUAU_DECOMPILER_BIN",v)
 def configure_runtime(token,sealed_runtime="1"):
  global _CD
  try:
   token=_extract_str(token).strip()
   if not re.fullmatch(r"[0-9A-Fa-f]{64}",token):_CD="error";return False
-  from com.alvsia.pro.sec import SessionGate as gate
-  if not bool(gate.isTokenCurrent(token)):_CD="error";return False
-  os.environ.pop("ALVSIA_SESSION_TOKEN",None)
-  os.environ["ALVSIA_APK_SESSION"]="1"
-  os.environ["ALVSIA_SEALED_RUNTIME"]="1" if _extract_str(sealed_runtime).strip()=="1" else "0"
+  from com.alvsia.pro.sec import SessionGate
+  if not bool(SessionGate.isTokenCurrent(token)):_CD="error";return False
+  os.environ.pop("ALVSIA_SESSION_TOKEN",None);os.environ["ALVSIA_APK_SESSION"]="1"
+  os.environ["ALVSIA_SEALED_RUNTIME"]="1" if str(sealed_runtime).strip()=="1" else "0"
   _isr();_CD="ok";return True
- except Exception:
-  # Release-safe diagnostic: never return internal stage, module, or exception details.
-  _CD="error"
-  return False
-def run_tool(mid,sid,inp,out_root,engine_dir,jars_dir):
+ except:_CD="error";return False
+def run_tool(m,s,i,o,e,j):
  if not _authorized() or os.environ.get("ALVSIA_APK_SESSION")!="1":return "X AUTH: login required"
  _isr()
  try:
   import alvsia_bridge_impl as impl
-  result=impl.run_tool(mid,sid,inp,out_root,engine_dir,jars_dir)
+  result=impl.run_tool(m,s,i,o,e,j)
   try:
-   from alvsia_features import scrub_foreign_branding, scrub_output_text_files
-   result,_=scrub_foreign_branding(result)
-   scrub_output_text_files(out_root)
-  except Exception:pass
+   from alvsia_features import scrub_foreign_branding,scrub_output_text_files
+   result,_=scrub_foreign_branding(result);scrub_output_text_files(o)
+  except:pass
   return result
- except Exception:
-  return "X SEALED BRIDGE: operation failed"
-def bridge_run_sub(mid,sid,inp,en,wd,jd):
- return run_tool(int(mid),str(sid),str(inp) if inp else "",str(wd),str(jd),str(jd))
+ except:return "X SEALED BRIDGE: operation failed"
+def bridge_run_sub(m,s,i,en,w,j):return run_tool(int(m),str(s),str(i) if i else "",str(w),str(j),str(j))
