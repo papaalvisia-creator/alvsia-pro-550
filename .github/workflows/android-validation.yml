@@ -325,6 +325,17 @@ jobs:
           }
           replacements = {**native, **notices}
           temp = candidate + ".restored"
+          # XopProtector encrypts selected ELF payload bytes in-place without
+          # refreshing the enclosing ZIP entry CRC. Decompression is still valid;
+          # skip only the stale CRC check while reading packed entries, then let
+          # zipfile write fresh CRCs into the reconstructed APK.
+          _update_crc = zipfile.ZipExtFile._update_crc
+          def read_packed(zf, name):
+              zipfile.ZipExtFile._update_crc = lambda self, data: None
+              try:
+                  return zf.read(name)
+              finally:
+                  zipfile.ZipExtFile._update_crc = _update_crc
           with zipfile.ZipFile(base, "r") as src, zipfile.ZipFile(candidate, "r") as packed:
               base_names = set(src.namelist())
               missing = sorted(set(replacements) - base_names)
@@ -334,7 +345,7 @@ jobs:
                   for info in packed.infolist():
                       if info.filename in replacements:
                           continue
-                      out.writestr(info, packed.read(info.filename))
+                      out.writestr(info, read_packed(packed, info.filename))
                   for name, mode in replacements.items():
                       info = src.getinfo(name)
                       info.external_attr = mode << 16
