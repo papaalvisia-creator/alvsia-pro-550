@@ -47,7 +47,7 @@ DEST="$ROOT/app/src/main/jniLibs/$ABI"
 mkdir -p "$DEST" "$ROOT/app/src/main/assets/engine_licenses"
 install -m 0755 "$BIN" "$DEST/libunluac-cli.so"
 install -m 0644 LICENSE.txt "$ROOT/app/src/main/assets/engine_licenses/unluac-rs-MIT.txt"
-sha256sum "$DEST/libunluac-cli.so" > "$ROOT/app/src/main/assets/engine_licenses/unluac-rs-android-${LICENSE_SUFFIX}.sha256"
+(cd "$ROOT" && sha256sum "app/src/main/jniLibs/$ABI/libunluac-cli.so") > "$ROOT/app/src/main/assets/engine_licenses/unluac-rs-android-${LICENSE_SUFFIX}.sha256"
 cat > "$ROOT/app/src/main/assets/engine_licenses/unluac-rs-android-${LICENSE_SUFFIX}.manifest" <<EOF
 upstream=https://github.com/x3zvawq/unluac-rs
 tag=$TAG
