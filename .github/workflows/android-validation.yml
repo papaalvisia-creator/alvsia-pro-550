@@ -199,7 +199,7 @@ jobs:
           CM_KEY_PASSWORD: ${{ secrets.CM_KEY_PASSWORD }}
         run: |
           set -euo pipefail
-          KS="$KS"
+          KS="$RUNNER_TEMP/alvsia-release.jks"
           KSPASS="${ALVSIA_KEYSTORE_PASSWORD:-${CM_KEYSTORE_PASSWORD:-}}"
           ALIAS="${ALVSIA_KEY_ALIAS:-${CM_KEY_ALIAS:-alvsia}}"
           KEYPASS="${ALVSIA_KEY_PASSWORD:-${CM_KEY_PASSWORD:-$KSPASS}}"
@@ -387,7 +387,7 @@ jobs:
           CM_KEY_PASSWORD: ${{ secrets.CM_KEY_PASSWORD }}
         run: |
           set -euo pipefail
-          KS="$KS"
+          KS="$RUNNER_TEMP/alvsia-release.jks"
           KSPASS="${ALVSIA_KEYSTORE_PASSWORD:-${CM_KEYSTORE_PASSWORD:-}}"
           ALIAS="${ALVSIA_KEY_ALIAS:-${CM_KEY_ALIAS:-alvsia}}"
           KEYPASS="${ALVSIA_KEY_PASSWORD:-${CM_KEY_PASSWORD:-$KSPASS}}"
