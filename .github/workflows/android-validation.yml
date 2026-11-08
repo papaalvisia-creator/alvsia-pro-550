@@ -219,6 +219,8 @@ jobs:
           fi
           test -s "$KS"
           test -n "$KSPASS" || { echo "ERROR: signing keystore password is missing"; exit 1; }
+          BASE_UNSIGNED="validation-artifacts/ALVISIA_PRO_5.5.2-hardened_release_unsigned.apk"
+          BASE_SIGNED="$RUNNER_TEMP/ALVISIA_PRO_5.5.2-hardened_xop_input_signed.apk"
           APKSIGNER="$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -n 1)"
           test -x "$APKSIGNER"
           "$APKSIGNER" sign \
@@ -407,6 +409,8 @@ jobs:
           fi
           test -s "$KS"
           test -n "$KSPASS" || { echo "ERROR: signing keystore password is missing"; exit 1; }
+          CANDIDATE="$RUNNER_TEMP/ALVISIA_PRO_5.5.2-xop_candidate_unsigned.apk"
+          SIGNED="validation-artifacts/ALVISIA_PRO_5.5.2-xop_candidate_signed.apk"
           APKSIGNER="$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -n 1)"
           test -x "$APKSIGNER"
           ZIPALIGN="$(find "$ANDROID_HOME/build-tools" -type f -name zipalign | sort -V | tail -n 1)"
