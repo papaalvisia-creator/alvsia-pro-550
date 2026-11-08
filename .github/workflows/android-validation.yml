@@ -187,10 +187,10 @@ jobs:
 
       - name: Sign internal baseline for XopProtector input
         env:
-          ALVSIA_KEYSTORE_BASE64: ${{ secrets.ALVSIA_KEYSTORE_BASE64 }}
-          ALVSIA_KEYSTORE_PASSWORD: ${{ secrets.ALVSIA_KEYSTORE_PASSWORD }}
-          ALVSIA_KEY_ALIAS: ${{ secrets.ALVSIA_KEY_ALIAS }}
-          ALVSIA_KEY_PASSWORD: ${{ secrets.ALVSIA_KEY_PASSWORD }}
+          ALVSIA_KEYSTORE_BASE64: ${{ secrets.ALVSIA_KEYSTORE_BASE64 || secrets.CM_KEYSTORE }}
+          ALVSIA_KEYSTORE_PASSWORD: ${{ secrets.ALVSIA_KEYSTORE_PASSWORD || secrets.CM_KEYSTORE_PASSWORD }}
+          ALVSIA_KEY_ALIAS: ${{ secrets.ALVSIA_KEY_ALIAS || secrets.CM_KEY_ALIAS || 'alvsia' }}
+          ALVSIA_KEY_PASSWORD: ${{ secrets.ALVSIA_KEY_PASSWORD || secrets.CM_KEY_PASSWORD || secrets.ALVSIA_KEYSTORE_PASSWORD || secrets.CM_KEYSTORE_PASSWORD }}
         run: |
           set -euo pipefail
           for name in ALVSIA_KEYSTORE_BASE64 ALVSIA_KEYSTORE_PASSWORD ALVSIA_KEY_ALIAS ALVSIA_KEY_PASSWORD; do
