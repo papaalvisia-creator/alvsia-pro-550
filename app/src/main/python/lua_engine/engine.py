@@ -165,7 +165,7 @@ def validate_lua_source(path_or_text, expected_version=None) -> tuple[bool, str]
                     pass
 
     code = _lua_code_without_literals(text)
-    tokens = re.findall(r'(?<![%\\w_])(function|if|for|while|repeat|do|end|until)(?![\\w_])', code)
+    tokens = re.findall(r'(?<![%\w_])(function|if|for|while|repeat|do|end|until)(?![\w_])', code)
     stack = []
     for tok in tokens:
         if tok in ("function", "if", "repeat"):
