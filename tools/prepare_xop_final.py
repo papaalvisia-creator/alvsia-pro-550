@@ -44,11 +44,15 @@ def main() -> int:
             if not {checksum_name, manifest_name, binary_name} <= candidate_names:
                 raise SystemExit(f"XOP candidate missing native provenance entries for {binary_name}")
             protected_hash = digest(candidate.read(binary_name))
-            checksum_text = f"{protected_hash}  {binary_name.split('/')[-1]}\\n"
+            checksum_text = f"{protected_hash}  {binary_name.split('/')[-1]}\
+"
             manifest = candidate.read(manifest_name).decode("utf-8")
             manifest = manifest.rstrip() + (
-                f"\\nsource_sha256={original_hash}"
-                f"\\nxop_protected_sha256={protected_hash}\\n"
+                f"\
+source_sha256={original_hash}"
+                f"\
+xop_protected_sha256={protected_hash}\
+"
             )
             replacements[checksum_name] = checksum_text.encode("ascii")
             replacements[manifest_name] = manifest.encode("utf-8")
