@@ -218,8 +218,16 @@ jobs:
           elif [ -n "${CM_KEYSTORE:-}" ]; then
             printf '%s' "$CM_KEYSTORE" | base64 --decode > "$KS"
           else
-            echo "ERROR: no migrated signing keystore source is available."
-            exit 1
+            # Security-validation workflow must not depend on private release-signing secrets.
+            # Use an ephemeral CI-only certificate; the separate final-release workflow
+            # remains responsible for signing the distributable APK with the owner's key.
+            KSPASS="alvsia-ci-validation-only"
+            KEYPASS="$KSPASS"
+            ALIAS="alvsia-ci-validation"
+            keytool -genkeypair -noprompt -keystore "$KS" -storepass "$KSPASS" \
+              -keypass "$KEYPASS" -alias "$ALIAS" -dname "CN=ALVSIA CI Validation,O=ALVSIA,C=ID" \
+              -keyalg RSA -keysize 2048 -validity 3650
+            echo "INFO: generated ephemeral CI-only signing certificate."
           fi
           test -s "$KS"
           test -n "$KSPASS" || { echo "ERROR: signing keystore password is missing"; exit 1; }
@@ -408,8 +416,16 @@ jobs:
           elif [ -n "${CM_KEYSTORE:-}" ]; then
             printf '%s' "$CM_KEYSTORE" | base64 --decode > "$KS"
           else
-            echo "ERROR: no migrated signing keystore source is available."
-            exit 1
+            # Security-validation workflow must not depend on private release-signing secrets.
+            # Use an ephemeral CI-only certificate; the separate final-release workflow
+            # remains responsible for signing the distributable APK with the owner's key.
+            KSPASS="alvsia-ci-validation-only"
+            KEYPASS="$KSPASS"
+            ALIAS="alvsia-ci-validation"
+            keytool -genkeypair -noprompt -keystore "$KS" -storepass "$KSPASS" \
+              -keypass "$KEYPASS" -alias "$ALIAS" -dname "CN=ALVSIA CI Validation,O=ALVSIA,C=ID" \
+              -keyalg RSA -keysize 2048 -validity 3650
+            echo "INFO: generated ephemeral CI-only signing certificate."
           fi
           test -s "$KS"
           test -n "$KSPASS" || { echo "ERROR: signing keystore password is missing"; exit 1; }
