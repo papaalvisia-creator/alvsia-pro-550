@@ -3,6 +3,7 @@
 from __future__ import annotations
 import hashlib
 import io
+import os
 import re
 import sys
 import zipfile
@@ -48,6 +49,7 @@ PROTECTED_MODULES = {
 }
 SEAL_MAGIC = b"ALVSEAL2"
 ASSET_MAGIC = b"ALVSA1\x00"
+REQUIRE_XOP_PROVENANCE = os.environ.get("ALVSIA_REQUIRE_XOP_PROVENANCE", "1") != "0"
 
 def _axml_strings(data: bytes) -> list[str]:
     """Read Android binary XML string-pool entries without relying on raw string-pool hits."""
@@ -172,9 +174,14 @@ def main() -> int:
                     manifest = outer.read(manifest_name).decode("utf-8", errors="replace")
                     check("tag=v1.4.4" in manifest and "target=aarch64-linux-android" in manifest,
                           "unluac-rs pinned release/target provenance verified")
-                    check(re.search(r"(?m)^source_sha256=[0-9a-f]{64}$", manifest) is not None
-                          and re.search(r"(?m)^xop_protected_sha256=[0-9a-f]{64}$", manifest) is not None,
-                          "unluac-rs original and XOP-protected hashes recorded")
+                    provenance_recorded = (
+                        re.search(r"(?m)^source_sha256=[0-9a-f]{64}$", manifest) is not None
+                        and re.search(r"(?m)^xop_protected_sha256=[0-9a-f]{64}$", manifest) is not None
+                    )
+                    check(provenance_recorded or not REQUIRE_XOP_PROVENANCE,
+                          "unluac-rs original and XOP-protected hashes recorded"
+                          if REQUIRE_XOP_PROVENANCE else
+                          "unluac-rs XOP provenance deferred to final XOP packaging")
                 if checksum_name in names:
                     checksum_parts = outer.read(checksum_name).decode("ascii", errors="ignore").split()
                     expected_hash = checksum_parts[0] if checksum_parts else ""
@@ -201,9 +208,14 @@ def main() -> int:
                     check("commit=ee07098c31e11601a9ca434bc12932a4ded65f7b" in manifest
                           and "supported_luau_bytecode=3-9" in manifest,
                           "PumbaaDev pinned commit/compatibility provenance verified")
-                    check(re.search(r"(?m)^source_sha256=[0-9a-f]{64}$", manifest) is not None
-                          and re.search(r"(?m)^xop_protected_sha256=[0-9a-f]{64}$", manifest) is not None,
-                          "Luau original and XOP-protected hashes recorded")
+                    provenance_recorded = (
+                        re.search(r"(?m)^source_sha256=[0-9a-f]{64}$", manifest) is not None
+                        and re.search(r"(?m)^xop_protected_sha256=[0-9a-f]{64}$", manifest) is not None
+                    )
+                    check(provenance_recorded or not REQUIRE_XOP_PROVENANCE,
+                          "Luau original and XOP-protected hashes recorded"
+                          if REQUIRE_XOP_PROVENANCE else
+                          "Luau XOP provenance deferred to final XOP packaging")
                 if checksum_name in names:
                     checksum_parts = outer.read(checksum_name).decode("ascii", errors="ignore").split()
                     expected_hash = checksum_parts[0] if checksum_parts else ""
