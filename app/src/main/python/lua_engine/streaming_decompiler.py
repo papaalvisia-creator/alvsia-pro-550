@@ -342,11 +342,20 @@ def stream_decompile_luajit(input_path: Path, out_path: Path) -> Tuple[bool, str
 
 def stream_unluac_jar(input_path: Path, out_path: Path, jars_dir: Optional[str] = None,
                       timeout: int = 1800) -> Tuple[bool, str]:
-    """Spawn java -jar unluac on the (possibly streaming) input file.
+    """Spawn java -jar unluac with bounded Android memory and wall-clock use.
 
-    Java's process spawning handles large input files natively because
-    the JVM reads the file from disk, not from stdin.
+    Desktop diagnostics retain the historical defaults. In the sealed Android
+    runtime, cap the child JVM and timeout to avoid the app + parser exhausting
+    device memory while other compatible engines remain available as fallback.
     """
+    android_mode = os.environ.get("ALVSIA_SEALED_RUNTIME") == "1"
+    effective_timeout = min(timeout, 120) if android_mode else timeout
+    heap_limit = os.environ.get(
+        "ALVSIA_UNLUAC_JAVA_HEAP", "192m" if android_mode else "512m"
+    )
+    if not re.fullmatch(r"[1-9][0-9]{1,3}m", heap_limit):
+        heap_limit = "192m" if android_mode else "512m"
+
     java = _find_java()
     if not java:
         return False, "java_runtime_unavailable"
@@ -361,12 +370,12 @@ def stream_unluac_jar(input_path: Path, out_path: Path, jars_dir: Optional[str] 
         return False, "unluac_jar_not_found"
     try:
         proc = subprocess.run(
-            [java, "-Xmx512m", "-jar", str(jar), str(input_path)],
+            [java, f"-Xmx{heap_limit}", "-jar", str(jar), str(input_path)],
             capture_output=True, text=True, errors="replace",
-            timeout=timeout
+            timeout=effective_timeout
         )
     except subprocess.TimeoutExpired:
-        return False, f"unluac_timeout_after_{timeout}s"
+        return False, f"unluac_timeout_after_{effective_timeout}s"
     except Exception as exc:
         return False, f"unluac_spawn_failed: {exc}"
     text = proc.stdout or ""
