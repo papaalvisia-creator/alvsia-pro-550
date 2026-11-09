@@ -897,8 +897,19 @@ class Decompiler:
             elif opname == "TFORCALL":
                 func = self._reg(a, i)
                 args_regs = [self._reg(a + 1, i), self._reg(a + 2, i)]
-                rets = [self._local_at(i + 1, a + 3 + j) or f"_r{a+3+j}" for j in range(c)]
-                out.append(f"{self.indent}{', '.join(rets)} = {func}({', '.join(args_regs)})")
+                call_target = func
+                if (not re.match(r"^[A-Za-z_][A-Za-z0-9_]*$", func)
+                        or func in LUA_KEYWORDS):
+                    call_target = f"_alvsia_tfor_{i}"
+                    out.append(f"{self.indent}local {call_target} = {func}")
+                rets = []
+                for j in range(c):
+                    nm = self._local_at(i + 1, a + 3 + j) or f"_r{a+3+j}"
+                    if not re.match(r"^[A-Za-z_][A-Za-z0-9_]*$", nm):
+                        nm = f"_r{a+3+j}"
+                    rets.append(nm)
+                lhs = ", ".join(rets) or f"_r{a+3}"
+                out.append(f"{self.indent}{lhs} = {call_target}({', '.join(args_regs)})")
 
             elif opname == "TFORLOOP":
                 out.append(f"{self.indent}-- tforloop")
