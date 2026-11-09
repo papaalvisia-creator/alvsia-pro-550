@@ -430,7 +430,7 @@ class Decompiler:
         if re.match(r"^[A-Za-z_][A-Za-z0-9_]*$", expr) and expr not in LUA_KEYWORDS:
             return expr
         name = f"_alvsia_{tag}_{pc}"
-        out.append(f"{self.indent}local {name} = {expr}")
+        out.append(f"{self.indent}{name} = {expr}")
         return name
 
     def decompile(self) -> List[str]:
@@ -755,7 +755,7 @@ class Decompiler:
                 if (not re.match(r"^[A-Za-z_][A-Za-z0-9_]*$", func)
                         or func in LUA_KEYWORDS):
                     call_target = f"_alvsia_call_{i}"
-                    out.append(f"{self.indent}local {call_target} = {func}")
+                    out.append(f"{self.indent}{call_target} = {func}")
                 call_expr = f"{call_target}({', '.join(args)})"
                 if ret_count == 0:
                     out.append(f"{self.indent}{call_expr}")
@@ -803,7 +803,7 @@ class Decompiler:
                 if (not re.match(r"^[A-Za-z_][A-Za-z0-9_]*$", func)
                         or func in LUA_KEYWORDS):
                     func = f"_alvsia_tailcall_{i}"
-                    out.append(f"{self.indent}local {func} = {self._reg(a, i)}")
+                    out.append(f"{self.indent}{func} = {self._reg(a, i)}")
                 # Tail calls are terminal in bytecode, but later bytecode may
                 # still be emitted by the conservative linear reconstruction. Wrap
                 # the return in a nested block so Lua permits subsequent statements.
@@ -909,7 +909,7 @@ class Decompiler:
                 if (not re.match(r"^[A-Za-z_][A-Za-z0-9_]*$", func)
                         or func in LUA_KEYWORDS):
                     call_target = f"_alvsia_tfor_{i}"
-                    out.append(f"{self.indent}local {call_target} = {func}")
+                    out.append(f"{self.indent}{call_target} = {func}")
                 rets = []
                 for j in range(c):
                     nm = self._local_at(i + 1, a + 3 + j) or f"_r{a+3+j}"
