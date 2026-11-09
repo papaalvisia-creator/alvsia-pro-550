@@ -50,8 +50,11 @@ def rk_idx(x): return x & ~BITRK
 LUA53_HEADER = bytes([0x1b, 0x4c, 0x75, 0x61, 0x53, 0x00,
                        0x19, 0x93, 0x0d, 0x0a, 0x1a, 0x0a])
 
+PUBGM_STRING_XOR_KEY = bytes.fromhex("112136474657a78d9d8490d8ab008c35261af7e45805b8b31507d02c1e8ff6c8")
+PUBGM_OPCODE_MAP = (17,18,19,20,21,22,23,24,25,26,27,28,29,0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46)
+
 class Reader:
-    def __init__(self, data: bytes):
+    def __init__(self, data: bytes, *, pubgm: bool = False, hybrid_long_string_size: bool = False):
         self._d = memoryview(data)
         self._pos = 0
         self.int_size = 4
@@ -60,7 +63,8 @@ class Reader:
         self.lua_int_size = 8
         self.lua_num_size = 8
         self.little = True
-        self.hybrid_long_string_size = False
+        self.hybrid_long_string_size = hybrid_long_string_size
+        self.pubgm = pubgm
 
     def remaining(self):
         return len(self._d) - self._pos
@@ -116,6 +120,8 @@ class Reader:
         if size == 0:
             return None
         raw = self._read(size - 1)
+        if self.pubgm:
+            raw = bytes(b ^ PUBGM_STRING_XOR_KEY[i % len(PUBGM_STRING_XOR_KEY)] for i, b in enumerate(raw))
         try:
             return raw.decode("utf-8", "replace")
         except Exception:
@@ -123,7 +129,13 @@ class Reader:
 
     def instruction(self):
         raw = self._read(self.instr_size)
-        return struct.unpack("<I" if self.little else ">I", raw)[0]
+        value = struct.unpack("<I" if self.little else ">I", raw)[0]
+        if self.pubgm:
+            op = value & 0x3F
+            if op >= len(PUBGM_OPCODE_MAP):
+                raise ValueError(f"invalid PUBG Mobile Lua opcode {op}")
+            value = (value & ~0x3F) | PUBGM_OPCODE_MAP[op]
+        return value
 
 
 # ── Proto (function prototype) ────────────────────────────────────────────────
@@ -207,8 +219,15 @@ def load_proto(r: Reader, depth: int = 0) -> Proto:
     p.protos = [load_proto(r, depth + 1) for _ in range(n)]
 
     # debug: lineinfo
-    n = _read_count(r, "lineinfo", 4)
-    p.lineinfo = [r.int_() for _ in range(n)]
+    if r.pubgm:
+        n = _read_count(r, "line delta", 1)
+        _deltas = [struct.unpack("b", r._read(1))[0] for _ in range(n)]
+        abs_n = _read_count(r, "absolute line", 8)
+        _abs_lines = [(r.int_(), r.int_()) for _ in range(abs_n)]
+        p.lineinfo = _deltas
+    else:
+        n = _read_count(r, "lineinfo", 4)
+        p.lineinfo = [r.int_() for _ in range(n)]
 
     # debug: locvars
     n = _read_count(r, "local variable", 9)
@@ -231,8 +250,8 @@ def load_proto(r: Reader, depth: int = 0) -> Proto:
     return p
 
 
-def load_chunk(data: bytes, *, hybrid_long_string_size: bool = False) -> Proto:
-    r = Reader(data)
+def load_chunk(data: bytes, *, hybrid_long_string_size: bool = False, pubgm: bool = False) -> Proto:
+    r = Reader(data, pubgm=pubgm, hybrid_long_string_size=hybrid_long_string_size)
     # header
     sig = r._read(4)
     if sig != b"\x1bLua":
@@ -848,10 +867,15 @@ class Decompiler:
 
 # ── Top-level entry ───────────────────────────────────────────────────────────
 def decompile_bytes(data: bytes) -> str:
-    try:
-        proto = load_chunk(data, hybrid_long_string_size=False)
-    except Exception as standard_error:
-        proto = load_chunk(data, hybrid_long_string_size=True)
+    errors = []
+    for variant in ("standard", "pubgm"):
+        try:
+            proto = load_chunk(data, pubgm=(variant == "pubgm"))
+            break
+        except Exception as exc:
+            errors.append(f"{variant}: {exc}")
+    else:
+        raise ValueError(" ; ".join(errors))
     # Top-level params
     params = []
     if proto.is_vararg:
