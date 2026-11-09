@@ -425,6 +425,14 @@ class Decompiler:
     def _emit(self, line: str):
         self.lines.append(self.indent + line)
 
+    def _prefix(self, expr: str, pc: int, out: List[str], tag: str) -> str:
+        """Return a Lua prefix expression, materializing complex/literal targets."""
+        if re.match(r"^[A-Za-z_][A-Za-z0-9_]*$", expr) and expr not in LUA_KEYWORDS:
+            return expr
+        name = f"_alvsia_{tag}_{pc}"
+        out.append(f"{self.indent}local {name} = {expr}")
+        return name
+
     def decompile(self) -> List[str]:
         p = self.p
         # Function header
@@ -583,7 +591,7 @@ class Decompiler:
                 out.append(f"{self.indent}{uv}[{key}] = {val}")
 
             elif opname == "GETTABLE":
-                tbl = self._reg(b, i)
+                tbl = self._prefix(self._reg(b, i), i, out, "table")
                 key = self._rk(c, i)
                 if key.startswith('"') and key.endswith('"'):
                     ks = key[1:-1]
@@ -607,7 +615,7 @@ class Decompiler:
                     out.append(f"{self.indent}{nm} = {expr}")
 
             elif opname == "SETTABLE":
-                tbl = self._local_at(i, a) or f"_r{a}"
+                tbl = self._prefix(self._local_at(i, a) or f"_r{a}", i, out, "settable")
                 key = self._rk(b, i)
                 val = self._rk(c, i)
                 if key.startswith('"') and key.endswith('"'):
@@ -632,7 +640,7 @@ class Decompiler:
                     out.append(f"{self.indent}{nm} = {{}}")
 
             elif opname == "SELF":
-                obj = self._reg(b, i)
+                obj = self._prefix(self._reg(b, i), i, out, "self")
                 key = self._rk(c, i)
                 nm_a1 = self._local_at(i + 1, a + 1) or f"_r{a+1}"
                 nm_a = self._local_at(i + 1, a) or f"_r{a}"
@@ -870,7 +878,7 @@ class Decompiler:
                 out.append(f"{self.indent}end")
 
             elif opname == "SETLIST":
-                tbl = self._local_at(i, a) or f"_r{a}"
+                tbl = self._prefix(self._local_at(i, a) or f"_r{a}", i, out, "setlist")
                 count = b if b > 0 else 1
                 base = (c - 1) * 50
                 for j in range(1, count + 1):
