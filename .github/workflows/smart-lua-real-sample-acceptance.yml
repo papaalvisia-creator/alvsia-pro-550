@@ -111,8 +111,13 @@ jobs:
         run: |
           set +e
           lua5.3 -e 'assert(loadfile("acceptance/BRPlayerCharacterBase.lua"))' 2> acceptance/syntax-error.txt
-          nl -ba acceptance/BRPlayerCharacterBase.lua | sed -n '635,650p'
           cat acceptance/syntax-error.txt
+          LINE=$(grep -oE 'BRPlayerCharacterBase.lua:[0-9]+' acceptance/syntax-error.txt | tail -1 | cut -d: -f2)
+          if [ -n "$LINE" ]; then
+            START=$((LINE-5)); [ "$START" -lt 1 ] && START=1
+            END=$((LINE+5))
+            nl -ba acceptance/BRPlayerCharacterBase.lua | sed -n "${START},${END}p"
+          fi
           exit 0
 
       - name: Lua compiler syntax gate
