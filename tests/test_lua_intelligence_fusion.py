@@ -41,8 +41,8 @@ class FusionTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as td:
             p = self._source(td, "bad.lua", "function f(x) return (x + 1 end\n")
             decision = fuse_candidates([FusionCandidate("bad", p)])
-            self.assertEqual(decision.status, "PARTIAL")
-            self.assertEqual(decision.selected_engine, "bad")
+            self.assertEqual(decision.status, "FAILED")
+            self.assertIsNone(decision.selected_engine)
 
     def test_semantic_equivalence_is_deterministic(self):
         with tempfile.TemporaryDirectory() as td:
