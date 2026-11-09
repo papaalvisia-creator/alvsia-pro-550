@@ -26,6 +26,7 @@ jobs:
           print("PYTHON SYNTAX PASS", len(files))
           PY
       - name: Run Program Intelligence tests
-        run: python -m unittest tests/test_lua_intelligence_core.py -v
+        run: |
+          python -m unittest tests/test_lua_intelligence_core.py -v
           python -m unittest tests/test_lua_intelligence_candidates.py -v
           python -m unittest tests/test_lua_intelligence_ir.py -v
