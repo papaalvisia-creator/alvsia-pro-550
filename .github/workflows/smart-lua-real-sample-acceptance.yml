@@ -75,7 +75,7 @@ jobs:
           sys.path.insert(0, "app/src/main/python")
 
           from lua_engine.streaming_decompiler import preflight_magic
-          from lua_engine.decompiler53 import load_chunk, decompile_bytes
+          from lua_engine.decompiler53 import decompile_bytes
           from lua_engine.engine import validate_lua_source
 
           sample = Path("authorized-sample/samples/lua/BRPlayerCharacterBase.lua")
@@ -89,15 +89,6 @@ jobs:
           print(f"preflight={kind}")
           if kind != "luac_53":
               raise SystemExit(f"unexpected preflight dialect: {kind}")
-
-          standard_error = None
-          try:
-              load_chunk(raw, hybrid_long_string_size=False)
-              mode = "standard"
-          except Exception as exc:
-              standard_error = repr(exc)
-              load_chunk(raw, hybrid_long_string_size=True)
-              mode = "hybrid-long-string"
 
           source = decompile_bytes(raw)
           if not source.strip():
