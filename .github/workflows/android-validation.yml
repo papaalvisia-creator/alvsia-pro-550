@@ -337,6 +337,20 @@ jobs:
                   raise SystemExit(f"Baseline missing native engine entries: {missing}")
               payloads = {name: src.read(name) for name in replacements}
               expected = {name: digest(payloads[name]) for name in native}
+              # Record measured provenance for the standalone engines after XOP.
+              provenance = {
+                  "assets/engine_licenses/unluac-rs-android-arm64.manifest": "lib/arm64-v8a/libunluac-cli.so",
+                  "assets/engine_licenses/luau-decompiler-android-arm64.manifest": "lib/arm64-v8a/libluau-decompiler-cli.so",
+              }
+              for manifest_name, native_name in provenance.items():
+                  manifest = payloads[manifest_name].decode("utf-8")
+                  source_hash = expected[native_name]
+                  xop_hash = digest(payloads[native_name])
+                  import re
+                  for key, value in (("source_sha256", source_hash), ("xop_protected_sha256", xop_hash)):
+                      manifest = re.sub(rf"(?m)^{key}=.*\\n?", "", manifest)
+                      manifest = manifest.rstrip() + f"\\n{key}={value}\\n"
+                  payloads[manifest_name] = manifest.encode("utf-8")
               with zipfile.ZipFile(temp, "w") as out:
                   for old in packed.infolist():
                       if old.filename in replacements:
