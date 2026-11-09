@@ -773,17 +773,17 @@ class Decompiler:
 
             elif opname == "RETURN":
                 if b == 1:
-                    out.append(f"{self.indent}return")
+                    out.append(f"{self.indent}do return end")
                 elif b == 2:
                     src = self._reg(a, i)
-                    out.append(f"{self.indent}return {src}")
+                    out.append(f"{self.indent}do return {src} end")
                 else:
                     count = b - 1
                     if count < 0:
                         srcs = [self._reg(j, i) for j in range(a, a + 2)] + ["..."]
                     else:
                         srcs = [self._reg(j, i) for j in range(a, a + count)]
-                    out.append(f"{self.indent}return {', '.join(srcs)}")
+                    out.append(f"{self.indent}do return {', '.join(srcs)} end")
 
             elif opname == "VARARG":
                 nm = self._local_at(i + 1, a) or f"_r{a}"
