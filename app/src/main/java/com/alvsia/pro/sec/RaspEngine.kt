@@ -125,7 +125,6 @@ object RaspEngine {
             hardKillCount.incrementAndGet()
             val detail = hard.joinToString("|")
             try { ThreatReport.emit(ctx, "THREAT", detail, license) } catch (_: Exception) {}
-            try { TelegramNotifier.notify(ctx, "THREAT", detail, license) } catch (_: Exception) {}
             try {
                 SessionGate.onThreat()
                 RamToolVault.wipeAll()
