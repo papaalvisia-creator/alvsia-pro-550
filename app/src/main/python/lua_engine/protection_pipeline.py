@@ -17,6 +17,7 @@ import tempfile
 
 from .engine import validate_lua_source
 from .protection import PROFILES, protect_source
+from lua_intelligence.oracle import differential_validate
 
 
 def protect_file(
@@ -50,16 +51,32 @@ def protect_file(
         }
 
     transformed = protect_source(text, PROFILES[profile])
-    valid, validation = validate_lua_source(
-        transformed, expected_version=expected_version
-    )
-    if not valid:
-        return {
-            "ok": False,
-            "error": "protected output failed validation: " + validation,
-            "profile": profile,
-            "validation": validation,
-        }
+
+    # Publish only when both syntax and semantic-shape checks pass. The
+    # differential oracle never executes either source; it compares bounded
+    # structural signatures only.
+    with tempfile.TemporaryDirectory(prefix="alvsia-protect-") as validation_dir:
+        probe = Path(validation_dir) / "protected.lua"
+        probe.write_text(transformed, encoding="utf-8")
+        valid, validation = validate_lua_source(
+            probe, expected_version=expected_version
+        )
+        if not valid:
+            return {
+                "ok": False,
+                "error": "protected output failed validation: " + validation,
+                "profile": profile,
+                "validation": validation,
+            }
+        differential = differential_validate(source, probe)
+        if not differential.ok:
+            return {
+                "ok": False,
+                "error": "protected output failed semantic differential validation",
+                "profile": profile,
+                "validation": validation,
+                "differential": differential.details,
+            }
 
     destination.parent.mkdir(parents=True, exist_ok=True)
     fd, temporary_name = tempfile.mkstemp(
@@ -86,4 +103,5 @@ def protect_file(
         "input_size": len(raw),
         "output_size": destination.stat().st_size,
         "validation": validation,
+        "differential": differential.details,
     }
