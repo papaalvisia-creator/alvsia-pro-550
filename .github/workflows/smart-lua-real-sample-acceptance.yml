@@ -97,8 +97,7 @@ jobs:
           out = Path("acceptance/BRPlayerCharacterBase.lua")
           out.write_text(source, encoding="utf-8")
           ok, note = validate_lua_source(out, expected_version="Lua 5.3")
-          print(f"parser_mode={mode}")
-          print(f"standard_error={standard_error}")
+          print("recovery_engine=ALVSIA adaptive standard/PUBGM")
           print(f"source_validation={ok} {note}")
           print(f"source_bytes={len(source.encode('utf-8'))}")
           if not ok:
