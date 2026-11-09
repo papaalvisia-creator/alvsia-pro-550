@@ -15,6 +15,7 @@ from pathlib import Path
 MAX_ENTRIES = 50000
 MAX_TOTAL_UNCOMPRESSED = 2 * 1024 * 1024 * 1024
 MAX_SINGLE_FILE = 512 * 1024 * 1024
+MAX_COMPRESSION_RATIO = 1000
 
 
 def detect_archive(path):
@@ -132,6 +133,9 @@ def extract_archive(path, output_dir):
                     raise ValueError("symbolic-link archive entry rejected")
                 if info.file_size > MAX_SINGLE_FILE:
                     raise ValueError("archive member exceeds size limit")
+                if (info.file_size >= 1024 * 1024 and info.compress_size > 0
+                        and info.file_size // info.compress_size > MAX_COMPRESSION_RATIO):
+                    raise ValueError("archive compression ratio exceeds limit")
                 if info.is_dir():
                     target.mkdir(parents=True, exist_ok=True)
                     continue

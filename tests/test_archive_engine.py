@@ -142,3 +142,17 @@ if __name__ == "__main__":
     test_pak_dispatch_uses_authenticated_core_contract()
     test_non_archive_rejected()
     print("ARCHIVE ENGINE TEST: PASS (8/8)")
+
+
+def test_extreme_zip_compression_ratio_is_rejected():
+    with tempfile.TemporaryDirectory() as td:
+        root = Path(td)
+        archive = root / "bomb.obb"
+        info = zipfile.ZipInfo("huge.txt")
+        info.compress_type = zipfile.ZIP_DEFLATED
+        payload = b"A" * (2 * 1024 * 1024)
+        with zipfile.ZipFile(archive, "w") as zf:
+            zf.writestr(info, payload)
+        result = extract_archive(archive, root / "out")
+        assert not result["ok"]
+        assert "compression ratio" in result["error"]
