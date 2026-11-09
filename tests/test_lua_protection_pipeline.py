@@ -1,6 +1,7 @@
 from pathlib import Path
 
 from lua_engine.protection_pipeline import protect_file
+from lua_engine.protection import protect_source
 
 
 def test_protect_file_validates_and_writes_atomically(tmp_path):
@@ -79,3 +80,30 @@ def test_protect_file_reports_semantic_differential_gate(tmp_path):
     assert result["ok"] is True, result
     assert result["differential"]["function_markers"] == 1
     assert result["differential"]["return_markers"] == 2
+
+
+def test_strong_profile_preserves_common_lua_string_escapes():
+    source = r'''local a = "\x41"
+local b = "\65"
+local c = "\z   hello"
+return a, b, c
+'''
+    transformed = protect_source(source, "strong")
+    assert 'string.char(65)' in transformed
+    assert transformed.count("string.char(") >= 3
+
+
+def test_protector_renames_nested_locals_without_touching_fields():
+    source = '''local value = 10
+local t = { value = value }
+do
+  local value = 20
+  t:value(value)
+end
+return value, t.value
+'''
+    transformed = protect_source(source, "balanced")
+    assert "value =" in transformed
+    assert ":value(" in transformed
+    assert "t.value" in transformed
+    assert "local value" not in transformed

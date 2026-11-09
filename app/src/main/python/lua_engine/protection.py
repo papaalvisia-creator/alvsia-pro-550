@@ -62,13 +62,45 @@ def _string_expr(token: str) -> str:
         esc = body[i + 1]
         if esc in mapping:
             chars.append(mapping[esc])
-        elif esc in ("\\", '"', "'"):
+            i += 2
+            continue
+        if esc in ("\\", '"', "'"):
             chars.append(ord(esc))
-        elif esc == "0":
+            i += 2
+            continue
+        if esc == "0":
             chars.append(0)
-        else:
-            return token
-        i += 2
+            i += 2
+            continue
+        if esc == "x" and i + 3 < len(body):
+            hx = body[i + 2:i + 4]
+            if re.fullmatch(r"[0-9A-Fa-f]{2}", hx):
+                chars.append(int(hx, 16))
+                i += 4
+                continue
+        if esc.isdigit():
+            j = i + 1
+            while j < len(body) and j < i + 4 and body[j].isdigit():
+                j += 1
+            try:
+                value = int(body[i + 1:j], 10)
+            except ValueError:
+                return token
+            if value > 255:
+                return token
+            chars.append(value)
+            i = j
+            continue
+        if esc == "z":
+            # Lua 5.2+ \z consumes following whitespace. Preserve the exact
+            # byte sequence through a deterministic character encoder.
+            j = i + 2
+            while j < len(body) and body[j].isspace():
+                j += 1
+            i = j
+            continue
+        return token
+        
     return '""' if not chars else "string.char(" + ",".join(map(str, chars)) + ")"
 
 def _significant(tokens, idx):
