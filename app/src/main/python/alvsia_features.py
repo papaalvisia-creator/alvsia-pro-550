@@ -367,17 +367,60 @@ def _run_lua_smart_legacy(input_path, out_dir, jars_dir=None):
                                     "ok": False, "error": str(exc)})
             work_input = input_path
 
-    # ── Step 1: unwrap container if needed ──────────────────────────────────
-    if info.wrapped:
+    # ── Step 1: recursively unwrap recognized Lua containers ────────────────
+    # Each layer is materialized separately and re-detected. We stop on a
+    # stable payload, a repeated digest, or the configured depth budget.
+    max_layers = max(1, min(16, int(os.environ.get("ALVSIA_LUA_MAX_UNWRAP_LAYERS", "8"))))
+    seen_payloads = set()
+    current_path = work_input
+    for layer_index in range(max_layers):
         try:
-            payload, ci = unwrap_lua_container(data)
-            unwrapped_path = out_dir / (input_path.stem + "_unwrapped.luac")
+            current_data = current_path.read_bytes()
+            digest = hashlib.sha256(current_data).hexdigest()
+            if digest in seen_payloads:
+                report["steps"].append({
+                    "step": "unwrap_stop",
+                    "ok": False,
+                    "reason": "repeated-payload",
+                    "layer": layer_index,
+                })
+                break
+            seen_payloads.add(digest)
+            current_info = detect_lua(current_path)
+            if not current_info.wrapped:
+                break
+            payload, ci = unwrap_lua_container(current_data)
+            if not payload or payload == current_data:
+                report["steps"].append({
+                    "step": "unwrap_stop",
+                    "ok": False,
+                    "reason": "empty-or-unchanged-payload",
+                    "layer": layer_index,
+                })
+                break
+            unwrapped_path = out_dir / (
+                input_path.stem + f"_unwrapped_l{layer_index + 1}.luac"
+            )
             unwrapped_path.write_bytes(payload)
+            current_path = unwrapped_path
             work_input = unwrapped_path
-            report["steps"].append({"step": "unwrap", "ok": True, "container": ci.format,
-                                     "chunks": ci.chunks, "out": str(unwrapped_path)})
-        except Exception as e:
-            report["steps"].append({"step": "unwrap", "ok": False, "error": str(e)})
+            report["steps"].append({
+                "step": "unwrap",
+                "ok": True,
+                "layer": layer_index + 1,
+                "container": ci.format,
+                "chunks": ci.chunks,
+                "bytes": len(payload),
+                "out": str(unwrapped_path),
+            })
+        except Exception as exc:
+            report["steps"].append({
+                "step": "unwrap",
+                "ok": False,
+                "layer": layer_index + 1,
+                "error": f"{type(exc).__name__}: {exc}",
+            })
+            break
 
     # ── Protected-format preflight (diagnostics only) ────────────────────
     vm_partial_seen = False
