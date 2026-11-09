@@ -458,11 +458,23 @@ def decompile_large(path: Path, out_dir: Path, jars_dir: Optional[str] = None, p
     try:
         from .pattern_registry import get_registry
         registry = get_registry()
-        matches = sorted(
-            registry.detect(p),
-            key=lambda pat: pat.confidence_boost,
-            reverse=True,
-        )
+        # Run only detectors compatible with the bounded header preflight.
+        # In particular, never parse every Lua 5.3 proto tree for an ordinary
+        # multi-megabyte source file just to discover that it is not BGMI VM.
+        eligible_ids = {
+            "source": {"ALVSEAL3_SOURCE"},
+            "luac_53": {"BGMI_VM"},
+        }.get(fmt, {"ALVLUA1_PAYLOAD"} if fmt.startswith("unknown_") else set())
+        matches = []
+        for pattern in registry.all_patterns():
+            if pattern.id not in eligible_ids:
+                continue
+            try:
+                if pattern.detector(p):
+                    matches.append(pattern)
+            except Exception:
+                continue
+        matches.sort(key=lambda pat: pat.confidence_boost, reverse=True)
         pattern_attempts = []
         for pattern in matches:
             try:
