@@ -14,7 +14,7 @@ class TestOracle(unittest.TestCase):
         with tempfile.TemporaryDirectory() as td:
             p = Path(td) / "large.lua"
             body = "local x = 1\nfunction f(a) if a then return a + x end end\n"
-            p.write_text(body * 80000, encoding="utf-8")
+            p.write_text(body * 100000, encoding="utf-8")
             r = parse_source(p)
             self.assertTrue(r.ok)
             self.assertGreater(r.details["bytes"], 5_000_000)
