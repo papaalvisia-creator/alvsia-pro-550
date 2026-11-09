@@ -207,11 +207,38 @@ def differential_validate(original: Path, reconstructed: Path) -> OracleResult:
         a, b = semantic_signature(original), semantic_signature(reconstructed)
     except OSError as exc:
         return OracleResult(False, "differential", 0.0, {"error": str(exc)})
-    keys = ("function_markers", "return_markers")
-    matches = sum(a[k] == b[k] for k in keys)
-    token_ratio = min(a["token_count"], b["token_count"]) / max(1, max(a["token_count"], b["token_count"]))
-    score = 0.6 * (matches / len(keys)) + 0.4 * token_ratio
-    return OracleResult(score >= 0.75, "differential", score, {"original": a, "reconstructed": b})
+    exact_keys = (
+        "function_markers", "return_markers", "assignment_markers",
+        "call_markers", "branch_markers", "loop_markers",
+        "string_literals", "numeric_literals",
+    )
+    matches = sum(a[k] == b[k] for k in exact_keys) / len(exact_keys)
+    identifier_ratio = min(a["identifier_count"], b["identifier_count"]) / max(
+        1, max(a["identifier_count"], b["identifier_count"])
+    )
+    token_ratio = min(a["token_count"], b["token_count"]) / max(
+        1, max(a["token_count"], b["token_count"])
+    )
+    operator_a = a["operator_counts"]
+    operator_b = b["operator_counts"]
+    operator_keys = set(operator_a) | set(operator_b)
+    if operator_keys:
+        operator_matches = sum(operator_a.get(k, 0) == operator_b.get(k, 0) for k in operator_keys) / len(operator_keys)
+    else:
+        operator_matches = 1.0
+    score = (
+        0.45 * matches
+        + 0.20 * operator_matches
+        + 0.15 * identifier_ratio
+        + 0.20 * token_ratio
+    )
+    return OracleResult(score >= 0.75, "differential", score, {
+        "original": a, "reconstructed": b,
+        "exact_match_ratio": matches,
+        "operator_match_ratio": operator_matches,
+        "identifier_ratio": identifier_ratio,
+        "token_ratio": token_ratio,
+    })
 
 
 def result_dict(result: OracleResult) -> dict:
