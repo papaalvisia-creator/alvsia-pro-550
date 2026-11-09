@@ -121,6 +121,7 @@ jobs:
           lua5.3 -e 'local f,err=loadfile("acceptance/BRPlayerCharacterBase.lua"); if not f then error(err) end; print("LUA 5.3 COMPILER: PASS")'
 
       - name: Upload real acceptance evidence
+        if: ${{ always() }}
         uses: actions/upload-artifact@v4
         with:
           name: smart-lua-real-brplayer-acceptance
