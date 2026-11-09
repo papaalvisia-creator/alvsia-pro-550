@@ -5,6 +5,7 @@ on:
     branches: [ feat/lua-intelligence-orchestrator-20261107 ]
     paths:
       - '.github/workflows/alvsia-final-release.yml'
+      - '.github/workflows/android-validation.yml'
       - 'app/**'
       - 'tools/**'
       - 'tests/**'
