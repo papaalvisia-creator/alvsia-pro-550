@@ -102,3 +102,20 @@ P8. Only after all gates pass, prepare a single final signed APK.
 - Protector transformations pass differential execution tests against the original source on every supported runtime.
 - Encryption rejects wrong keys and tampering; no plaintext key sidecar is emitted by default.
 - CI is green, native binaries are packaged correctly, and Android runtime tests pass on device/emulator.
+
+
+## Additional audit — second Protector path discovered
+The repository also contains `lua_engine/protection.py` and `protection_pipeline.py`, separate from the legacy `lua_protector.py` API. These must be consolidated behind one explicit protector registry rather than left as parallel implementations.
+
+Observed in `protection.py`:
+- It tokenizes with a regular expression and tracks scopes using a single integer depth. This is safer than raw global regex replacement in some cases, but it is not a full Lua/Luau parser or lexical scope resolver.
+- The current scope model closes a scope on `end`/`until` and opens on `do`/`function`/`repeat`/`then`; nested constructs, repeat scopes, local declaration visibility, method syntax, and dialect grammar need dedicated parser-backed tests before the renamer can be considered semantics-preserving.
+- String rewriting uses a narrow escape decoder. Unsupported escapes are left unchanged, which is conservative, but long-bracket strings are not transformed by this path.
+- The `strong` profile strips comments and encodes strings, but there is no real bytecode compiler or VM backend in this pipeline.
+- `protection_pipeline.py` validates and atomically publishes output, but currently reads the complete source and transformed result into memory; add large-file budgets and streaming or explicitly document the source-size cap.
+- Existing `tests/test_vm_protect_roundtrip.py` exercises a separate `alvsia_vm_protect` implementation and its ALVSEAL3 deobfuscator. Keep this round-trip suite, but add differential execution tests for the newer source-level protector and do not conflate the two formats.
+
+Consolidation rule:
+- Keep `alvsia_vm_protect`/ALVSEAL3 as a separately versioned legacy format until migration and compatibility are proven.
+- Route new protection profiles through a single parser-backed pipeline with explicit feature support per dialect.
+- Make Smart Decompile recognize ALVSIA format versions through a versioned manifest/adapter; only recover when the user has the valid decryption key or the format is intentionally reversible.
