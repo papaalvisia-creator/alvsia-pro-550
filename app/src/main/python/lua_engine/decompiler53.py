@@ -60,6 +60,7 @@ class Reader:
         self.lua_int_size = 8
         self.lua_num_size = 8
         self.little = True
+        self.hybrid_long_string_size = False
 
     def remaining(self):
         return len(self._d) - self._pos
@@ -107,7 +108,11 @@ class Reader:
     def string(self):
         size = self.uint8()
         if size == 0xFF:
-            size = self.sizet_()
+            if self.hybrid_long_string_size and self.sizet_size == 4:
+                raw = self._read(8)
+                size = struct.unpack("<Q" if self.little else ">Q", raw)[0]
+            else:
+                size = self.sizet_()
         if size == 0:
             return None
         raw = self._read(size - 1)
@@ -226,7 +231,7 @@ def load_proto(r: Reader, depth: int = 0) -> Proto:
     return p
 
 
-def load_chunk(data: bytes) -> Proto:
+def load_chunk(data: bytes, *, hybrid_long_string_size: bool = False) -> Proto:
     r = Reader(data)
     # header
     sig = r._read(4)
@@ -242,6 +247,7 @@ def load_chunk(data: bytes) -> Proto:
     if luac_data != b"\x19\x93\x0d\x0a\x1a\x0a":
         raise ValueError("Lua 5.3 header check bytes do not match; input may be wrapped or protected")
     r.int_size = r.byte()
+    r.hybrid_long_string_size = hybrid_long_string_size
     r.sizet_size = r.byte()
     r.instr_size = r.byte()
     r.lua_int_size = r.byte()
@@ -842,7 +848,10 @@ class Decompiler:
 
 # ── Top-level entry ───────────────────────────────────────────────────────────
 def decompile_bytes(data: bytes) -> str:
-    proto = load_chunk(data)
+    try:
+        proto = load_chunk(data, hybrid_long_string_size=False)
+    except Exception as standard_error:
+        proto = load_chunk(data, hybrid_long_string_size=True)
     # Top-level params
     params = []
     if proto.is_vararg:
