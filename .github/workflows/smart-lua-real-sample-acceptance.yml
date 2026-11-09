@@ -35,18 +35,15 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y lua5.3
 
-      - name: Build Java unluac reference decompiler
+      - name: Build LuaDec 5.3 reference decompiler
         run: |
           set -euo pipefail
-          sudo apt-get update
-          sudo apt-get install -y default-jdk
-          git clone --depth 1 https://github.com/Jeong-Min-Cho/unluac.git java-unluac
-          mkdir -p java-unluac/build
-          find java-unluac/src -name "*.java" -print0 | xargs -0 javac -d java-unluac/build
-          cp java-unluac/MANIFEST.MF java-unluac/build/MANIFEST.MF
-          (cd java-unluac/build && jar cfm ../unluac.jar MANIFEST.MF unluac)
-          test -s java-unluac/unluac.jar
-          java -jar java-unluac/unluac.jar --version || true
+          git clone --depth 1 --recurse-submodules https://github.com/zhangjiequan/luadec.git luadec-src
+          test -d luadec-src/lua-5.3
+          make -C luadec-src/lua-5.3 linux
+          make -C luadec-src/luadec LUAVER=5.3
+          test -x luadec-src/luadec/luadec
+          luadec-src/luadec/luadec -h >/dev/null
 
       - name: Checkout authorized BRPlayerCharacterBase sample
         uses: actions/checkout@v4
@@ -107,14 +104,14 @@ jobs:
 
           def run_unluac():
               cmd = [
-                  "java", "-jar", "java-unluac/unluac.jar",
-                  "-o", str(unluac_out), str(sample),
+                  "luadec-src/luadec/luadec", str(sample),
               ]
               try:
                   p = subprocess.run(cmd, text=True, capture_output=True, timeout=240)
-                  return ("java_unluac", p.returncode, p.stdout[-4000:], p.stderr[-4000:])
+                  unluac_out.write_text(p.stdout, encoding="utf-8")
+                  return ("luadec_5_3", p.returncode, p.stdout[-4000:], p.stderr[-4000:])
               except subprocess.TimeoutExpired:
-                  return ("java_unluac", 124, "", "TIMEOUT")
+                  return ("luadec_5_3", 124, "", "TIMEOUT")
 
           def run_stream():
               try:
@@ -139,7 +136,7 @@ jobs:
               ok, note = validate_lua_source(unluac_out, expected_version="Lua 5.3")
               print(f"unluac_validation={ok} {note}", flush=True)
               if ok:
-                  candidates.append(FusionCandidate("java_unluac_5_3", unluac_out, note))
+                  candidates.append(FusionCandidate("luadec_5_3", unluac_out, note))
 
           if stream_out.is_file() and stream_out.stat().st_size:
               ok, note = validate_lua_source(stream_out, expected_version="Lua 5.3")
