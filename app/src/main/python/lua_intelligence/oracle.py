@@ -32,49 +32,57 @@ def _source_digest(path: Path) -> str:
 
 
 def parse_source(path: Path) -> OracleResult:
-    """Conservative syntax/structure oracle without executing Lua."""
+    """Conservative streaming syntax/structure oracle without executing Lua."""
     try:
-        text = path.read_text(encoding="utf-8", errors="strict")
-    except (OSError, UnicodeError) as exc:
+        size = path.stat().st_size
+        h = hashlib.sha256()
+        balance = {"(": 0, "[": 0, "{": 0}
+        pairs = {")": "(", "]": "[", "}": "{"}
+        mismatches = tokens = kw = control = 0
+        keywords = {
+            "and","break","do","else","elseif","end","false","for","function","goto",
+            "if","in","local","nil","not","or","repeat","return","then","true","until","while",
+        }
+        # The scanner deliberately works chunk-by-chunk so multi-megabyte files never
+        # need to be materialized as one Python string.
+        carry = ""
+        with path.open("rb") as fh:
+            while True:
+                raw = fh.read(1024 * 1024)
+                if not raw:
+                    break
+                h.update(raw)
+                text = carry + raw.decode("utf-8", "replace")
+                carry = text[-128:]
+                scan = text[:-128] if len(text) > 128 else ""
+                parts = re.findall(
+                    r"[A-Za-z_][A-Za-z0-9_]*|\\d+(?:\\.\\d+)?|==|~=|<=|>=|\\.\\.\\.|[{}()\\[\\],;:.+*/%^#=<>~-]",
+                    scan,
+                )
+                tokens += len(parts)
+                kw += sum(t in keywords for t in parts)
+                control += sum(t in {"if","for","while","repeat","function","do"} for t in parts)
+                for tok in parts:
+                    if tok in balance:
+                        balance[tok] += 1
+                    elif tok in pairs:
+                        if balance[pairs[tok]] <= 0:
+                            mismatches += 1
+                        else:
+                            balance[pairs[tok]] -= 1
+        tokens += len(re.findall(r"[A-Za-z_][A-Za-z0-9_]*|\\d+(?:\\.\\d+)?|==|~=|<=|>=|\\.\\.\\.|[{}()\\[\\],;:.+*/%^#=<>~-]", carry))
+        remaining = sum(balance.values())
+        if size == 0:
+            return OracleResult(False, "parser", 0.0, {"error": "empty source"})
+        score = max(0.0, 1.0 - min(1.0, (mismatches + remaining) / max(1, tokens // 20 + 1)))
+        return OracleResult(
+            mismatches == 0 and remaining == 0, "parser", score,
+            {"bytes": size, "tokens": tokens, "keywords": kw,
+             "control_tokens": control, "delimiter_errors": mismatches,
+             "open_delimiters": remaining, "sha256": h.hexdigest()},
+        )
+    except OSError as exc:
         return OracleResult(False, "parser", 0.0, {"error": str(exc)})
-
-    if not text.strip():
-        return OracleResult(False, "parser", 0.0, {"error": "empty source"})
-
-    # Strip comments only for structural token checks; long strings are preserved.
-    tokens = re.findall(
-        r"(?:::|==|~=|<=|>=|...|..|[A-Za-z_][A-Za-z0-9_]*|\d+(?:\.\d+)?|"
-        r"[{}()\[\],;:.+*/%^#=<>~-])",
-        text,
-    )
-    keywords = {
-        "and","break","do","else","elseif","end","false","for","function","goto",
-        "if","in","local","nil","not","or","repeat","return","then","true","until","while",
-    }
-    balance = {"(": 0, "[": 0, "{": 0}
-    pairs = {")": "(", "]": "[", "}": "{"}
-    mismatches = 0
-    for tok in tokens:
-        if tok in balance:
-            balance[tok] += 1
-        elif tok in pairs:
-            if balance[pairs[tok]] <= 0:
-                mismatches += 1
-            else:
-                balance[pairs[tok]] -= 1
-    remaining = sum(balance.values())
-    kw = sum(t in keywords for t in tokens)
-    control = sum(t in {"if","for","while","repeat","function","do"} for t in tokens)
-    score = max(0.0, 1.0 - min(1.0, (mismatches + remaining) / max(1, len(tokens) // 20 + 1)))
-    return OracleResult(
-        mismatches == 0 and remaining == 0,
-        "parser",
-        score,
-        {"bytes": path.stat().st_size, "tokens": len(tokens), "keywords": kw,
-         "control_tokens": control, "delimiter_errors": mismatches,
-         "open_delimiters": remaining, "sha256": _source_digest(path)},
-    )
-
 
 def compile_trusted_fixture(
     source: Path,
@@ -113,18 +121,32 @@ def compile_trusted_fixture(
 
 
 def semantic_signature(path: Path) -> dict:
-    """Dialect-neutral structural signature used for differential validation."""
-    text = path.read_text(encoding="utf-8", errors="replace")
-    tokens = re.findall(r"[A-Za-z_][A-Za-z0-9_]*|\d+(?:\.\d+)?|==|~=|<=|>=|\.\.\.|\S", text)
+    """Streaming dialect-neutral structural signature."""
+    token_count = 0
+    keyword_counts = {}
+    strings = functions = returns = 0
     keywords = {"function","return","if","then","elseif","else","end","for","while","repeat","until","local"}
+    try:
+        with path.open("r", encoding="utf-8", errors="replace") as fh:
+            for line in fh:
+                tokens = re.findall(r"[A-Za-z_][A-Za-z0-9_]*|\\d+(?:\\.\\d+)?|==|~=|<=|>=|\\.\\.\\.|\\S", line)
+                token_count += len(tokens)
+                for k in keywords:
+                    n = tokens.count(k)
+                    if n:
+                        keyword_counts[k] = keyword_counts.get(k, 0) + n
+                strings += len(re.findall(r'"(?:\\\\.|[^"\\\\])*"|\\'(?:\\\\.|[^\\'\\\\])*\\'', line))
+                functions += line.count("function")
+                returns += line.count("return")
+    except OSError as exc:
+        raise exc
     return {
-        "token_count": len(tokens),
-        "keyword_counts": {k: tokens.count(k) for k in sorted(keywords) if k in tokens},
-        "string_literals": len(re.findall(r'"(?:\\.|[^"\\])*"|\'(?:\\.|[^\'\\])*\'', text)),
-        "function_markers": text.count("function"),
-        "return_markers": text.count("return"),
+        "token_count": token_count,
+        "keyword_counts": {k: keyword_counts[k] for k in sorted(keyword_counts)},
+        "string_literals": strings,
+        "function_markers": functions,
+        "return_markers": returns,
     }
-
 
 def differential_validate(original: Path, reconstructed: Path) -> OracleResult:
     """Compare two source candidates without executing either."""
