@@ -30,3 +30,4 @@ jobs:
           python -m unittest tests/test_lua_intelligence_core.py -v
           python -m unittest tests/test_lua_intelligence_candidates.py -v
           python -m unittest tests/test_lua_intelligence_ir.py -v
+          python -m unittest tests/test_lua_intelligence_oracle.py -v
