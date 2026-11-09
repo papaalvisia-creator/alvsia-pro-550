@@ -1,7 +1,7 @@
 name: Smart Lua Native Engines Android ARM64 Candidate
 on:
   push:
-    branches: [ feat/alvsia-program-intelligence-core-20261109 ]
+    branches: [ feat/alvsia-program-intelligence-core-20261109, feat/smart-lua-recovery-fusion-20261109 ]
     paths:
       - .github/workflows/unluac-rs-android-candidate.yml
       - tools/build_unluac_rs_android.sh
