@@ -342,11 +342,20 @@ def stream_decompile_luajit(input_path: Path, out_path: Path) -> Tuple[bool, str
 
 def stream_unluac_jar(input_path: Path, out_path: Path, jars_dir: Optional[str] = None,
                       timeout: int = 1800) -> Tuple[bool, str]:
-    """Spawn java -jar unluac on the (possibly streaming) input file.
+    """Spawn java -jar unluac with bounded Android memory and wall-clock use.
 
-    Java's process spawning handles large input files natively because
-    the JVM reads the file from disk, not from stdin.
+    Desktop diagnostics retain the historical defaults. In the sealed Android
+    runtime, cap the child JVM and timeout to avoid the app + parser exhausting
+    device memory while other compatible engines remain available as fallback.
     """
+    android_mode = os.environ.get("ALVSIA_SEALED_RUNTIME") == "1"
+    effective_timeout = min(timeout, 120) if android_mode else timeout
+    heap_limit = os.environ.get(
+        "ALVSIA_UNLUAC_JAVA_HEAP", "192m" if android_mode else "512m"
+    )
+    if not re.fullmatch(r"[1-9][0-9]{1,3}m", heap_limit):
+        heap_limit = "192m" if android_mode else "512m"
+
     java = _find_java()
     if not java:
         return False, "java_runtime_unavailable"
@@ -361,12 +370,12 @@ def stream_unluac_jar(input_path: Path, out_path: Path, jars_dir: Optional[str] 
         return False, "unluac_jar_not_found"
     try:
         proc = subprocess.run(
-            [java, "-Xmx512m", "-jar", str(jar), str(input_path)],
+            [java, f"-Xmx{heap_limit}", "-jar", str(jar), str(input_path)],
             capture_output=True, text=True, errors="replace",
-            timeout=timeout
+            timeout=effective_timeout
         )
     except subprocess.TimeoutExpired:
-        return False, f"unluac_timeout_after_{timeout}s"
+        return False, f"unluac_timeout_after_{effective_timeout}s"
     except Exception as exc:
         return False, f"unluac_spawn_failed: {exc}"
     text = proc.stdout or ""
@@ -412,18 +421,16 @@ def probe_lua_header(path: Path) -> Dict[str, Any]:
         result["header_complete"] = len(chunk) >= 33
     return result
 
-def decompile_large(path: Path, out_dir: Path, jars_dir: Optional[str] = None) -> Dict[str, Any]:
+def decompile_large(path: Path, out_dir: Path, jars_dir: Optional[str] = None, preflight_only: bool = False) -> Dict[str, Any]:
     """Top-level entry for streaming decompilation of large Lua inputs.
 
     Pipeline:
       1. preflight_magic — 8-byte sniff
-      2. If chunked-DEFLATE or gzip → stream-inflate into temp file
-      3. Try VM-deobfuscation patterns FIRST (ALVSEAL3, ALVLUA1, BGMI-VM)
-         — custom VM protection may only yield structure/constants until its
-           matching opcode/dispatcher mapping is known.
-      4. Try unluac jar (Java) — handles large inputs natively on disk
-      5. Try pure-Python decompiler53 — works without Java
-      6. Honest failure: no fake .lua output
+      2. Try VM-deobfuscation patterns (ALVSEAL3, ALVLUA1, BGMI-VM)
+      3. In normal mode, unwrap supported containers and run legacy engines.
+      4. With preflight_only=True, return after pattern triage; the Smart Lua
+         orchestrator owns all standard engine attempts and output selection.
+      5. Honest failure: no fake .lua output.
     """
     p = Path(path)
     out = Path(out_dir)
@@ -451,11 +458,28 @@ def decompile_large(path: Path, out_dir: Path, jars_dir: Optional[str] = None) -
     try:
         from .pattern_registry import get_registry
         registry = get_registry()
-        matches = sorted(
-            registry.detect(p),
-            key=lambda pat: pat.confidence_boost,
-            reverse=True,
-        )
+        # Run only detectors compatible with the bounded header preflight.
+        # In particular, never parse every Lua 5.3 proto tree for an ordinary
+        # multi-megabyte source file just to discover that it is not BGMI VM.
+        eligible_ids = {
+            "source": {"ALVSEAL3_SOURCE"},
+            "luac_53": {"BGMI_VM"},
+        }.get(fmt, {"ALVLUA1_PAYLOAD"} if fmt.startswith("unknown_") else set())
+        matches = []
+        if hasattr(registry, "all_patterns"):
+            for pattern in registry.all_patterns():
+                if pattern.id not in eligible_ids:
+                    continue
+                try:
+                    if pattern.detector(p):
+                        matches.append(pattern)
+                except Exception:
+                    continue
+        else:
+            # Compatibility for third-party/test registries implementing the
+            # original detect(path) protocol.
+            matches = registry.detect(p)
+        matches.sort(key=lambda pat: pat.confidence_boost, reverse=True)
         pattern_attempts = []
         for pattern in matches:
             try:
@@ -486,6 +510,19 @@ def decompile_large(path: Path, out_dir: Path, jars_dir: Optional[str] = None) -
                 artifact_error = "handler reported partial analysis, not full source recovery"
             else:
                 artifact_error = str(deob_result.get("error", "unknown"))
+
+            if deob_result.get("recovered") is False:
+                result["recovered"] = False
+                result["mode"] = deob_result.get("mode") or "protected_partial"
+                result["pattern_id"] = pattern.id
+                result["pattern_label"] = pattern.label
+                for key in (
+                    "protos_parsed", "main_code_count", "main_const_count",
+                    "main_nested_count", "parse_errors", "structure_out",
+                    "constants_out", "report_out", "note",
+                ):
+                    if key in deob_result:
+                        result[key] = deob_result[key]
 
             if deob_result.get("ok") and deob_result.get("recovered") is True and artifact_error is None:
                 deob_result["pattern_id"] = pattern.id
@@ -522,6 +559,14 @@ def decompile_large(path: Path, out_dir: Path, jars_dir: Optional[str] = None) -
             )[:1000]
     except Exception as exc:
         result["pattern_registry_exception"] = str(exc)[:200]
+
+    # Smart Lua asks this function for protection-pattern triage only. Standard
+    # decompilation is owned by lua_engine.orchestrator so engines are not run
+    # twice or allowed to short-circuit the shared selection/validation path.
+    if preflight_only:
+        if not result.get("mode"):
+            result["mode"] = "pattern_preflight"
+        return result
 
     # ── Stage 2: unwrap comment-prefixed bytecode without touching input ─
     work_file = p

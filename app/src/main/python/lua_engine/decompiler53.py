@@ -50,8 +50,12 @@ def rk_idx(x): return x & ~BITRK
 LUA53_HEADER = bytes([0x1b, 0x4c, 0x75, 0x61, 0x53, 0x00,
                        0x19, 0x93, 0x0d, 0x0a, 0x1a, 0x0a])
 
+PUBGM_STRING_XOR_KEY = bytes.fromhex("112136474657a78d9d8490d8ab008c35261af7e45805b8b31507d02c1e8ff6c8")
+INVALID_CONSTANT_REF_COUNT = 0
+PUBGM_OPCODE_MAP = (17,18,19,20,21,22,23,24,25,26,27,28,29,0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46)
+
 class Reader:
-    def __init__(self, data: bytes):
+    def __init__(self, data: bytes, *, pubgm: bool = False, hybrid_long_string_size: bool = False):
         self._d = memoryview(data)
         self._pos = 0
         self.int_size = 4
@@ -60,6 +64,8 @@ class Reader:
         self.lua_int_size = 8
         self.lua_num_size = 8
         self.little = True
+        self.hybrid_long_string_size = hybrid_long_string_size
+        self.pubgm = pubgm
 
     def remaining(self):
         return len(self._d) - self._pos
@@ -107,10 +113,16 @@ class Reader:
     def string(self):
         size = self.uint8()
         if size == 0xFF:
-            size = self.sizet_()
+            if self.hybrid_long_string_size and self.sizet_size == 4:
+                raw = self._read(8)
+                size = struct.unpack("<Q" if self.little else ">Q", raw)[0]
+            else:
+                size = self.sizet_()
         if size == 0:
             return None
         raw = self._read(size - 1)
+        if self.pubgm:
+            raw = bytes(b ^ PUBGM_STRING_XOR_KEY[i % len(PUBGM_STRING_XOR_KEY)] for i, b in enumerate(raw))
         try:
             return raw.decode("utf-8", "replace")
         except Exception:
@@ -118,7 +130,13 @@ class Reader:
 
     def instruction(self):
         raw = self._read(self.instr_size)
-        return struct.unpack("<I" if self.little else ">I", raw)[0]
+        value = struct.unpack("<I" if self.little else ">I", raw)[0]
+        if self.pubgm:
+            op = value & 0x3F
+            if op >= len(PUBGM_OPCODE_MAP):
+                raise ValueError(f"invalid PUBG Mobile Lua opcode {op}")
+            value = (value & ~0x3F) | PUBGM_OPCODE_MAP[op]
+        return value
 
 
 # ── Proto (function prototype) ────────────────────────────────────────────────
@@ -202,8 +220,15 @@ def load_proto(r: Reader, depth: int = 0) -> Proto:
     p.protos = [load_proto(r, depth + 1) for _ in range(n)]
 
     # debug: lineinfo
-    n = _read_count(r, "lineinfo", 4)
-    p.lineinfo = [r.int_() for _ in range(n)]
+    if r.pubgm:
+        n = _read_count(r, "line delta", 1)
+        _deltas = [struct.unpack("b", r._read(1))[0] for _ in range(n)]
+        abs_n = _read_count(r, "absolute line", 8)
+        _abs_lines = [(r.int_(), r.int_()) for _ in range(abs_n)]
+        p.lineinfo = _deltas
+    else:
+        n = _read_count(r, "lineinfo", 4)
+        p.lineinfo = [r.int_() for _ in range(n)]
 
     # debug: locvars
     n = _read_count(r, "local variable", 9)
@@ -226,8 +251,8 @@ def load_proto(r: Reader, depth: int = 0) -> Proto:
     return p
 
 
-def load_chunk(data: bytes) -> Proto:
-    r = Reader(data)
+def load_chunk(data: bytes, *, hybrid_long_string_size: bool = False, pubgm: bool = False) -> Proto:
+    r = Reader(data, pubgm=pubgm, hybrid_long_string_size=hybrid_long_string_size)
     # header
     sig = r._read(4)
     if sig != b"\x1bLua":
@@ -242,6 +267,7 @@ def load_chunk(data: bytes) -> Proto:
     if luac_data != b"\x19\x93\x0d\x0a\x1a\x0a":
         raise ValueError("Lua 5.3 header check bytes do not match; input may be wrapped or protected")
     r.int_size = r.byte()
+    r.hybrid_long_string_size = hybrid_long_string_size
     r.sizet_size = r.byte()
     r.instr_size = r.byte()
     r.lua_int_size = r.byte()
@@ -292,6 +318,7 @@ class Decompiler:
         self.indent = "  " * depth
         # Register → expression string
         self.regs: Dict[int, str] = {}
+        self.invalid_constant_refs: List[tuple[int,int,str]] = []
         self.lines: List[str] = []
         # Track local variable names by register
         self.locals: Dict[int, str] = {}
@@ -349,6 +376,11 @@ class Decompiler:
         return best
 
     def _k(self, idx: int) -> str:
+        if idx < 0 or idx >= len(self.p.constants):
+            global INVALID_CONSTANT_REF_COUNT
+            INVALID_CONSTANT_REF_COUNT += 1
+            self.invalid_constant_refs.append((idx, len(self.p.constants), self.name))
+            return "nil"
         v = self.p.constants[idx]
         return self._lit(v)
 
@@ -392,6 +424,14 @@ class Decompiler:
 
     def _emit(self, line: str):
         self.lines.append(self.indent + line)
+
+    def _prefix(self, expr: str, pc: int, out: List[str], tag: str) -> str:
+        """Return a Lua prefix expression, materializing complex/literal targets."""
+        if re.match(r"^[A-Za-z_][A-Za-z0-9_]*$", expr) and expr not in LUA_KEYWORDS:
+            return expr
+        name = f"_alvsia_{tag}_{pc}"
+        out.append(f"{self.indent}{name} = {expr}")
+        return name
 
     def decompile(self) -> List[str]:
         p = self.p
@@ -451,7 +491,7 @@ class Decompiler:
                 if lv_decls:
                     for r, nm in lv_decls:
                         if r == a:
-                            out.append(f"{self.indent}local {nm} = {src}")
+                            out.append(f"{self.indent}{nm} = {src}")
                             self.regs[a] = nm
                             break
                     else:
@@ -470,7 +510,7 @@ class Decompiler:
                 if lv_decls:
                     for r, nm2 in lv_decls:
                         if r == a:
-                            out.append(f"{self.indent}local {nm2} = {val}")
+                            out.append(f"{self.indent}{nm2} = {val}")
                             self.regs[a] = nm2
                             break
                     else:
@@ -483,7 +523,7 @@ class Decompiler:
                 if i + 1 < n:
                     next_ins = p.code[i + 1]
                     nop, *_ = decode(next_ins)
-                    nax = (next_ins >> (POS_A + SIZE_A)) & ((1 << (SIZE_B + SIZE_C)) - 1)
+                    nax = (next_ins >> POS_A) & ((1 << (SIZE_A + SIZE_B + SIZE_C)) - 1)
                     val = self._k(nax)
                     skip_pcs.add(i + 1)
                 else:
@@ -531,7 +571,7 @@ class Decompiler:
                 if lv_decls:
                     for r, nm2 in lv_decls:
                         if r == a:
-                            out.append(f"{self.indent}local {nm2} = {expr}")
+                            out.append(f"{self.indent}{nm2} = {expr}")
                             self.regs[a] = nm2
                             break
                     else:
@@ -551,7 +591,7 @@ class Decompiler:
                 out.append(f"{self.indent}{uv}[{key}] = {val}")
 
             elif opname == "GETTABLE":
-                tbl = self._reg(b, i)
+                tbl = self._prefix(self._reg(b, i), i, out, "table")
                 key = self._rk(c, i)
                 if key.startswith('"') and key.endswith('"'):
                     ks = key[1:-1]
@@ -566,7 +606,7 @@ class Decompiler:
                 if lv_decls:
                     for r, nm2 in lv_decls:
                         if r == a:
-                            out.append(f"{self.indent}local {nm2} = {expr}")
+                            out.append(f"{self.indent}{nm2} = {expr}")
                             self.regs[a] = nm2
                             break
                     else:
@@ -575,7 +615,7 @@ class Decompiler:
                     out.append(f"{self.indent}{nm} = {expr}")
 
             elif opname == "SETTABLE":
-                tbl = self._reg(a, i)
+                tbl = self._prefix(self._local_at(i, a) or f"_r{a}", i, out, "settable")
                 key = self._rk(b, i)
                 val = self._rk(c, i)
                 if key.startswith('"') and key.endswith('"'):
@@ -587,11 +627,11 @@ class Decompiler:
 
             elif opname == "NEWTABLE":
                 nm = self._local_at(i + 1, a) or f"_r{a}"
-                self.regs[a] = "{}"
+                self.regs[a] = nm
                 if lv_decls:
                     for r, nm2 in lv_decls:
                         if r == a:
-                            out.append(f"{self.indent}local {nm2} = {{}}")
+                            out.append(f"{self.indent}{nm2} = {{}}")
                             self.regs[a] = nm2
                             break
                     else:
@@ -600,7 +640,7 @@ class Decompiler:
                     out.append(f"{self.indent}{nm} = {{}}")
 
             elif opname == "SELF":
-                obj = self._reg(b, i)
+                obj = self._prefix(self._reg(b, i), i, out, "self")
                 key = self._rk(c, i)
                 nm_a1 = self._local_at(i + 1, a + 1) or f"_r{a+1}"
                 nm_a = self._local_at(i + 1, a) or f"_r{a}"
@@ -621,13 +661,13 @@ class Decompiler:
                 sym = _BINOP_MAP[opname]
                 lhs = self._rk(b, i)
                 rhs = self._rk(c, i)
-                expr = f"{lhs} {sym} {rhs}"
+                expr = f"({lhs}) {sym} ({rhs})"
                 nm = self._local_at(i + 1, a) or f"_r{a}"
                 self.regs[a] = expr
                 if lv_decls:
                     for r, nm2 in lv_decls:
                         if r == a:
-                            out.append(f"{self.indent}local {nm2} = {expr}")
+                            out.append(f"{self.indent}{nm2} = {expr}")
                             self.regs[a] = nm2
                             break
                     else:
@@ -638,13 +678,13 @@ class Decompiler:
             elif opname in _UNOP_MAP:
                 sym = _UNOP_MAP[opname]
                 src = self._reg(b, i)
-                expr = f"{sym}{src}"
+                expr = f"({sym}{src})"
                 nm = self._local_at(i + 1, a) or f"_r{a}"
                 self.regs[a] = expr
                 if lv_decls:
                     for r, nm2 in lv_decls:
                         if r == a:
-                            out.append(f"{self.indent}local {nm2} = {expr}")
+                            out.append(f"{self.indent}{nm2} = {expr}")
                             self.regs[a] = nm2
                             break
                     else:
@@ -654,14 +694,19 @@ class Decompiler:
 
             elif opname == "CONCAT":
                 parts = [self._reg(j, i) for j in range(b, c + 1)]
-                expr = " .. ".join(parts)
+                if not parts:
+                    expr = '""'
+                elif len(parts) == 1:
+                    expr = parts[0]
+                else:
+                    expr = "(" + " .. ".join(f"({part})" for part in parts) + ")"
                 nm = self._local_at(i + 1, a) or f"_r{a}"
                 self.regs[a] = expr
                 out.append(f"{self.indent}{nm} = {expr}")
 
             elif opname == "LEN":
                 src = self._reg(b, i)
-                expr = f"#{src}"
+                expr = f"(#{src})"
                 nm = self._local_at(i + 1, a) or f"_r{a}"
                 self.regs[a] = expr
                 out.append(f"{self.indent}{nm} = {expr}")
@@ -701,11 +746,22 @@ class Decompiler:
                 func = self._reg(a, i)
                 arg_count = b - 1
                 if arg_count < 0:
-                    args = [self._reg(j, i) for j in range(a + 1, a + 2)] + ["..."]
+                    args = [self._reg(j, i) for j in range(a + 1, a + 2)]
+                    if self.p.is_vararg:
+                        args.append("...")
                 else:
                     args = [self._reg(j, i) for j in range(a + 1, a + 1 + arg_count)]
+                # C == 0 means multret; exact register arity is dynamic.
+                # Keep the reconstructed call syntactically valid instead of emitting
+                # an empty assignment target.
                 ret_count = c - 1
-                call_expr = f"{func}({', '.join(args)})"
+                # Materialize complex call targets to preserve Lua precedence.
+                call_target = func
+                if (not re.match(r"^[A-Za-z_][A-Za-z0-9_]*$", func)
+                        or func in LUA_KEYWORDS):
+                    call_target = f"_alvsia_call_{i}"
+                    out.append(f"{self.indent}{call_target} = {func}")
+                call_expr = f"{call_target}({', '.join(args)})"
                 if ret_count == 0:
                     out.append(f"{self.indent}{call_expr}")
                 elif ret_count == 1:
@@ -714,22 +770,29 @@ class Decompiler:
                     if lv_decls:
                         for r, nm2 in lv_decls:
                             if r == a:
-                                out.append(f"{self.indent}local {nm2} = {call_expr}")
+                                out.append(f"{self.indent}{nm2} = {call_expr}")
                                 self.regs[a] = nm2
                                 break
                         else:
                             out.append(f"{self.indent}{nm} = {call_expr}")
                     else:
                         out.append(f"{self.indent}{nm} = {call_expr}")
+                elif c == 0:
+                    # Multret result count is unknown at this reconstruction layer.
+                    # Preserve execution order and syntax; downstream dataflow can
+                    # still inspect the original bytecode for exact arity.
+                    out.append(f"{self.indent}{call_expr}")
                 else:
                     rets = []
                     for j in range(a, a + ret_count):
                         nm = self._local_at(i + 1, j) or f"_r{j}"
+                        if not re.match(r"^[A-Za-z_][A-Za-z0-9_]*$", nm):
+                            nm = f"_r{j}"
                         self.regs[j] = nm
                         rets.append(nm)
-                    lhs = ", ".join(rets)
+                    lhs = ", ".join(rets) or f"_r{a}"
                     if lv_decls:
-                        out.append(f"{self.indent}local {lhs} = {call_expr}")
+                        out.append(f"{self.indent}{lhs} = {call_expr}")
                     else:
                         out.append(f"{self.indent}{lhs} = {call_expr}")
 
@@ -737,38 +800,58 @@ class Decompiler:
                 func = self._reg(a, i)
                 arg_count = b - 1
                 if arg_count < 0:
-                    args = [self._reg(j, i) for j in range(a + 1, a + 2)] + ["..."]
+                    args = [self._reg(j, i) for j in range(a + 1, a + 2)]
+                    if self.p.is_vararg:
+                        args.append("...")
                 else:
                     args = [self._reg(j, i) for j in range(a + 1, a + 1 + arg_count)]
-                out.append(f"{self.indent}return {func}({', '.join(args)})")
+                if (not re.match(r"^[A-Za-z_][A-Za-z0-9_]*$", func)
+                        or func in LUA_KEYWORDS):
+                    func = f"_alvsia_tailcall_{i}"
+                    out.append(f"{self.indent}{func} = {self._reg(a, i)}")
+                # Tail calls are terminal in bytecode, but later bytecode may
+                # still be emitted by the conservative linear reconstruction. Wrap
+                # the return in a nested block so Lua permits subsequent statements.
+                out.append(f"{self.indent}do return {func}({', '.join(args)}) end")
 
             elif opname == "RETURN":
                 if b == 1:
-                    out.append(f"{self.indent}return")
+                    out.append(f"{self.indent}do return end")
                 elif b == 2:
                     src = self._reg(a, i)
-                    out.append(f"{self.indent}return {src}")
+                    out.append(f"{self.indent}do return {src} end")
                 else:
                     count = b - 1
                     if count < 0:
-                        srcs = [self._reg(j, i) for j in range(a, a + 2)] + ["..."]
+                        srcs = [self._reg(j, i) for j in range(a, a + 2)]
+                        if self.p.is_vararg:
+                            srcs.append("...")
                     else:
                         srcs = [self._reg(j, i) for j in range(a, a + count)]
-                    out.append(f"{self.indent}return {', '.join(srcs)}")
+                    out.append(f"{self.indent}do return {', '.join(srcs)} end")
 
             elif opname == "VARARG":
                 nm = self._local_at(i + 1, a) or f"_r{a}"
                 self.regs[a] = "..."
-                if b == 1:
+                if b == 0:
+                    # B == 0 is multret vararg. Lua source cannot use "..." on
+                    # the left-hand side, so capture one value safely and retain
+                    # an explicit diagnostic comment.
+                    out.append(f"{self.indent}{nm} = ...")
+                    out.append(f"{self.indent}-- VARARG multret reconstructed from register {a}")
+                elif b == 1:
                     out.append(f"{self.indent}{nm} = ...")
                 else:
                     count = b - 1
                     names = []
                     for j in range(a, a + count):
                         nm2 = self._local_at(i + 1, j) or f"_r{j}"
+                        if not re.match(r"^[A-Za-z_][A-Za-z0-9_]*$", nm2):
+                            nm2 = f"_r{j}"
                         self.regs[j] = "..."
                         names.append(nm2)
-                    out.append(f"{self.indent}{', '.join(names)} = ...")
+                    lhs = ", ".join(names) or nm
+                    out.append(f"{self.indent}{lhs} = ...")
 
             elif opname == "CLOSURE":
                 sub = p.protos[bx]
@@ -789,18 +872,18 @@ class Decompiler:
                 if lv_decls:
                     for r, nm2 in lv_decls:
                         if r == a:
-                            out.append(f"{self.indent}local function {nm2}({', '.join(params)})")
+                            out.append(f"{self.indent}{nm2} = function({', '.join(params)})")
                             self.regs[a] = nm2
                             break
                     else:
-                        out.append(f"{self.indent}local function {sub_name}({', '.join(params)})")
+                        out.append(f"{self.indent}{sub_name} = function({', '.join(params)})")
                 else:
-                    out.append(f"{self.indent}local function {sub_name}({', '.join(params)})")
+                    out.append(f"{self.indent}{sub_name} = function({', '.join(params)})")
                 out.extend(sub_body)
                 out.append(f"{self.indent}end")
 
             elif opname == "SETLIST":
-                tbl = self._reg(a, i)
+                tbl = self._prefix(self._local_at(i, a) or f"_r{a}", i, out, "setlist")
                 count = b if b > 0 else 1
                 base = (c - 1) * 50
                 for j in range(1, count + 1):
@@ -816,16 +899,30 @@ class Decompiler:
                 limit = self._reg(limit_reg, i)
                 step = self._reg(step_reg, i)
                 var_nm = self._local_at(i + 1, var_reg) or f"_i{a}"
-                out.append(f"{self.indent}for {var_nm} = {idx}, {limit}, {step} do")
+                # Conservative linear recovery does not yet own the full CFG.
+                # Emit loop metadata as comments rather than opening a Lua block
+                # that could become structurally mismatched after jump recovery.
+                out.append(f"{self.indent}-- FORPREP {var_nm} = {idx}, {limit}, {step}")
 
             elif opname == "FORLOOP":
-                out.append(f"{self.indent}end -- forloop")
+                out.append(f"{self.indent}-- FORLOOP register {a}")
 
             elif opname == "TFORCALL":
                 func = self._reg(a, i)
                 args_regs = [self._reg(a + 1, i), self._reg(a + 2, i)]
-                rets = [self._local_at(i + 1, a + 3 + j) or f"_r{a+3+j}" for j in range(c)]
-                out.append(f"{self.indent}{', '.join(rets)} = {func}({', '.join(args_regs)})")
+                call_target = func
+                if (not re.match(r"^[A-Za-z_][A-Za-z0-9_]*$", func)
+                        or func in LUA_KEYWORDS):
+                    call_target = f"_alvsia_tfor_{i}"
+                    out.append(f"{self.indent}{call_target} = {func}")
+                rets = []
+                for j in range(c):
+                    nm = self._local_at(i + 1, a + 3 + j) or f"_r{a+3+j}"
+                    if not re.match(r"^[A-Za-z_][A-Za-z0-9_]*$", nm):
+                        nm = f"_r{a+3+j}"
+                    rets.append(nm)
+                lhs = ", ".join(rets) or f"_r{a+3}"
+                out.append(f"{self.indent}{lhs} = {call_target}({', '.join(args_regs)})")
 
             elif opname == "TFORLOOP":
                 out.append(f"{self.indent}-- tforloop")
@@ -842,7 +939,17 @@ class Decompiler:
 
 # ── Top-level entry ───────────────────────────────────────────────────────────
 def decompile_bytes(data: bytes) -> str:
-    proto = load_chunk(data)
+    global INVALID_CONSTANT_REF_COUNT
+    INVALID_CONSTANT_REF_COUNT = 0
+    errors = []
+    for variant in ("standard", "pubgm"):
+        try:
+            proto = load_chunk(data, pubgm=(variant == "pubgm"))
+            break
+        except Exception as exc:
+            errors.append(f"{variant}: {exc}")
+    else:
+        raise ValueError(" ; ".join(errors))
     # Top-level params
     params = []
     if proto.is_vararg:
@@ -859,6 +966,8 @@ def decompile_bytes(data: bytes) -> str:
 
     # Collect nested function definitions that were emitted inline
     # Top-level body IS the chunk body — no wrapping function needed
+    if INVALID_CONSTANT_REF_COUNT:
+        header.append(f"-- ALVSIA_INVALID_CONSTANT_REF_COUNT={INVALID_CONSTANT_REF_COUNT}")
     lines = header + body
     return "\n".join(lines)
 

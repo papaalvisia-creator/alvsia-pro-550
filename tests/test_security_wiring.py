@@ -31,6 +31,28 @@ class SecurityWiringTests(unittest.TestCase):
         self.assertIn("FLAG_SECURE", activity)
         self.assertIn("filterTouchesWhenObscured = true", activity)
 
+    def test_flag_secure_is_applied_at_activity_creation_and_never_cleared(self):
+        activity = read("app/src/main/java/com/alvsia/pro/MainActivity.kt")
+        self.assertIn("window.setFlags(", activity)
+        self.assertIn("WindowManager.LayoutParams.FLAG_SECURE", activity)
+        self.assertNotIn("window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)", activity)
+
+    def test_network_proxy_detection_and_guard_health_are_wired(self):
+        network = read("app/src/main/java/com/alvsia/pro/sec/NetworkGuard.kt")
+        rasp = read("app/src/main/java/com/alvsia/pro/sec/RaspEngine.kt")
+        self.assertIn("fun detect_proxy(ctx: Context)", network)
+        self.assertIn("fun net_guard(ctx: Context)", network)
+        self.assertIn("cm.defaultProxy", network)
+        self.assertIn("ProxySelector.getDefault()", network)
+        self.assertIn("NetworkGuard.detect_proxy(ctx)", rasp)
+        self.assertIn("NetworkGuard.net_guard(ctx)", rasp)
+
+    def test_medium_lua_chunks_bypass_in_process_art_unluac(self):
+        runner = read("app/src/main/java/com/alvsia/pro/tool/UnluacRunner.kt")
+        self.assertIn("ART_SAFE_LIMIT = 256L * 1024L", runner)
+        self.assertIn("Python fallback will handle this input", runner)
+        self.assertIn("normalizedSize > ART_SAFE_LIMIT", runner)
+
     def test_pinned_panel_transport_does_not_follow_redirects(self):
         client = read("app/src/main/java/com/alvsia/pro/panel/PanelClient.kt")
         self.assertIn(".followRedirects(false)", client)

@@ -1,0 +1,219 @@
+name: ALVSIA PRO Final Release Pipeline
+
+on:
+  push:
+    branches: [ feat/lua-intelligence-orchestrator-20261107 ]
+    paths:
+      - '.github/workflows/alvsia-final-release.yml'
+      - '.github/workflows/android-validation.yml'
+      - 'app/**'
+      - 'tools/**'
+      - 'tests/**'
+      - 'build.gradle.kts'
+      - 'settings.gradle.kts'
+      - 'gradle/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: alvsia-final-release-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Host Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Rust + Android target
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android
+
+      - name: Android NDK and CMake
+        run: |
+          set -euo pipefail
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "ndk;27.0.12077973" "cmake;3.22.1"
+          test -d "$ANDROID_HOME/ndk/27.0.12077973"
+
+      - name: Build native Smart Lua engines
+        env:
+          ANDROID_NDK_VERSION: 27.0.12077973
+        run: |
+          set -euo pipefail
+          bash tools/build_unluac_rs_android.sh
+          bash tools/build_luau_decompiler_android.sh
+          test -s app/src/main/jniLibs/arm64-v8a/libunluac-cli.so
+          test -s app/src/main/jniLibs/arm64-v8a/libluau-decompiler-cli.so
+
+      - name: Source and Lua validation
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y lua5.3
+          command -v luac5.3
+          python3 tools/security_release_check.py
+          python3 -m unittest tests.test_security_wiring
+          python3 -m pip install --disable-pip-version-check pytest && python3 -m pytest -q tests/test_tool_dispatch.py
+          python3 tests/test_lua_engine.py
+          python3 -m pytest -q tests/test_lua_orchestrator.py
+          python3 tests/test_vm_protect_roundtrip.py
+
+      - name: Prepare sealed release
+        run: |
+          set -euo pipefail
+          python3 -m pip install --disable-pip-version-check cryptography pycryptodome pytest
+          SEED=$(python3 -c "import secrets; print(secrets.token_hex(32))")
+          echo "::add-mask::$SEED"
+          export ALVSIA_SEAL_SEED_HEX="$SEED"
+          python3 tools/seal_python.py --seal
+          python3 tools/seal_assets.py
+          python3 - "$SEED" <<'PY'
+          import pathlib, sys
+          seed=sys.argv[1]
+          p=pathlib.Path("app/src/main/cpp/rasp_guard.cpp")
+          s=p.read_text()
+          old="static const unsigned char _alvsia_seal_seed[32] = {0};"
+          if s.count(old)!=1:
+              raise SystemExit("seal seed placeholder missing or ambiguous")
+          values=", ".join("0x"+seed[i:i+2] for i in range(0,64,2))
+          p.write_text(s.replace(old,"static const unsigned char _alvsia_seal_seed[32] = {"+values+"};"))
+          PY
+
+      - name: Build unsigned APK
+        run: |
+          set -euo pipefail
+          chmod +x ./gradlew
+          bash tools/run_gradle_with_retry.sh ./gradlew assembleRelease --no-daemon --stacktrace
+          APK=$(find app/build/outputs/apk/release -type f -name '*.apk' | head -n 1)
+          test -s "$APK"
+          mkdir -p validation-artifacts
+          cp "$APK" validation-artifacts/ALVISIA_PRO_5.5.2-hardened_release_unsigned.apk
+          sha256sum validation-artifacts/ALVISIA_PRO_5.5.2-hardened_release_unsigned.apk
+
+      - name: Sign baseline for XOP
+        env:
+          ALVSIA_KEYSTORE_BASE64: ${{ secrets.ALVSIA_KEYSTORE_BASE64 }}
+          ALVSIA_KEYSTORE_PASSWORD: ${{ secrets.ALVSIA_KEYSTORE_PASSWORD }}
+          ALVSIA_KEY_ALIAS: ${{ secrets.ALVSIA_KEY_ALIAS }}
+          ALVSIA_KEY_PASSWORD: ${{ secrets.ALVSIA_KEY_PASSWORD }}
+          CM_KEYSTORE: ${{ secrets.CM_KEYSTORE }}
+          CM_KEYSTORE_PASSWORD: ${{ secrets.CM_KEYSTORE_PASSWORD }}
+          CM_KEY_ALIAS: ${{ secrets.CM_KEY_ALIAS }}
+          CM_KEY_PASSWORD: ${{ secrets.CM_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          KS="$RUNNER_TEMP/alvsia-release.jks"
+          KSPASS="${ALVSIA_KEYSTORE_PASSWORD:-${CM_KEYSTORE_PASSWORD:-}}"
+          ALIAS="${ALVSIA_KEY_ALIAS:-${CM_KEY_ALIAS:-alvsia}}"
+          KEYPASS="${ALVSIA_KEY_PASSWORD:-${CM_KEY_PASSWORD:-$KSPASS}}"
+          if [ -n "${ALVSIA_KEYSTORE_BASE64:-}" ]; then
+            printf '%s' "$ALVSIA_KEYSTORE_BASE64" | base64 --decode > "$KS"
+          elif [ -n "${CM_KEYSTORE:-}" ]; then
+            if [ -f "$CM_KEYSTORE" ]; then cp "$CM_KEYSTORE" "$KS"; else printf '%s' "$CM_KEYSTORE" | base64 --decode > "$KS"; fi
+          else
+            echo "ERROR: no signing keystore secret is available"
+            exit 1
+          fi
+          test -s "$KS"
+          test -n "$KSPASS"
+          export KSPASS KEYPASS
+          APKSIGNER=$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -n 1)
+          "$APKSIGNER" sign --ks "$KS" --ks-key-alias "$ALIAS" --ks-pass env:KSPASS --key-pass env:KEYPASS             --out "$RUNNER_TEMP/alvsia-xop-input.apk" validation-artifacts/ALVISIA_PRO_5.5.2-hardened_release_unsigned.apk
+          "$APKSIGNER" verify --verbose --print-certs "$RUNNER_TEMP/alvsia-xop-input.apk"
+
+      - name: Build XopProtector and pack candidate
+        run: |
+          set -euo pipefail
+          XOP="$RUNNER_TEMP/xopprotector-src"
+          git clone --filter=blob:none https://github.com/xopJack/XopProtector.git "$XOP"
+          git -C "$XOP" checkout --detach 5990c31
+          rm -f "$XOP/local.properties"
+          python3 - "$XOP/settings.gradle.kts" "$XOP/gradle.properties" <<'PY'
+          import pathlib, re, sys
+          settings = pathlib.Path(sys.argv[1])
+          props = pathlib.Path(sys.argv[2])
+          ss = settings.read_text()
+          lines = ss.splitlines(True)
+          filtered = [ln for ln in lines if not re.search(r'E:/Android/|E:\\\\Android\\\\', ln)]
+          if len(filtered) == len(lines):
+              raise SystemExit("XOP settings Windows SDK candidate not found; upstream layout changed")
+          settings.write_text("".join(filtered))
+          ps = props.read_text()
+          p_lines = ps.splitlines(True)
+          p_filtered = [ln for ln in p_lines if not ln.lstrip().startswith("unimp.sdk.libs=")]
+          if len(p_filtered) == len(p_lines):
+              raise SystemExit("XOP unimp.sdk.libs property not found; upstream layout changed")
+          props.write_text("".join(p_filtered))
+          PY
+          python3 - "$XOP/native/build.gradle.kts" <<'PY'
+          import pathlib,sys
+          p=pathlib.Path(sys.argv[1]); s=p.read_text()
+          if "ndkVersion" in s: raise SystemExit("unexpected Xop native Gradle layout")
+          marker="android {"
+          if s.count(marker)!=1: raise SystemExit("unexpected Xop native Gradle layout")
+          p.write_text(s.replace(marker, marker+'\n    ndkVersion = "27.0.12077973"',1))
+          PY
+          chmod +x "$XOP/gradlew"
+          (cd "$XOP" && bash "$GITHUB_WORKSPACE/tools/run_gradle_with_retry.sh" ./gradlew --no-daemon :packer:jar exportShellFiles)
+          PACKER=$(find "$XOP/packer/build/libs" -maxdepth 1 -type f -name 'protector-packer-*.jar' ! -name '*-sources.jar' | head -n 1)
+          test -s "$PACKER"
+          java -jar "$PACKER" "$RUNNER_TEMP/alvsia-xop-input.apk"             -o "$RUNNER_TEMP/alvsia-xop-candidate.apk"             --shell-dir "$XOP/executable/shell-files" --profile industry --protect-so
+          test -s "$RUNNER_TEMP/alvsia-xop-candidate.apk"
+          python3 tools/prepare_xop_final.py "$RUNNER_TEMP/alvsia-xop-input.apk" "$RUNNER_TEMP/alvsia-xop-candidate.apk"
+
+      - name: Sign final XOP APK and verify
+        env:
+          ALVSIA_KEYSTORE_BASE64: ${{ secrets.ALVSIA_KEYSTORE_BASE64 }}
+          ALVSIA_KEYSTORE_PASSWORD: ${{ secrets.ALVSIA_KEYSTORE_PASSWORD }}
+          ALVSIA_KEY_ALIAS: ${{ secrets.ALVSIA_KEY_ALIAS }}
+          ALVSIA_KEY_PASSWORD: ${{ secrets.ALVSIA_KEY_PASSWORD }}
+          CM_KEYSTORE: ${{ secrets.CM_KEYSTORE }}
+          CM_KEYSTORE_PASSWORD: ${{ secrets.CM_KEYSTORE_PASSWORD }}
+          CM_KEY_ALIAS: ${{ secrets.CM_KEY_ALIAS }}
+          CM_KEY_PASSWORD: ${{ secrets.CM_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          KS="$RUNNER_TEMP/alvsia-release.jks"
+          KSPASS="${ALVSIA_KEYSTORE_PASSWORD:-${CM_KEYSTORE_PASSWORD:-}}"
+          ALIAS="${ALVSIA_KEY_ALIAS:-${CM_KEY_ALIAS:-alvsia}}"
+          KEYPASS="${ALVSIA_KEY_PASSWORD:-${CM_KEY_PASSWORD:-$KSPASS}}"
+          if [ -n "${ALVSIA_KEYSTORE_BASE64:-}" ]; then printf '%s' "$ALVSIA_KEYSTORE_BASE64" | base64 --decode > "$KS"
+          elif [ -n "${CM_KEYSTORE:-}" ]; then if [ -f "$CM_KEYSTORE" ]; then cp "$CM_KEYSTORE" "$KS"; else printf '%s' "$CM_KEYSTORE" | base64 --decode > "$KS"; fi
+          else echo "ERROR: no signing keystore secret is available"; exit 1; fi
+          export KSPASS KEYPASS
+          APKSIGNER=$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -n 1)
+          ZIPALIGN=$(find "$ANDROID_HOME/build-tools" -type f -name zipalign | sort -V | tail -n 1)
+          "$ZIPALIGN" -p 4 "$RUNNER_TEMP/alvsia-xop-candidate.apk" "$RUNNER_TEMP/alvsia-xop-aligned.apk"
+          "$APKSIGNER" sign --ks "$KS" --ks-key-alias "$ALIAS" --ks-pass env:KSPASS --key-pass env:KEYPASS             --out validation-artifacts/ALVISIA_PRO_5.5.2-xop_candidate_signed.apk "$RUNNER_TEMP/alvsia-xop-aligned.apk"
+          "$APKSIGNER" verify --verbose --print-certs validation-artifacts/ALVISIA_PRO_5.5.2-xop_candidate_signed.apk
+          python3 tools/audit_release_apk.py validation-artifacts/ALVISIA_PRO_5.5.2-xop_candidate_signed.apk
+          sha256sum validation-artifacts/ALVISIA_PRO_5.5.2-xop_candidate_signed.apk
+
+      - name: Upload final APK and audit
+        uses: actions/upload-artifact@v4
+        with:
+          name: ALVISIA_PRO_5.5.2-final-xop-signed
+          path: |
+            validation-artifacts/ALVISIA_PRO_5.5.2-hardened_release_unsigned.apk
+            validation-artifacts/ALVISIA_PRO_5.5.2-xop_candidate_signed.apk
+            release_security_audit.txt
+          if-no-files-found: error
+
+# release pipeline trigger checkpoint

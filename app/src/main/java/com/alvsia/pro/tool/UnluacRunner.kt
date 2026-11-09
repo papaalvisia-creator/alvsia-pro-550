@@ -31,8 +31,15 @@ import java.util.zip.Inflater
  */
 object UnluacRunner {
 
-    /** Hard safety limit for the in-process (ART) unluac call. */
-    private const val ART_SAFE_LIMIT = 1L * 1024L * 1024L
+    /**
+     * Conservative safety limit for in-process ART unluac.
+     *
+     * unluac builds a sizeable object graph from bytecode and can consume
+     * several times the input size. A ~1 MB Lua chunk is not safe to parse
+     * inside the app process on low-memory Android devices; route it to the
+     * isolated Chaquopy/streaming pipeline instead.
+     */
+    private const val ART_SAFE_LIMIT = 256L * 1024L
 
     /**
      * Above this, we go straight to the streaming Python fallback rather

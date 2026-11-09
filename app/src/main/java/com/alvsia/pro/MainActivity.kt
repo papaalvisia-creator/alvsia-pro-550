@@ -62,6 +62,13 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         // Reject obscured/tapjacked touches at the activity root.
         window.decorView.filterTouchesWhenObscured = true
+        // Keep the entire application window capture-protected from first frame.
+        // Do not clear FLAG_SECURE on splash/home/submenu: security must not depend
+        // on a transient Compose screen state or LaunchedEffect scheduling.
+        window.setFlags(
+            WindowManager.LayoutParams.FLAG_SECURE,
+            WindowManager.LayoutParams.FLAG_SECURE
+        )
         // Never expose app content in Android Recents previews (API 33+).
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             setRecentsScreenshotEnabled(false)
@@ -96,19 +103,7 @@ class MainActivity : ComponentActivity() {
                 val ctx = LocalContext.current
                 val hwid = remember { Hwid.deviceId(ctx) }
 
-                // Protect credentials and private data on sensitive screens.
-                // Login contains a license key; tool/profile contain workspace data.
-                LaunchedEffect(screen) {
-                    if (screen == "login" || screen == "loading" ||
-                        screen == "tool" || screen == "profile" || screen == "output") {
-                        window.setFlags(
-                            WindowManager.LayoutParams.FLAG_SECURE,
-                            WindowManager.LayoutParams.FLAG_SECURE
-                        )
-                    } else {
-                        window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
-                    }
-                }
+                // FLAG_SECURE is applied at Activity creation and remains enabled.
 
                 LaunchedEffect(screen, license, hwid) {
                     if (screen == "home" && license.isNotBlank() && panel.sessionToken.length == 64) {
@@ -389,48 +384,70 @@ class MainActivity : ComponentActivity() {
                                     running = true
                                     logs = listOf("> preparing ${sub.id}...")
                                     lifecycleScope.launch {
-                                        val result = withContext(Dispatchers.IO) {
-                                            engine.runSub(moduleId, sub.id, uri, extra)
-                                        }
-                                        logs = result
-                                        val success = result.any { it.startsWith("OK ") } &&
-                                            result.none { it.startsWith("X ") }
-                                        val eventDetail = "${sub.id}: " +
-                                            (result.firstOrNull { it.startsWith("X ") } ?: if (success) "operation completed" else "operation needs review")
-                                        val eventKind = if (success) "TOOL_OK" else "TOOL_ERROR"
-                                        TelegramNotifier.notifyModuleStatus(
-                                            this@MainActivity,
-                                            sub.title,
-                                            if (success) "SUCCESS" else "ATTENTION",
-                                            eventDetail.take(200)
-                                        )
-                                        val scanLike = sub.id.contains("scan", ignoreCase = true) ||
-                                            sub.title.contains("scan", ignoreCase = true)
-                                        if (scanLike) {
-                                            val scanCounts = mapOf(
-                                                "success" to result.count { it.startsWith("OK ") },
-                                                "error" to result.count { it.startsWith("X ") },
-                                                "other" to result.count { !it.startsWith("OK ") && !it.startsWith("X ") }
+                                        try {
+                                            val result = withContext(Dispatchers.IO) {
+                                                try {
+                                                    engine.runSub(moduleId, sub.id, uri, extra)
+                                                } catch (t: Throwable) {
+                                                    val root = t.cause ?: t
+                                                    listOf(
+                                                        "X TOOL EXECUTION FAILED: ${root.javaClass.simpleName}: ${root.message ?: "no detail"}",
+                                                        "diagnostic: module=${moduleId}; subtool=${sub.id}",
+                                                        "Input file is preserved; no successful output is claimed."
+                                                    )
+                                                }
+                                            }
+                                            logs = result
+                                            val success = result.any { it.startsWith("OK ") } &&
+                                                result.none { it.startsWith("X ") }
+                                            val eventDetail = "${sub.id}: " +
+                                                (result.firstOrNull { it.startsWith("X ") } ?: if (success) "operation completed" else "operation needs review")
+                                            val eventKind = if (success) "TOOL_OK" else "TOOL_ERROR"
+                                            try {
+                                                TelegramNotifier.notifyModuleStatus(
+                                                    this@MainActivity,
+                                                    sub.title,
+                                                    if (success) "SUCCESS" else "ATTENTION",
+                                                    eventDetail.take(200)
+                                                )
+                                                val scanLike = sub.id.contains("scan", ignoreCase = true) ||
+                                                    sub.title.contains("scan", ignoreCase = true)
+                                                if (scanLike) {
+                                                    val scanCounts = mapOf(
+                                                        "success" to result.count { it.startsWith("OK ") },
+                                                        "error" to result.count { it.startsWith("X ") },
+                                                        "other" to result.count { !it.startsWith("OK ") && !it.startsWith("X ") }
+                                                    )
+                                                    TelegramNotifier.notifyScanComplete(
+                                                        this@MainActivity,
+                                                        result.size,
+                                                        scanCounts
+                                                    )
+                                                }
+                                                TelegramNotifier.notify(
+                                                    this@MainActivity,
+                                                    eventKind,
+                                                    eventDetail.take(200),
+                                                    license
+                                                )
+                                                TacticalNotifier.post(
+                                                    this@MainActivity,
+                                                    if (success) "OPERATION COMPLETE" else "OPERATION NEEDS ATTENTION",
+                                                    "${sub.title}: ${result.firstOrNull { it.startsWith("X ") } ?: if (success) "Operation completed." else "Review the operation log for details."}",
+                                                    551
+                                                )
+                                            } catch (_: Throwable) {
+                                                // Notifications must never terminate a tool run.
+                                            }
+                                        } catch (t: Throwable) {
+                                            logs = listOf(
+                                                "X UNEXPECTED TOOL FAILURE: ${t.javaClass.simpleName}: ${t.message ?: "no detail"}",
+                                                "diagnostic: module=${moduleId}; subtool=${sub.id}",
+                                                "Input file is preserved where staging completed."
                                             )
-                                            TelegramNotifier.notifyScanComplete(
-                                                this@MainActivity,
-                                                result.size,
-                                                scanCounts
-                                            )
+                                        } finally {
+                                            running = false
                                         }
-                                        TelegramNotifier.notify(
-                                            this@MainActivity,
-                                            eventKind,
-                                            eventDetail.take(200),
-                                            license
-                                        )
-                                        TacticalNotifier.post(
-                                            this@MainActivity,
-                                            if (success) "OPERATION COMPLETE" else "OPERATION NEEDS ATTENTION",
-                                            "${sub.title}: ${result.firstOrNull { it.startsWith("X ") } ?: if (success) "Operation completed." else "Review the operation log for details."}",
-                                            551
-                                        )
-                                        running = false
                                     }
                                 },
                                 initialUri = pendingInputUri
