@@ -34,7 +34,7 @@ jobs:
         run: |
           set -euo pipefail
           git clone --depth 1 --recurse-submodules https://github.com/zhangjiequan/luadec.git luadec-src
-          make -C luadec-src/lua-5.3/src liblua.a CC="gcc -m32" CFLAGS="-m32"
+          make -C luadec-src/lua-5.3/src liblua.a lua CC="gcc -m32" CFLAGS="-m32" SYSLIBS="-lm -ldl"
           printf "#define SRCVERSION \"ci-20261110\"\\n" > luadec-src/luadec/srcversion.h
           make -C luadec-src/luadec LUAVER=5.3 CC="gcc -m32" CFLAGS="-m32 -I../lua-5.3/src" LDFLAGS="-m32"
           test -x luadec-src/luadec/luadec
