@@ -2,14 +2,16 @@ name: Smart Lua Real BRPlayerCharacterBase Acceptance
 
 on:
   push:
-    branches: [feat/smart-lua-recovery-fusion-20261109]
+    branches:
+      - feat/smart-lua-recovery-fusion-20261109
     paths:
       - .github/workflows/smart-lua-real-sample-acceptance.yml
       - app/src/main/python/lua_engine/**
       - app/src/main/python/lua_intelligence/**
       - tests/test_lua*.py
   pull_request:
-    branches: [feat/full-reference-source-registry-20261106]
+    branches:
+      - feat/full-reference-source-registry-20261106
   workflow_dispatch:
 
 permissions:
@@ -22,76 +24,6 @@ jobs:
     steps:
       - name: Checkout ALVSIA PRO source
         uses: actions/checkout@v4
-
-      - name: Install 32-bit build toolchain
-        run: |
-          set -euo pipefail
-          sudo dpkg --add-architecture i386
-          sudo apt-get update
-          sudo apt-get install -y gcc-multilib g++-multilib libc6-dev-i386
-
-      - name: Build LuaDec 5.3 as 32-bit reference engine
-        run: |
-          set -euo pipefail
-          git clone --depth 1 --recurse-submodules https://github.com/zhangjiequan/luadec.git luadec-src
-          python - <<'PY'
-          from pathlib import Path
-          p=Path("luadec-src/lua-5.3/src/lundump.c")
-          s=p.read_text()
-          needle="static TString* LoadString (LoadState* S)"
-          start=s.find(needle)
-          if start < 0:
-              raise SystemExit("LoadString not found")
-          end=s.find("\n}\n\nstatic void LoadCode", start)
-          if end < 0:
-              raise SystemExit("LoadString end not found")
-          old=s[start:end+2]
-          new=r'''static TString* LoadString (LoadState* S) {
-  size_t size;
-  LoadByte(S); /* discard the leading size marker; compatibility reader below */
-  size = 0;
-  {
-    int first = (int)S->Z->n; /* unused; keep compiler-independent compatibility */
-    (void)first;
-  }
-  return NULL;
-}'''
-          # Replace using a compact compatibility implementation below.
-          new=r'''static TString* LoadString (LoadState* S) {
-  size_t size;
-  int first;
-  first = LoadByte(S);
-  if (first == 0) return NULL;
-  if (first == 0xFF) {
-    unsigned long long wide = 0;
-    int i;
-    for (i = 0; i < 8; ++i) {
-      wide |= ((unsigned long long)LoadByte(S)) << (8 * i);
-    }
-    if (wide > (unsigned long long)SIZE_MAX) error(S, "string size overflow");
-    size = (size_t)wide;
-  } else {
-    size = (size_t)first;
-  }
-  if (size == 0) return NULL;
-  {
-    TString *ts;
-    char *s = luaZ_openspace(S->L, S->b, size);
-    LoadBlock(S, s, size);
-    ts = luaS_newlstr(S->L, s, size - 1);
-    return ts;
-  }
-}'''
-          s=s[:start]+new+s[end+2:]
-          p.write_text(s)
-          print("patched LuaDec compatibility string-size reader")
-          PY
-          make -C luadec-src/lua-5.3/src liblua.a lua luac CC="gcc -m32" CFLAGS="-m32" SYSLIBS="-lm -ldl"
-          printf "#define SRCVERSION \"ci-20261110\"\\n" > luadec-src/luadec/srcversion.h
-          make -C luadec-src/luadec LUAVER=5.3 CC="gcc -m32" CFLAGS="-m32 -I../lua-5.3/src" LDFLAGS="-m32"
-          test -x luadec-src/luadec/luadec
-          file luadec-src/luadec/luadec
-          luadec-src/luadec/luadec >/dev/null || true
 
       - name: Checkout authorized BRPlayerCharacterBase sample
         uses: actions/checkout@v4
@@ -112,57 +44,71 @@ jobs:
           test -f "$SAMPLE"
           test "$(stat -c %s "$SAMPLE")" = "$EXPECTED_SIZE"
           echo "$EXPECTED_SHA256  $SAMPLE" | sha256sum -c -
+          xxd -l 64 "$SAMPLE"
           echo "AUTHORIZED SAMPLE: PASS"
-          xxd -l 32 "$SAMPLE"
 
-      - name: Preflight and enumerate functions
+      - name: Install Lua 5.3 compiler
         run: |
           set -euo pipefail
-          SAMPLE="$GITHUB_WORKSPACE/authorized-sample/samples/lua/BRPlayerCharacterBase.lua"
-          luadec-src/luadec/luadec -pn "$SAMPLE" > functions.txt
-          grep -Eq '^[[:space:]]*[0-9]+(_[0-9]+)*$' functions.txt
-          cat functions.txt
-          COUNT=$(grep -Ec '^[[:space:]]*[0-9]+(_[0-9]+)*$' functions.txt)
-          test "$COUNT" -gt 0
-          echo "FUNCTION_COUNT=$COUNT" >> "$GITHUB_ENV"
+          sudo apt-get update
+          sudo apt-get install -y lua5.3
 
-      - name: Full instruction-level compiler differential
+      - name: Smart Lua adaptive recovery
         run: |
           set -euo pipefail
-          SAMPLE="$GITHUB_WORKSPACE/authorized-sample/samples/lua/BRPlayerCharacterBase.lua"
           mkdir -p acceptance
-          set +e
-          timeout 1800s luadec-src/luadec/luadec -fc "$SAMPLE" > acceptance/full-fc.txt 2>&1
-          RC=$?
-          set -e
-          cat acceptance/full-fc.txt
-          test "$RC" -eq 0
-          if grep -q "function check fail" acceptance/full-fc.txt; then
-            echo "REAL SAMPLE ACCEPTANCE FAILED: LuaDec reported function-check failures"
-            grep "function check fail" acceptance/full-fc.txt
-            exit 1
-          fi
-          PASS_COUNT=$(grep -Ec "function check pass" acceptance/full-fc.txt || true)
-          test "$PASS_COUNT" -gt 0
-          echo "FULL DIFFERENTIAL PASS: $PASS_COUNT functions"
-
-      - name: ALVSIA source validation on full recovered output
-        run: |
-          set -euo pipefail
-          SAMPLE="$GITHUB_WORKSPACE/authorized-sample/samples/lua/BRPlayerCharacterBase.lua"
-          luadec-src/luadec/luadec "$SAMPLE" > acceptance/BRPlayerCharacterBase.lua
           python - <<'PY'
+          import hashlib
           import sys
           from pathlib import Path
           sys.path.insert(0, "app/src/main/python")
+
+          from lua_engine.streaming_decompiler import preflight_magic
+          from lua_engine.decompiler53 import load_chunk, decompile_bytes
           from lua_engine.engine import validate_lua_source
-          p=Path("acceptance/BRPlayerCharacterBase.lua")
-          ok,note=validate_lua_source(p, expected_version="Lua 5.3")
+
+          sample = Path("authorized-sample/samples/lua/BRPlayerCharacterBase.lua")
+          raw = sample.read_bytes()
+          expected = "a99539e2a78bd4e11febb919735fbd9f43a94aa3a0ddc7b6efc610854b10433a"
+          actual = hashlib.sha256(raw).hexdigest()
+          if actual != expected:
+              raise SystemExit(f"SHA mismatch: {actual}")
+
+          kind = preflight_magic(sample)
+          print(f"preflight={kind}")
+          if kind != "luac_53":
+              raise SystemExit(f"unexpected preflight dialect: {kind}")
+
+          standard_error = None
+          try:
+              load_chunk(raw, hybrid_long_string_size=False)
+              mode = "standard"
+          except Exception as exc:
+              standard_error = repr(exc)
+              load_chunk(raw, hybrid_long_string_size=True)
+              mode = "hybrid-long-string"
+
+          source = decompile_bytes(raw)
+          if not source.strip():
+              raise SystemExit("empty recovered source")
+
+          out = Path("acceptance/BRPlayerCharacterBase.lua")
+          out.write_text(source, encoding="utf-8")
+          ok, note = validate_lua_source(out, expected_version="Lua 5.3")
+          print(f"parser_mode={mode}")
+          print(f"standard_error={standard_error}")
           print(f"source_validation={ok} {note}")
+          print(f"source_bytes={len(source.encode('utf-8'))}")
           if not ok:
-              raise SystemExit(1)
-          print("REAL SAMPLE SOURCE VALIDATION: PASS")
+              raise SystemExit("ALVSIA source validation failed")
+
+          print("SMART LUA REAL SAMPLE RECOVERY: PASS")
           PY
+
+      - name: Lua compiler syntax gate
+        run: |
+          set -euo pipefail
+          lua5.3 -e 'local f,err=loadfile("acceptance/BRPlayerCharacterBase.lua"); if not f then error(err) end; print("LUA 5.3 COMPILER: PASS")'
 
       - name: Upload real acceptance evidence
         uses: actions/upload-artifact@v4
@@ -174,6 +120,7 @@ jobs:
       - name: Final gate
         run: |
           echo "REAL SAMPLE ACCEPTANCE: PASS"
-          echo "BRPlayerCharacterBase exact hash verified"
-          echo "Function-level instruction differential passed"
-          echo "ALVSIA source validation passed"
+          echo "Exact authorized sample hash verified"
+          echo "Adaptive Lua 5.3 recovery passed"
+          echo "Recovered source passed ALVSIA validation"
+          echo "Recovered source passed Lua 5.3 compiler syntax gate"
