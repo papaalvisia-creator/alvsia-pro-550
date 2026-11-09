@@ -55,10 +55,7 @@ def parse_source(path: Path) -> OracleResult:
                 text = carry + raw.decode("utf-8", "replace")
                 carry = text[-128:]
                 scan = text[:-128] if len(text) > 128 else ""
-                parts = re.findall(
-                    r"[A-Za-z_][A-Za-z0-9_]*|\\d+(?:\\.\\d+)?|==|~=|<=|>=|\\.\\.\\.|[{}()\\[\\],;:.+*/%^#=<>~-]",
-                    scan,
-                )
+                parts = re.findall(r"[A-Za-z_][A-Za-z0-9_]*|\\d+(?:\\.\\d+)?|==|~=|<=|>=|\\.\\.\\.|[{}()\\[\\],;:.+*/%^#=<>~-]", scan)
                 tokens += len(parts)
                 kw += sum(t in keywords for t in parts)
                 control += sum(t in {"if","for","while","repeat","function","do"} for t in parts)
