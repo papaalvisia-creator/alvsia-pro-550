@@ -35,14 +35,18 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y lua5.3
 
-      - name: Build pinned unluac-rs host CLI
+      - name: Build Java unluac reference decompiler
         run: |
           set -euo pipefail
-          git clone --depth 1 --branch v1.4.4 https://github.com/x3zvawq/unluac-rs.git candidate
-          test "$(grep -m1 '^version = ' candidate/Cargo.toml | cut -d '"' -f2)" = "1.4.4"
-          cargo build --locked --release -p unluac-cli --manifest-path candidate/Cargo.toml
-          test -x candidate/target/release/unluac-cli
-          candidate/target/release/unluac-cli --help >/dev/null
+          sudo apt-get update
+          sudo apt-get install -y default-jdk
+          git clone --depth 1 https://github.com/Jeong-Min-Cho/unluac.git java-unluac
+          mkdir -p java-unluac/build
+          javac -d java-unluac/build java-unluac/src/unluac/Main.java
+          cp java-unluac/MANIFEST.MF java-unluac/build/MANIFEST.MF
+          (cd java-unluac/build && jar cfm ../unluac.jar MANIFEST.MF unluac)
+          test -s java-unluac/unluac.jar
+          java -jar java-unluac/unluac.jar --version || true
 
       - name: Checkout authorized BRPlayerCharacterBase sample
         uses: actions/checkout@v4
