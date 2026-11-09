@@ -45,9 +45,9 @@ jobs:
           git -C lua-5.5.0 checkout --detach FETCH_HEAD
           echo "Lua 5.5.0 fetched commit: $(git -C lua-5.5.0 rev-parse HEAD)"
           LUA55_ROOT="lua-5.5.0"
-          make -C "$LUA55_ROOT/src" all
-          test -x "$LUA55_ROOT/src/luac"
-          "$LUA55_ROOT/src/luac" -v
+          gcc -O2 -std=c99 -DLUA_USE_LINUX -DMAKE_LUAC -o "$LUA55_ROOT/luac" "$LUA55_ROOT/onelua.c" -lm -ldl
+          test -x "$LUA55_ROOT/luac"
+          "$LUA55_ROOT/luac" -v
           echo "Lua 5.5 reference root: $LUA55_ROOT"
 
       - name: Build genuine Luau v7 reference compiler
