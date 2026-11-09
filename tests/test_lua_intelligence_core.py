@@ -1,4 +1,5 @@
-import tempfile, unittest, zipfile
+import tempfile
+import gzip, unittest, zipfile
 from pathlib import Path
 from app.src.main.python.lua_intelligence.core import IntelligenceEngine, IntelligenceConfig
 
@@ -26,5 +27,17 @@ class IntelligenceCoreTests(unittest.TestCase):
             result=IntelligenceEngine().analyze(src,root/"out")
             self.assertEqual(result.status,"PARTIAL")
             self.assertEqual(result.artifacts[0].status,"UNSUPPORTED")
+
+    def test_recursive_gzip_layer(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td) / "sample.lua.gz"
+            out = Path(td) / "out"
+            raw = b"return 42\n" * 1000
+            with gzip.open(root, "wb") as fh:
+                fh.write(raw)
+            result = analyze_file(root, out)
+            self.assertTrue(result.ok)
+            self.assertGreaterEqual(result.metadata["artifact_count"], 2)
+            self.assertTrue(any(a.transformation == "gzip-decompress" for a in result.artifacts))
 
 if __name__=="__main__": unittest.main()
