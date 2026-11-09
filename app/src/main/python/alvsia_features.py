@@ -2,6 +2,7 @@
 """ALVSIA PRO 5.5 — features: LUA (unluac jar), helpers."""
 from __future__ import annotations
 import os
+import hashlib
 import shutil
 import subprocess
 import tempfile
