@@ -113,7 +113,7 @@ jobs:
                   values.append(s)
           if not values or values[0] != "0":
               raise SystemExit("function enumeration missing root function")
-          groups=[values[i:i+8] for i in range(0,len(values),8)]
+          groups=[{"functions": values[i:i+8]} for i in range(0,len(values),8)]
           if len(groups) > 256:
               raise SystemExit(f"sample has too many function groups for one matrix run: {len(groups)}")
           Path("function_count.txt").write_text(str(len(values)))
@@ -144,7 +144,7 @@ jobs:
       fail-fast: false
       max-parallel: 20
       matrix:
-        functions: ${{ fromJSON(needs.enumerate.outputs.groups) }}
+        include: ${{ fromJSON(needs.enumerate.outputs.groups) }}
     steps:
       - name: Checkout ALVSIA PRO source
         uses: actions/checkout@v4
