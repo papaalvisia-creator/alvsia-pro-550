@@ -67,7 +67,18 @@ def parse_source(path: Path) -> OracleResult:
                             mismatches += 1
                         else:
                             balance[pairs[tok]] -= 1
-        tokens += len(re.findall(r"[A-Za-z_][A-Za-z0-9_]*|\d+(?:\.\d+)?|==|~=|<=|>=|\.\.\.|[{}(),;:.+*/%^#=<>~\-\[\]]", carry))
+        tail = re.findall(r"[A-Za-z_][A-Za-z0-9_]*|\d+(?:\.\d+)?|==|~=|<=|>=|\.\.\.|[{}(),;:.+*/%^#=<>~\-\[\]]", carry)
+        tokens += len(tail)
+        kw += sum(t in keywords for t in tail)
+        control += sum(t in {"if","for","while","repeat","function","do"} for t in tail)
+        for tok in tail:
+            if tok in balance:
+                balance[tok] += 1
+            elif tok in pairs:
+                if balance[pairs[tok]] <= 0:
+                    mismatches += 1
+                else:
+                    balance[pairs[tok]] -= 1
         remaining = sum(balance.values())
         if size == 0:
             return OracleResult(False, "parser", 0.0, {"error": "empty source"})
