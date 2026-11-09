@@ -508,7 +508,7 @@ class Decompiler:
                 if i + 1 < n:
                     next_ins = p.code[i + 1]
                     nop, *_ = decode(next_ins)
-                    nax = (next_ins >> (POS_A + SIZE_A)) & ((1 << (SIZE_B + SIZE_C)) - 1)
+                    nax = (next_ins >> POS_A) & ((1 << (SIZE_A + SIZE_B + SIZE_C)) - 1)
                     val = self._k(nax)
                     skip_pcs.add(i + 1)
                 else:
