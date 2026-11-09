@@ -43,6 +43,21 @@ class IntelligenceEngine:
             status="PARTIAL" if fp.kind in ("source","bytecode","container") else "UNSUPPORTED"
             conf=fp.confidence
             evidence=[AnalysisEvidence("fingerprint",fp.format,conf,"builtin",",".join(fp.notes))]
+            if fp.kind == "bytecode":
+                try:
+                    from .structure import analyze_bytecode_structure
+                    structure = analyze_bytecode_structure(path, fp.dialect)
+                    evidence.append(AnalysisEvidence(
+                        "bytecode-structure",
+                        structure.version,
+                        structure.score,
+                        "structural-parser",
+                        ";".join(structure.anomalies) if structure.anomalies else
+                        f"header={structure.header_size};payload={structure.payload_offset}",
+                    ))
+                    conf = min(1.0, max(conf, structure.score))
+                except (OSError, ValueError) as exc:
+                    errors.append(f"bytecode structure analysis: {type(exc).__name__}: {exc}")
             art=LayerArtifact(
                 artifact_id="a-"+digest[:20], path=str(path), sha256=digest, size=size,
                 parent_id=parent, dialect=fp.dialect, format=fp.format,
