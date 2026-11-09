@@ -42,7 +42,7 @@ jobs:
           sudo apt-get install -y default-jdk
           git clone --depth 1 https://github.com/Jeong-Min-Cho/unluac.git java-unluac
           mkdir -p java-unluac/build
-          javac -d java-unluac/build java-unluac/src/unluac/Main.java
+          find java-unluac/src -name "*.java" -print0 | xargs -0 javac -d java-unluac/build
           cp java-unluac/MANIFEST.MF java-unluac/build/MANIFEST.MF
           (cd java-unluac/build && jar cfm ../unluac.jar MANIFEST.MF unluac)
           test -s java-unluac/unluac.jar
