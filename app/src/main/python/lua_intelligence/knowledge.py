@@ -24,9 +24,9 @@ class KnowledgeRegistry:
             ("puc-lua","dialect","canonical Lua bytecode headers",("lua-5.1","lua-5.2","lua-5.3","lua-5.4","lua-5.5")),
             ("luajit","dialect","LuaJIT bytecode marker",("luajit",)),
             ("luau","dialect","Luau bytecode marker",("luau",)),
-            ("high-entropy","fingerprint","entropy requires corroborating structural evidence"),
-            ("layer-hash-cycle","safety","SHA-256 cycle detection"),
-            ("semantic-unknown","policy","never invent stripped identifiers or semantics"),
+            ("high-entropy","fingerprint","entropy requires corroborating structural evidence",()),
+            ("layer-hash-cycle","safety","SHA-256 cycle detection",()),
+            ("semantic-unknown","policy","never invent stripped identifiers or semantics",()),
         ]
         for key,cat,det,dial in seeds:
             self.entries[key]=KnowledgeEntry(key,cat,det,dial)
