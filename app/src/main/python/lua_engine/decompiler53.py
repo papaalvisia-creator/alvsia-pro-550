@@ -884,10 +884,13 @@ class Decompiler:
                 limit = self._reg(limit_reg, i)
                 step = self._reg(step_reg, i)
                 var_nm = self._local_at(i + 1, var_reg) or f"_i{a}"
-                out.append(f"{self.indent}for {var_nm} = {idx}, {limit}, {step} do")
+                # Conservative linear recovery does not yet own the full CFG.
+                # Emit loop metadata as comments rather than opening a Lua block
+                # that could become structurally mismatched after jump recovery.
+                out.append(f"{self.indent}-- FORPREP {var_nm} = {idx}, {limit}, {step}")
 
             elif opname == "FORLOOP":
-                out.append(f"{self.indent}end -- forloop")
+                out.append(f"{self.indent}-- FORLOOP register {a}")
 
             elif opname == "TFORCALL":
                 func = self._reg(a, i)
