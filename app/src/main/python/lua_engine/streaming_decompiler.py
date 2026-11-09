@@ -466,14 +466,19 @@ def decompile_large(path: Path, out_dir: Path, jars_dir: Optional[str] = None, p
             "luac_53": {"BGMI_VM"},
         }.get(fmt, {"ALVLUA1_PAYLOAD"} if fmt.startswith("unknown_") else set())
         matches = []
-        for pattern in registry.all_patterns():
-            if pattern.id not in eligible_ids:
-                continue
-            try:
-                if pattern.detector(p):
-                    matches.append(pattern)
-            except Exception:
-                continue
+        if hasattr(registry, "all_patterns"):
+            for pattern in registry.all_patterns():
+                if pattern.id not in eligible_ids:
+                    continue
+                try:
+                    if pattern.detector(p):
+                        matches.append(pattern)
+                except Exception:
+                    continue
+        else:
+            # Compatibility for third-party/test registries implementing the
+            # original detect(path) protocol.
+            matches = registry.detect(p)
         matches.sort(key=lambda pat: pat.confidence_boost, reverse=True)
         pattern_attempts = []
         for pattern in matches:
