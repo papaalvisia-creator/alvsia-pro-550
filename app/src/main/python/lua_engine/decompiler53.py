@@ -794,7 +794,10 @@ class Decompiler:
                 if not re.match(r"^[A-Za-z_][A-Za-z0-9_]*$", func):
                     func = f"_alvsia_tailcall_{i}"
                     out.append(f"{self.indent}local {func} = {self._reg(a, i)}")
-                out.append(f"{self.indent}return {func}({', '.join(args)})")
+                # Tail calls are terminal in bytecode, but later bytecode may
+                # still be emitted by the conservative linear reconstruction. Wrap
+                # the return in a nested block so Lua permits subsequent statements.
+                out.append(f"{self.indent}do return {func}({', '.join(args)}) end")
 
             elif opname == "RETURN":
                 if b == 1:
