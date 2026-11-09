@@ -653,7 +653,7 @@ class Decompiler:
                 sym = _BINOP_MAP[opname]
                 lhs = self._rk(b, i)
                 rhs = self._rk(c, i)
-                expr = f"{lhs} {sym} {rhs}"
+                expr = f"({lhs}) {sym} ({rhs})"
                 nm = self._local_at(i + 1, a) or f"_r{a}"
                 self.regs[a] = expr
                 if lv_decls:
@@ -670,7 +670,7 @@ class Decompiler:
             elif opname in _UNOP_MAP:
                 sym = _UNOP_MAP[opname]
                 src = self._reg(b, i)
-                expr = f"{sym}{src}"
+                expr = f"({sym}{src})"
                 nm = self._local_at(i + 1, a) or f"_r{a}"
                 self.regs[a] = expr
                 if lv_decls:
@@ -686,14 +686,14 @@ class Decompiler:
 
             elif opname == "CONCAT":
                 parts = [self._reg(j, i) for j in range(b, c + 1)]
-                expr = " .. ".join(parts)
+                expr = "(" + " .. ".join(f"({part})" for part in parts) + ")"
                 nm = self._local_at(i + 1, a) or f"_r{a}"
                 self.regs[a] = expr
                 out.append(f"{self.indent}{nm} = {expr}")
 
             elif opname == "LEN":
                 src = self._reg(b, i)
-                expr = f"#{src}"
+                expr = f"(#{src})"
                 nm = self._local_at(i + 1, a) or f"_r{a}"
                 self.regs[a] = expr
                 out.append(f"{self.indent}{nm} = {expr}")
