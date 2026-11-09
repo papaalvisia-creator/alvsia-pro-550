@@ -194,7 +194,7 @@ jobs:
               raise SystemExit(f"sample SHA mismatch: {actual}")
           kind = preflight_magic(sample)
           print(f"preflight={kind}")
-          out = Path("$RUNNER_TEMP") / "brplayer"
+          out = Path(os.environ["RUNNER_TEMP"]) / "brplayer"
           out.mkdir(parents=True, exist_ok=True)
           candidates = []
           if kind.startswith("luac_") and kind == "luac_53":
