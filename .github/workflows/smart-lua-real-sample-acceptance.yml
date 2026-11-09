@@ -107,18 +107,14 @@ jobs:
 
           def run_unluac():
               cmd = [
-                  "candidate/target/release/unluac-cli",
-                  "-i", str(sample),
-                  "-D", "lua5.3",
-                  "--ignore-debug",
-                  "--generate-mode", "permissive",
-                  "-o", str(unluac_out),
+                  "java", "-jar", "java-unluac/unluac.jar",
+                  "-o", str(unluac_out), str(sample),
               ]
               try:
                   p = subprocess.run(cmd, text=True, capture_output=True, timeout=240)
-                  return ("unluac", p.returncode, p.stdout[-4000:], p.stderr[-4000:])
+                  return ("java_unluac", p.returncode, p.stdout[-4000:], p.stderr[-4000:])
               except subprocess.TimeoutExpired:
-                  return ("unluac", 124, "", "TIMEOUT")
+                  return ("java_unluac", 124, "", "TIMEOUT")
 
           def run_stream():
               try:
@@ -143,7 +139,7 @@ jobs:
               ok, note = validate_lua_source(unluac_out, expected_version="Lua 5.3")
               print(f"unluac_validation={ok} {note}", flush=True)
               if ok:
-                  candidates.append(FusionCandidate("unluac_rs_v1_4_4", unluac_out, note))
+                  candidates.append(FusionCandidate("java_unluac_5_3", unluac_out, note))
 
           if stream_out.is_file() and stream_out.stat().st_size:
               ok, note = validate_lua_source(stream_out, expected_version="Lua 5.3")
