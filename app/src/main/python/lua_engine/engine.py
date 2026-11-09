@@ -106,6 +106,93 @@ def _find_lua_parser(expected_version=None):
     return None
 
 
+def _validate_lua_structure(text: str) -> tuple[bool, str]:
+    """Validate block balance with a streaming lexer and bounded auxiliary memory."""
+    stack = []
+    n = len(text)
+    i = 0
+
+    def long_bracket(pos: int):
+        if pos >= n or text[pos] != "[":
+            return None
+        j = pos + 1
+        while j < n and text[j] == "=":
+            j += 1
+        if j < n and text[j] == "[":
+            return j - pos - 1, j + 1
+        return None
+
+    def skip_long(pos: int, eq_count: int) -> int:
+        close = "]" + ("=" * eq_count) + "]"
+        end = text.find(close, pos)
+        return n if end < 0 else end + len(close)
+
+    while i < n:
+        ch = text[i]
+        if ch in ("'", '"'):
+            quote = ch
+            i += 1
+            while i < n:
+                if text[i] == "\\":
+                    i += 2
+                elif text[i] == quote:
+                    i += 1
+                    break
+                else:
+                    i += 1
+            continue
+
+        if text.startswith("--", i):
+            long = long_bracket(i + 2)
+            if long:
+                eq_count, body_start = long
+                i = skip_long(body_start, eq_count)
+            else:
+                end = text.find("\n", i + 2)
+                i = n if end < 0 else end + 1
+            continue
+
+        long = long_bracket(i)
+        if long:
+            eq_count, body_start = long
+            i = skip_long(body_start, eq_count)
+            continue
+
+        if ch == "_" or ch.isalpha():
+            start = i
+            i += 1
+            while i < n and (text[i] == "_" or text[i].isalnum()):
+                i += 1
+            token = text[start:i]
+            if token in ("function", "if", "repeat"):
+                stack.append({"kind": token, "awaiting_do": False})
+            elif token in ("for", "while"):
+                stack.append({"kind": token, "awaiting_do": True})
+            elif token == "do":
+                pending = next((entry for entry in reversed(stack)
+                                if entry["kind"] in ("for", "while") and entry["awaiting_do"]), None)
+                if pending is not None:
+                    pending["awaiting_do"] = False
+                else:
+                    stack.append({"kind": "do", "awaiting_do": False})
+            elif token == "until":
+                if not stack or stack[-1]["kind"] != "repeat":
+                    return False, "unmatched until"
+                stack.pop()
+            elif token == "end":
+                if not stack:
+                    return False, "unmatched end"
+                stack.pop()
+            continue
+        i += 1
+
+    if stack:
+        return False, "unclosed Lua block(s): " + ",".join(
+            entry["kind"] for entry in stack[-8:]
+        )
+    return True, "structural heuristic accepted; matching Lua parser unavailable"
+
+
 def validate_lua_source(path_or_text, expected_version=None) -> tuple[bool, str]:
     source_path = None
     temporary = None
@@ -164,34 +251,7 @@ def validate_lua_source(path_or_text, expected_version=None) -> tuple[bool, str]
                 except Exception:
                     pass
 
-    code = _lua_code_without_literals(text)
-    tokens = re.findall(r'(?<![%\w_])(function|if|for|while|repeat|do|end|until)(?![\w_])', code)
-    stack = []
-    for tok in tokens:
-        if tok in ("function", "if", "repeat"):
-            stack.append({"kind": tok, "awaiting_do": False})
-        elif tok in ("for", "while"):
-            stack.append({"kind": tok, "awaiting_do": True})
-        elif tok == "do":
-            pending = next((entry for entry in reversed(stack)
-                            if entry["kind"] in ("for", "while") and entry["awaiting_do"]), None)
-            if pending is not None:
-                pending["awaiting_do"] = False
-            else:
-                stack.append({"kind": "do", "awaiting_do": False})
-        elif tok == "until":
-            if not stack or stack[-1]["kind"] != "repeat":
-                return False, "unmatched until"
-            stack.pop()
-        elif tok == "end":
-            if not stack:
-                return False, "unmatched end"
-            stack.pop()
-    if stack:
-        return False, "unclosed Lua block(s): " + ",".join(
-            entry["kind"] for entry in stack[-8:]
-        )
-    return True, "structural heuristic accepted; matching Lua parser unavailable"
+    return _validate_lua_structure(text)
 
 
 def _extract_strings(data: bytes, minimum=4):
