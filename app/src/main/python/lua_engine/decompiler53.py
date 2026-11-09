@@ -829,7 +829,7 @@ class Decompiler:
                 out.append(f"{self.indent}end")
 
             elif opname == "SETLIST":
-                tbl = self._reg(a, i)
+                tbl = self._local_at(i, a) or f"_r{a}"
                 count = b if b > 0 else 1
                 base = (c - 1) * 50
                 for j in range(1, count + 1):
