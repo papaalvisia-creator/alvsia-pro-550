@@ -1,6 +1,6 @@
 {
   "name": "BRPlayerCharacterBase.lua",
-  "size_bytes": 5662310,
+  "size_description": "approximately 5.4 MB (exact byte count intentionally not inferred)",
   "sha256": "a99539e2a78bd4e11febb919735fbd9f43a94aa3a0ddc7b6efc610854b10433a",
   "purpose": "large-file regression metadata",
   "status": "external-fixture-required",
