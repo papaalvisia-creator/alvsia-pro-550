@@ -12,6 +12,23 @@ class IntelligenceCoreTests(unittest.TestCase):
             self.assertEqual(result.artifacts[0].dialect,"lua-family")
             self.assertEqual(len(result.artifacts[0].sha256),64)
 
+
+    def test_bytecode_gets_structural_evidence_without_execution(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            src = root / "sample.luac"
+            src.write_bytes(
+                b"\x1bLua\x53\x00\x01\x04\x04\x04\x08\x08\x00"
+                + b"\x01" * 8 + b"\x00" * 8 + b"\x00" * 5
+                + b"\x00" * 64
+            )
+            result = IntelligenceEngine().analyze(src, root / "out")
+            self.assertTrue(result.ok)
+            kinds = [e.kind for e in result.artifacts[0].evidence]
+            self.assertIn("bytecode-structure", kinds)
+            self.assertEqual(result.artifacts[0].status, "PARTIAL")
+
+
     def test_recursive_zip_layer_graph(self):
         with tempfile.TemporaryDirectory() as td:
             root=Path(td); inner=root/"inner.lua"; inner.write_text("return 1\n",encoding="utf-8")
