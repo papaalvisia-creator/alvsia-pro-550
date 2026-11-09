@@ -28,13 +28,13 @@ jobs:
           set -euo pipefail
           sudo dpkg --add-architecture i386
           sudo apt-get update
-          sudo apt-get install -y gcc-multilib g++-multilib libc6-dev-i386 lua5.3
+          sudo apt-get install -y gcc-multilib g++-multilib libc6-dev-i386
 
       - name: Build LuaDec 5.3 as 32-bit reference engine
         run: |
           set -euo pipefail
           git clone --depth 1 --recurse-submodules https://github.com/zhangjiequan/luadec.git luadec-src
-          make -C luadec-src/lua-5.3 linux CC="gcc -m32" CFLAGS="-m32"
+          make -C luadec-src/lua-5.3/src liblua.a CC="gcc -m32" CFLAGS="-m32"
           make -C luadec-src/luadec LUAVER=5.3 CC="gcc -m32" CFLAGS="-m32" LDFLAGS="-m32"
           test -x luadec-src/luadec/luadec
           file luadec-src/luadec/luadec
