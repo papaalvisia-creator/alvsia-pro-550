@@ -51,6 +51,7 @@ LUA53_HEADER = bytes([0x1b, 0x4c, 0x75, 0x61, 0x53, 0x00,
                        0x19, 0x93, 0x0d, 0x0a, 0x1a, 0x0a])
 
 PUBGM_STRING_XOR_KEY = bytes.fromhex("112136474657a78d9d8490d8ab008c35261af7e45805b8b31507d02c1e8ff6c8")
+INVALID_CONSTANT_REF_COUNT = 0
 PUBGM_OPCODE_MAP = (17,18,19,20,21,22,23,24,25,26,27,28,29,0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46)
 
 class Reader:
@@ -376,8 +377,10 @@ class Decompiler:
 
     def _k(self, idx: int) -> str:
         if idx < 0 or idx >= len(self.p.constants):
+            global INVALID_CONSTANT_REF_COUNT
+            INVALID_CONSTANT_REF_COUNT += 1
             self.invalid_constant_refs.append((idx, len(self.p.constants), self.name))
-            return f"nil -- INVALID_CONSTANT_INDEX_{idx}"
+            return "nil"
         v = self.p.constants[idx]
         return self._lit(v)
 
@@ -871,6 +874,8 @@ class Decompiler:
 
 # ── Top-level entry ───────────────────────────────────────────────────────────
 def decompile_bytes(data: bytes) -> str:
+    global INVALID_CONSTANT_REF_COUNT
+    INVALID_CONSTANT_REF_COUNT = 0
     errors = []
     for variant in ("standard", "pubgm"):
         try:
@@ -896,6 +901,8 @@ def decompile_bytes(data: bytes) -> str:
 
     # Collect nested function definitions that were emitted inline
     # Top-level body IS the chunk body — no wrapping function needed
+    if INVALID_CONSTANT_REF_COUNT:
+        header.append(f"-- ALVSIA_INVALID_CONSTANT_REF_COUNT={INVALID_CONSTANT_REF_COUNT}")
     lines = header + body
     return "\n".join(lines)
 
