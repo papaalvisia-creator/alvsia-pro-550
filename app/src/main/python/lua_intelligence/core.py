@@ -52,17 +52,23 @@ class IntelligenceEngine:
             if parent:
                 for p in artifacts:
                     if p.artifact_id==parent and art.artifact_id not in p.children: p.children.append(art.artifact_id)
-            # Generic, conservative recursive container expansion.
-            if depth < self.config.max_depth and fp.format=="ZIP":
+            # Conservative recursive recovery adapters. Each transform is file-backed,
+            # deterministic, bounded, and immediately re-fingerprinted on the next queue pass.
+            if depth < self.config.max_depth and fp.format in ("ZIP", "GZIP"):
                 try:
                     from .layers import LayerStore
                     store=LayerStore(out_dir/"layers",self.config.max_file_bytes)
-                    children=store.safe_zip_extract(path,"zip-"+digest[:12])
-                    for child in children[:32]:
+                    if fp.format=="ZIP":
+                        children=store.safe_zip_extract(path,"zip-"+digest[:12])
+                        for child in children[:32]:
+                            if child.is_file() and child.stat().st_size<=self.config.max_file_bytes:
+                                queue.append((child,art.artifact_id,depth+1,"zip-extract"))
+                    else:
+                        child=store.safe_gzip(path,"gzip-"+digest[:12])
                         if child.is_file() and child.stat().st_size<=self.config.max_file_bytes:
-                            queue.append((child,art.artifact_id,depth+1,"zip-extract"))
+                            queue.append((child,art.artifact_id,depth+1,"gzip-decompress"))
                 except Exception as exc:
-                    errors.append(f"zip expansion: {type(exc).__name__}: {exc}")
+                    errors.append(f"{fp.format.lower()} expansion: {type(exc).__name__}: {exc}")
         elapsed=time.monotonic()-started
         if queue: errors.append("analysis budget reached before queue exhaustion")
         report=out_dir/(input_path.stem+"_intelligence.json")
