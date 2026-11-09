@@ -733,7 +733,9 @@ class Decompiler:
                 func = self._reg(a, i)
                 arg_count = b - 1
                 if arg_count < 0:
-                    args = [self._reg(j, i) for j in range(a + 1, a + 2)] + ["..."]
+                    args = [self._reg(j, i) for j in range(a + 1, a + 2)]
+                    if self.p.is_vararg:
+                        args.append("...")
                 else:
                     args = [self._reg(j, i) for j in range(a + 1, a + 1 + arg_count)]
                 # C == 0 means multret; exact register arity is dynamic.
@@ -784,7 +786,9 @@ class Decompiler:
                 func = self._reg(a, i)
                 arg_count = b - 1
                 if arg_count < 0:
-                    args = [self._reg(j, i) for j in range(a + 1, a + 2)] + ["..."]
+                    args = [self._reg(j, i) for j in range(a + 1, a + 2)]
+                    if self.p.is_vararg:
+                        args.append("...")
                 else:
                     args = [self._reg(j, i) for j in range(a + 1, a + 1 + arg_count)]
                 if not re.match(r"^[A-Za-z_][A-Za-z0-9_]*$", func):
@@ -801,7 +805,9 @@ class Decompiler:
                 else:
                     count = b - 1
                     if count < 0:
-                        srcs = [self._reg(j, i) for j in range(a, a + 2)] + ["..."]
+                        srcs = [self._reg(j, i) for j in range(a, a + 2)]
+                        if self.p.is_vararg:
+                            srcs.append("...")
                     else:
                         srcs = [self._reg(j, i) for j in range(a, a + count)]
                     out.append(f"{self.indent}do return {', '.join(srcs)} end")
