@@ -37,7 +37,7 @@ class IntelligenceCoreTests(unittest.TestCase):
                 fh.write(raw)
             result = analyze_file(root, out)
             self.assertTrue(result.ok)
-            self.assertGreaterEqual(result.metadata["artifact_count"], 2)
+            self.assertGreaterEqual(len(result.artifacts), 2)
             self.assertTrue(any(a.transformation == "gzip-decompress" for a in result.artifacts))
 
 if __name__=="__main__": unittest.main()
