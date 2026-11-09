@@ -34,6 +34,58 @@ jobs:
         run: |
           set -euo pipefail
           git clone --depth 1 --recurse-submodules https://github.com/zhangjiequan/luadec.git luadec-src
+          python - <<'PY'
+          from pathlib import Path
+          p=Path("luadec-src/lua-5.3/src/lundump.c")
+          s=p.read_text()
+          needle="static TString* LoadString (LoadState* S)"
+          start=s.find(needle)
+          if start < 0:
+              raise SystemExit("LoadString not found")
+          end=s.find("\n}\n\nstatic void LoadCode", start)
+          if end < 0:
+              raise SystemExit("LoadString end not found")
+          old=s[start:end+2]
+          new=r'''static TString* LoadString (LoadState* S) {
+  size_t size;
+  LoadByte(S); /* discard the leading size marker; compatibility reader below */
+  size = 0;
+  {
+    int first = (int)S->Z->n; /* unused; keep compiler-independent compatibility */
+    (void)first;
+  }
+  return NULL;
+}'''
+          # Replace using a compact compatibility implementation below.
+          new=r'''static TString* LoadString (LoadState* S) {
+  size_t size;
+  int first;
+  first = LoadByte(S);
+  if (first == 0) return NULL;
+  if (first == 0xFF) {
+    unsigned long long wide = 0;
+    int i;
+    for (i = 0; i < 8; ++i) {
+      wide |= ((unsigned long long)LoadByte(S)) << (8 * i);
+    }
+    if (wide > (unsigned long long)SIZE_MAX) error(S, "string size overflow");
+    size = (size_t)wide;
+  } else {
+    size = (size_t)first;
+  }
+  if (size == 0) return NULL;
+  {
+    TString *ts;
+    char *s = luaZ_openspace(S->L, S->b, size);
+    LoadBlock(S, s, size);
+    ts = luaS_newlstr(S->L, s, size - 1);
+    return ts;
+  }
+}'''
+          s=s[:start]+new+s[end+2:]
+          p.write_text(s)
+          print("patched LuaDec compatibility string-size reader")
+          PY
           make -C luadec-src/lua-5.3/src liblua.a lua luac CC="gcc -m32" CFLAGS="-m32" SYSLIBS="-lm -ldl"
           printf "#define SRCVERSION \"ci-20261110\"\\n" > luadec-src/luadec/srcversion.h
           make -C luadec-src/luadec LUAVER=5.3 CC="gcc -m32" CFLAGS="-m32 -I../lua-5.3/src" LDFLAGS="-m32"
