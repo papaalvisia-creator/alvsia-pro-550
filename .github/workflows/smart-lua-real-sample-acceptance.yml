@@ -111,7 +111,7 @@ jobs:
         run: |
           set +e
           lua5.3 -e 'assert(loadfile("acceptance/BRPlayerCharacterBase.lua"))' 2> acceptance/syntax-error.txt
-          nl -ba acceptance/BRPlayerCharacterBase.lua | sed -n '220,240p'
+          nl -ba acceptance/BRPlayerCharacterBase.lua | sed -n '635,650p'
           cat acceptance/syntax-error.txt
           exit 0
 
