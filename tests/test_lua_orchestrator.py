@@ -355,3 +355,30 @@ def test_invalid_pattern_candidate_falls_back_as_explicit_partial_wrapper(tmp_pa
     assert result["final_status"] == "PARTIAL"
     assert result["source_recovered"] is False
     assert result["artifact_kind"] == "protected_wrapper_source"
+
+
+def test_large_source_validation_uses_bounded_lexical_scan(tmp_path):
+    from lua_engine import engine
+
+    source = tmp_path / "large_source.lua"
+    source.write_text(
+        "local function render()\n"
+        "  local payload = [=["
+        + ("x" * (5 * 1024 * 1024))
+        + "]=]\n  return payload\nend\nreturn render\n",
+        encoding="utf-8",
+    )
+
+    original = engine._lua_code_without_literals
+
+    def bounded_sample_only(sample):
+        # This helper is intentionally retained only for the 8 KiB sniff.
+        assert len(sample) <= 8192
+        return original(sample)
+
+    with patch("lua_engine.engine._find_lua_parser", return_value=None):
+        with patch("lua_engine.engine._lua_code_without_literals", side_effect=bounded_sample_only):
+            valid, note = validate_lua_source(source)
+
+    assert valid, note
+    assert "structural heuristic accepted" in note
