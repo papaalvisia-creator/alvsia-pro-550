@@ -14,6 +14,7 @@ import shutil
 import subprocess
 
 from .engine import validate_lua_source, _find_java
+from lua_intelligence.fusion import FusionCandidate, fuse_candidates
 
 
 @dataclass(frozen=True)
@@ -288,17 +289,43 @@ def run_decompiler_pipeline(
             break
 
     selected_name = None
+    fusion = None
     if valid_candidates:
-        selected_spec, selected_path, selected_note = valid_candidates[0]
+        # Deep mode is the only mode allowed to fuse multiple engines. The
+        # quick Android path preserves its historical first-valid behavior.
+        if deep_scan and len(valid_candidates) > 1:
+            fusion = fuse_candidates([
+                FusionCandidate(spec.name, candidate, note)
+                for spec, candidate, note in valid_candidates
+            ])
+            if fusion.selected_engine is not None:
+                selected_tuple = next(
+                    item for item in valid_candidates
+                    if item[0].name == fusion.selected_engine
+                )
+                selected_spec, selected_path, selected_note = selected_tuple
+            else:
+                selected_spec, selected_path, selected_note = valid_candidates[0]
+        else:
+            selected_spec, selected_path, selected_note = valid_candidates[0]
+
         selected_path.replace(destination)
         selected_name = selected_spec.name
+        fusion_note = ""
+        if fusion is not None:
+            fusion_note = (
+                f"; fusion={fusion.status}; confidence={fusion.confidence:.3f}; "
+                f"agreement={fusion.agreement.get(selected_spec.name, 0)}"
+            )
         results.append(EngineResult(
             selected_spec.name, True, str(destination),
-            selected_note + "; " + "validated Lua source", True,
+            selected_note + "; validated Lua source" + fusion_note, True,
         ))
         if len(valid_candidates) > 1:
             alternate_dir.mkdir(parents=True, exist_ok=True)
-            for spec, candidate, note in valid_candidates[1:]:
+            for spec, candidate, note in valid_candidates:
+                if candidate == selected_path:
+                    continue
                 retained = alternate_dir / (spec.name + ".lua")
                 candidate.replace(retained)
                 results.append(EngineResult(
@@ -325,6 +352,13 @@ def run_decompiler_pipeline(
             for item in results
         ],
         "alternates_dir": str(alternate_dir) if alternate_dir.is_dir() else None,
+        "fusion": ({
+            "status": fusion.status,
+            "confidence": fusion.confidence,
+            "scores": fusion.scores,
+            "agreement": fusion.agreement,
+            "reasons": list(fusion.reasons),
+        } if fusion is not None else None),
         "error": None if selected_name else (
             "no compatible installed decompiler produced validated Lua source"
         ),
