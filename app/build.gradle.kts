@@ -89,6 +89,11 @@ android {
         kotlinCompilerExtensionVersion = "1.5.14"
     }
     packaging {
+        jniLibs {
+            // Extract executable native CLI engines so ProcessBuilder can invoke them
+            // from ApplicationInfo.nativeLibraryDir on Android 10+.
+            useLegacyPackaging = true
+        }
         resources {
             excludes += setOf(
                 "META-INF/version-control-info.textproto",

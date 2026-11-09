@@ -1,0 +1,226 @@
+name: Smart Lua Native Engines Android ARM64 Candidate
+on:
+  push:
+    branches: [ feat/lua-intelligence-orchestrator-20261107 ]
+    paths:
+      - .github/workflows/unluac-rs-android-candidate.yml
+      - tools/build_unluac_rs_android.sh
+      - tools/build_luau_decompiler_android.sh
+      - app/src/main/python/lua_engine/**
+      - tests/test_lua_protection_core.py
+      - app/src/main/python/alvsia_features.py
+      - app/src/main/python/alvsia_bridge.py
+      - app/src/main/java/com/alvsia/pro/tool/PythonBridgeRunner.kt
+      - app/src/main/AndroidManifest.xml
+      - tools/audit_release_apk.py
+      - tests/test_lua*.py
+      - tests/test_streaming_decompiler.py
+  pull_request:
+    branches: [ feat/full-reference-source-registry-20261106 ]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: unluac-rs-candidate-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  build-and-fixture-verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    steps:
+      - name: Checkout ALVSIA PRO source
+        uses: actions/checkout@v4
+      - name: Install host Lua compilers and LuaJIT
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y lua5.1 lua5.2 lua5.3 lua5.4 luajit binutils build-essential cmake
+      - name: Build Lua 5.5 reference compiler
+        # Re-run native candidate validation against the pinned official Lua 5.5.0 release archive.
+        # Verify the archive checksum and src/Makefile before compiling the reference luac.
+        run: |
+          set -euo pipefail
+          curl --retry 10 --retry-delay 3 --connect-timeout 20 --max-time 120 --fail --silent --show-error --location https://www.lua.org/ftp/lua-5.5.0.tar.gz -o lua-5.5.0.tar.gz
+          echo "57ccc32bbbd005cab75bcc52444052535af691789dba2b9016d5c50640d68b3d  lua-5.5.0.tar.gz" | sha256sum -c -
+          tar -xzf lua-5.5.0.tar.gz
+          LUA55_ROOT="lua-5.5.0"
+          test -d "$LUA55_ROOT/src"
+          test -f "$LUA55_ROOT/src/Makefile"
+          test -f "$LUA55_ROOT/src/luac.c"
+          make -C "$LUA55_ROOT/src" -j2 linux
+          test -x "$LUA55_ROOT/src/luac"
+          "$LUA55_ROOT/src/luac" -v
+          echo "Lua 5.5 reference root: $LUA55_ROOT"
+
+      - name: Build genuine Luau v7 reference compiler
+        run: |
+          set -euo pipefail
+          git clone --depth 1 --branch 0.729 https://github.com/luau-lang/luau.git luau-src
+          grep -q 'LBC_VERSION_TARGET = 7,' luau-src/Common/include/Luau/Bytecode.h
+          cmake -S luau-src -B luau-build -DCMAKE_BUILD_TYPE=Release -DLUAU_BUILD_CLI=ON -DLUAU_BUILD_TESTS=OFF
+          cmake --build luau-build --target Luau.Compile.CLI --parallel 2
+          test -x luau-build/luau-compile
+          luau-build/luau-compile --help
+      - name: Build genuine Luau v9 reference compiler
+        run: |
+          set -euo pipefail
+          git clone --depth 1 --branch 0.730 https://github.com/luau-lang/luau.git luau-src-v9
+          grep -q 'LBC_VERSION_TARGET = 9,' luau-src-v9/Common/include/Luau/Bytecode.h
+          cmake -S luau-src-v9 -B luau-build-v9 -DCMAKE_BUILD_TYPE=Release -DLUAU_BUILD_CLI=ON -DLUAU_BUILD_TESTS=OFF
+          cmake --build luau-build-v9 --target Luau.Compile.CLI --parallel 2
+          test -x luau-build-v9/luau-compile
+      - name: Install Rust stable and Android target
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android, x86_64-linux-android
+      - name: Install pinned Android NDK
+        run: |
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "ndk;27.0.12077973"
+      - name: Fetch pinned upstream candidate
+        run: |
+          git clone --depth 1 --branch v1.4.4 https://github.com/x3zvawq/unluac-rs.git candidate
+          test "$(grep -m1 '^version = ' candidate/Cargo.toml | cut -d '"' -f2)" = "1.4.4"
+          grep -q '^license = "MIT"' candidate/Cargo.toml
+          test -s candidate/LICENSE.txt
+      - name: Build host CLI
+        working-directory: candidate
+        run: cargo build --locked --release -p unluac-cli
+      - name: Build pinned PumbaaDev host Luau decompiler
+        run: |
+          set -euo pipefail
+          git init luau-decompiler-src
+          git -C luau-decompiler-src remote add origin https://github.com/PumbaaDev/luau-decompiler.git
+          git -C luau-decompiler-src fetch --depth 1 origin ee07098c31e11601a9ca434bc12932a4ded65f7b
+          git -C luau-decompiler-src checkout --detach FETCH_HEAD
+          test "$(git -C luau-decompiler-src rev-parse HEAD)" = "ee07098c31e11601a9ca434bc12932a4ded65f7b"
+          grep -q '^license = "MIT"' luau-decompiler-src/Cargo.toml
+          cargo build --locked --release -p luau-cli --manifest-path luau-decompiler-src/Cargo.toml
+          test -x luau-decompiler-src/target/release/luau-decompiler
+          luau-decompiler-src/target/release/luau-decompiler --help
+      - name: Verify Lua 5.1–5.5, LuaJIT 2.1 and Luau v7/v9 fixtures
+        working-directory: candidate
+        run: |
+          set -euo pipefail
+          CLI="$PWD/target/release/unluac-cli"
+          mkdir -p "$RUNNER_TEMP/lua-fixtures"
+          cat > "$RUNNER_TEMP/lua-fixtures/sample.lua" <<'LUA'
+          local function combine(a, b)
+              local value = a + b
+              if value > 10 then
+                  return value * 2
+              end
+              return value
+          end
+          return combine(7, 9)
+          LUA
+          for version in 5.1 5.2 5.3 5.4; do
+            COMPILER="luac$version"
+            "$COMPILER" -o "$RUNNER_TEMP/lua-fixtures/input-$version.luac" "$RUNNER_TEMP/lua-fixtures/sample.lua"
+            "$CLI" -i "$RUNNER_TEMP/lua-fixtures/input-$version.luac" -o "$RUNNER_TEMP/lua-fixtures/output-$version.lua" --generate-mode strict
+            "$COMPILER" -p "$RUNNER_TEMP/lua-fixtures/output-$version.lua"
+            test -s "$RUNNER_TEMP/lua-fixtures/output-$version.lua"
+            echo "PASS Lua $version parse/decompile/re-parse"
+          done
+          luajit -b "$RUNNER_TEMP/lua-fixtures/sample.lua" "$RUNNER_TEMP/lua-fixtures/input-luajit.lj"
+          "$CLI" -i "$RUNNER_TEMP/lua-fixtures/input-luajit.lj" -o "$RUNNER_TEMP/lua-fixtures/output-luajit.lua" --generate-mode strict
+          luajit -b "$RUNNER_TEMP/lua-fixtures/output-luajit.lua" "$RUNNER_TEMP/lua-fixtures/output-luajit.lj"
+          test -s "$RUNNER_TEMP/lua-fixtures/output-luajit.lua"
+          echo "PASS LuaJIT parse/decompile/re-compile"
+          LUA55="$GITHUB_WORKSPACE/lua-5.5.0/src/luac"
+          "$LUA55" -o "$RUNNER_TEMP/lua-fixtures/input-5.5.luac" "$RUNNER_TEMP/lua-fixtures/sample.lua"
+          "$CLI" -i "$RUNNER_TEMP/lua-fixtures/input-5.5.luac" -o "$RUNNER_TEMP/lua-fixtures/output-5.5.lua" --generate-mode strict
+          "$LUA55" -p "$RUNNER_TEMP/lua-fixtures/output-5.5.lua"
+          test -s "$RUNNER_TEMP/lua-fixtures/output-5.5.lua"
+          echo "PASS Lua 5.5 parse/decompile/re-parse"
+          cat > "$RUNNER_TEMP/lua-fixtures/sample.luau" <<'LUAU'
+          local function combine(a: number, b: number): number
+              local value = a + b
+              if value > 10 then
+                  return value * 2
+              end
+              return value
+          end
+          return combine(7, 9)
+          LUAU
+          "$GITHUB_WORKSPACE/luau-build/luau-compile" --binary "$RUNNER_TEMP/lua-fixtures/sample.luau" > "$RUNNER_TEMP/lua-fixtures/input-luau.luau"
+          echo "Luau v7 fixture header: $(od -An -tx1 -N32 "$RUNNER_TEMP/lua-fixtures/input-luau.luau" | tr -s ' ')"
+          test -s "$RUNNER_TEMP/lua-fixtures/input-luau.luau"
+          echo "PASS generated Luau v7 reference bytecode using pinned compiler tag 0.729"
+          "$GITHUB_WORKSPACE/luau-decompiler-src/target/release/luau-decompiler" "$RUNNER_TEMP/lua-fixtures/input-luau.luau" -o "$RUNNER_TEMP/lua-fixtures/output-luau.lua"
+          "$GITHUB_WORKSPACE/luau-build/luau-compile" --binary "$RUNNER_TEMP/lua-fixtures/output-luau.lua" > "$RUNNER_TEMP/lua-fixtures/output-luau.bc"
+          test -s "$RUNNER_TEMP/lua-fixtures/output-luau.bc"
+          echo "PASS Luau v7 parse/decompile/re-compile"
+          "$GITHUB_WORKSPACE/luau-build-v9/luau-compile" --binary "$RUNNER_TEMP/lua-fixtures/sample.luau" > "$RUNNER_TEMP/lua-fixtures/input-luau-v9.luau"
+          echo "Luau v9 fixture header: $(od -An -tx1 -N32 "$RUNNER_TEMP/lua-fixtures/input-luau-v9.luau" | tr -s ' ')"
+          test -s "$RUNNER_TEMP/lua-fixtures/input-luau-v9.luau"
+          "$GITHUB_WORKSPACE/luau-decompiler-src/target/release/luau-decompiler" "$RUNNER_TEMP/lua-fixtures/input-luau-v9.luau" -o "$RUNNER_TEMP/lua-fixtures/output-luau-v9.lua"
+          "$GITHUB_WORKSPACE/luau-build-v9/luau-compile" --binary "$RUNNER_TEMP/lua-fixtures/output-luau-v9.lua" > "$RUNNER_TEMP/lua-fixtures/output-luau-v9.bc"
+          test -s "$RUNNER_TEMP/lua-fixtures/output-luau-v9.bc"
+          echo "PASS Luau v9 PumbaaDev parse/decompile/re-compile"
+      - name: Build and stage Android ARM64 app candidate
+        working-directory: ${{ github.workspace }}
+        env:
+          ANDROID_NDK_VERSION: 27.0.12077973
+        run: |
+          set -euo pipefail
+          bash tools/build_unluac_rs_android.sh
+          bash tools/build_luau_decompiler_android.sh
+          ALVSIA_ANDROID_TARGET=x86_64-linux-android bash tools/build_unluac_rs_android.sh
+          ALVSIA_ANDROID_TARGET=x86_64-linux-android bash tools/build_luau_decompiler_android.sh
+          test -s app/src/main/jniLibs/arm64-v8a/libunluac-cli.so
+          test -s app/src/main/jniLibs/arm64-v8a/libluau-decompiler-cli.so
+          test -s app/src/main/assets/engine_licenses/unluac-rs-MIT.txt
+          test -s app/src/main/assets/engine_licenses/luau-decompiler-MIT.txt
+          cat app/src/main/assets/engine_licenses/unluac-rs-android-arm64.sha256
+          cat app/src/main/assets/engine_licenses/unluac-rs-android-arm64.manifest
+          cat app/src/main/assets/engine_licenses/luau-decompiler-android-arm64.sha256
+          cat app/src/main/assets/engine_licenses/luau-decompiler-android-arm64.manifest
+      - name: Verify Android native ELF candidates without emulator dependency
+        run: |
+          set -euo pipefail
+          for abi in arm64-v8a x86_64; do
+            UNLUAC="app/src/main/jniLibs/$abi/libunluac-cli.so"
+            LUAU="app/src/main/jniLibs/$abi/libluau-decompiler-cli.so"
+            test -s "$UNLUAC"
+            test -s "$LUAU"
+            test -x "$UNLUAC"
+            test -x "$LUAU"
+            readelf -h "$UNLUAC" | tee "$RUNNER_TEMP/$abi-unluac-elf.txt"
+            readelf -h "$LUAU" | tee "$RUNNER_TEMP/$abi-luau-elf.txt"
+            readelf -l "$UNLUAC" | grep -q '/system/bin/linker64'
+            readelf -l "$LUAU" | grep -q '/system/bin/linker64'
+            grep -q 'Type:[[:space:]]*DYN' "$RUNNER_TEMP/$abi-unluac-elf.txt"
+            grep -q 'Type:[[:space:]]*DYN' "$RUNNER_TEMP/$abi-luau-elf.txt"
+            if [[ "$abi" == "arm64-v8a" ]]; then
+              grep -Eq 'AArch64|ARM aarch64' "$RUNNER_TEMP/$abi-unluac-elf.txt"
+              grep -Eq 'AArch64|ARM aarch64' "$RUNNER_TEMP/$abi-luau-elf.txt"
+            else
+              grep -Eq 'X86-64|Advanced Micro Devices X86-64' "$RUNNER_TEMP/$abi-unluac-elf.txt"
+              grep -Eq 'X86-64|Advanced Micro Devices X86-64' "$RUNNER_TEMP/$abi-luau-elf.txt"
+            fi
+            echo "PASS Android $abi native ELF validation"
+          done
+          sha256sum -c app/src/main/assets/engine_licenses/unluac-rs-android-arm64.sha256
+          sha256sum -c app/src/main/assets/engine_licenses/luau-decompiler-android-arm64.sha256
+          sha256sum -c app/src/main/assets/engine_licenses/unluac-rs-android-x86_64.sha256
+          sha256sum -c app/src/main/assets/engine_licenses/luau-decompiler-android-x86_64.sha256
+      - name: Upload Android ARM64 candidate and provenance
+        uses: actions/upload-artifact@v4
+        with:
+          name: smart-lua-native-engines-arm64-candidate
+          path: |
+            app/src/main/jniLibs/arm64-v8a/libunluac-cli.so
+            app/src/main/jniLibs/arm64-v8a/libluau-decompiler-cli.so
+            app/src/main/assets/engine_licenses/unluac-rs-MIT.txt
+            app/src/main/assets/engine_licenses/unluac-rs-android-arm64.sha256
+            app/src/main/assets/engine_licenses/unluac-rs-android-arm64.manifest
+            app/src/main/assets/engine_licenses/luau-decompiler-MIT.txt
+            app/src/main/assets/engine_licenses/luau-decompiler-android-arm64.sha256
+            app/src/main/assets/engine_licenses/luau-decompiler-android-arm64.manifest
+            app/src/main/jniLibs/x86_64/libunluac-cli.so
+            app/src/main/jniLibs/x86_64/libluau-decompiler-cli.so
+            app/src/main/assets/engine_licenses/unluac-rs-android-x86_64.sha256
+            app/src/main/assets/engine_licenses/unluac-rs-android-x86_64.manifest
+            app/src/main/assets/engine_licenses/luau-decompiler-android-x86_64.sha256
+            app/src/main/assets/engine_licenses/luau-decompiler-android-x86_64.manifest
+          if-no-files-found: error

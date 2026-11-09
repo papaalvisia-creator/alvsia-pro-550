@@ -4,7 +4,7 @@ from pathlib import Path
 import re
 from .container import unwrap_lua_container
 
-LUA_VERSIONS = {0x51: "5.1", 0x52: "5.2", 0x53: "5.3", 0x54: "5.4"}
+LUA_VERSIONS = {0x51: "5.1", 0x52: "5.2", 0x53: "5.3", 0x54: "5.4", 0x55: "5.5"}
 
 @dataclass(frozen=True)
 class LuaInfo:
@@ -150,9 +150,77 @@ def detect_bytes(data: bytes) -> LuaInfo:
     return replace(info, notes=tuple(info.notes) + extra, confidence=confidence)
 
 
+def _read_luau_varint(data: bytes, offset: int):
+    value = 0
+    shift = 0
+    for _ in range(5):
+        if offset >= len(data):
+            return None
+        byte = data[offset]
+        offset += 1
+        value |= (byte & 0x7f) << shift
+        if not byte & 0x80:
+            return value, offset
+        shift += 7
+    return None
+
+
+def _luau_header_version(data: bytes):
+    """Conservatively recognize Luau's version/type/string-table/proto header."""
+    if not data or not 3 <= data[0] <= 14:
+        return None
+    version = data[0]
+    offset = 1
+    if version >= 4:
+        if offset >= len(data) or not 1 <= data[offset] <= 3:
+            return None
+        offset += 1
+    parsed = _read_luau_varint(data, offset)
+    if parsed is None:
+        return None
+    string_count, offset = parsed
+    if string_count > 65536:
+        return None
+    for _ in range(string_count):
+        parsed = _read_luau_varint(data, offset)
+        if parsed is None:
+            return None
+        length, offset = parsed
+        if length > 1024 * 1024 or offset + length > len(data):
+            return None
+        offset += length
+    # Optional userdata type-name mapping: byte id + varint string-table
+    # index pairs, terminated by a zero byte.
+    while offset < len(data):
+        type_id = data[offset]
+        offset += 1
+        if type_id == 0:
+            break
+        parsed = _read_luau_varint(data, offset)
+        if parsed is None:
+            return None
+        _name_index, offset = parsed
+    else:
+        return None
+    parsed = _read_luau_varint(data, offset)
+    if parsed is None:
+        return None
+    proto_count, offset = parsed
+    if not 1 <= proto_count <= 100000 or offset >= len(data):
+        return None
+    return version
+
+
 def _classify_bytes(data: bytes) -> LuaInfo:
     size = len(data)
     magic = data[:8].hex()
+    luau_version = _luau_header_version(data)
+    if luau_version is not None:
+        return LuaInfo(
+            "bytecode", f"Luau bytecode v{luau_version}", "luau",
+            size, magic, 0.88,
+            ("Luau header candidate; strict decompiler validation required",),
+        )
     if data.startswith(b"\x1bLJ"):
         ver = "LuaJIT 2.0/2.1"
         if len(data) >= 4 and data[3] == 0x02:

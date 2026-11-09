@@ -3,6 +3,7 @@
 from __future__ import annotations
 import hashlib
 import io
+import os
 import re
 import sys
 import zipfile
@@ -32,6 +33,9 @@ EXPECTED_SEALED = {
     "lua_engine_detector.alv",
     "lua_engine_multi_format.alv",
     "lua_engine_streaming_decompiler.alv",
+    "lua_engine_orchestrator.alv",
+    "lua_engine_protection.alv",
+    "lua_engine_protection_pipeline.alv",
     "lua_engine_vm_deobfuscator.alv",
 }
 PROTECTED_MODULES = {
@@ -41,10 +45,11 @@ PROTECTED_MODULES = {
     "lua_output_validator", "lua_string_recover",
     "lua_engine/engine", "lua_engine/decompiler53", "lua_engine/bgmi", "lua_engine/t24",
     "lua_engine/luajit_decompiler", "lua_engine/container", "lua_engine/detector",
-    "lua_engine/multi_format", "lua_engine/streaming_decompiler", "lua_engine/vm_deobfuscator",
+    "lua_engine/multi_format", "lua_engine/streaming_decompiler", "lua_engine/orchestrator", "lua_engine/vm_deobfuscator",
 }
 SEAL_MAGIC = b"ALVSEAL2"
 ASSET_MAGIC = b"ALVSA1\x00"
+REQUIRE_XOP_PROVENANCE = os.environ.get("ALVSIA_REQUIRE_XOP_PROVENANCE", "1") != "0"
 
 def _axml_strings(data: bytes) -> list[str]:
     """Read Android binary XML string-pool entries without relying on raw string-pool hits."""
@@ -149,6 +154,73 @@ def main() -> int:
                   "sensitive local rebrand/build metadata absent from APK" if not packaged_forbidden
                   else "forbidden APK metadata entries: " + ", ".join(packaged_forbidden))
             check("lib/arm64-v8a/librasp_guard.so" in names, "native RASP library packaged")
+            unluac_entry = "lib/arm64-v8a/libunluac-cli.so"
+            check(unluac_entry in names, "Android ARM64 Smart Lua native decompiler packaged")
+            check("assets/engine_licenses/unluac-rs-MIT.txt" in names,
+                  "unluac-rs MIT license attribution packaged")
+            if unluac_entry in names:
+                native_cli = outer.read(unluac_entry)
+                is_arm64_elf = (
+                    len(native_cli) > 20 and native_cli[:4] == b"\x7fELF"
+                    and native_cli[18:20] == b"\xb7\x00"
+                    and b"/system/bin/linker64\x00" in native_cli
+                )
+                check(is_arm64_elf, "unluac-rs executable is Android ARM64 ELF")
+                manifest_name = "assets/engine_licenses/unluac-rs-android-arm64.manifest"
+                checksum_name = "assets/engine_licenses/unluac-rs-android-arm64.sha256"
+                check(manifest_name in names and checksum_name in names,
+                      "unluac-rs Android build provenance and checksum packaged")
+                if manifest_name in names:
+                    manifest = outer.read(manifest_name).decode("utf-8", errors="replace")
+                    check("tag=v1.4.4" in manifest and "target=aarch64-linux-android" in manifest,
+                          "unluac-rs pinned release/target provenance verified")
+                    provenance_recorded = (
+                        re.search(r"(?m)^source_sha256=[0-9a-f]{64}$", manifest) is not None
+                        and re.search(r"(?m)^xop_protected_sha256=[0-9a-f]{64}$", manifest) is not None
+                    )
+                    check(provenance_recorded or not REQUIRE_XOP_PROVENANCE,
+                          "unluac-rs original and XOP-protected hashes recorded"
+                          if REQUIRE_XOP_PROVENANCE else
+                          "unluac-rs XOP provenance deferred to final XOP packaging")
+                if checksum_name in names:
+                    checksum_parts = outer.read(checksum_name).decode("ascii", errors="ignore").split()
+                    expected_hash = checksum_parts[0] if checksum_parts else ""
+                    check(expected_hash == hashlib.sha256(native_cli).hexdigest(),
+                          "unluac-rs Android executable checksum verified")
+            luau_entry = "lib/arm64-v8a/libluau-decompiler-cli.so"
+            check(luau_entry in names, "Android ARM64 Luau v3-v9 decompiler packaged")
+            check("assets/engine_licenses/luau-decompiler-MIT.txt" in names,
+                  "PumbaaDev Luau decompiler MIT license attribution packaged")
+            if luau_entry in names:
+                luau_native = outer.read(luau_entry)
+                is_luau_arm64_elf = (
+                    len(luau_native) > 20 and luau_native[:4] == b"\x7fELF"
+                    and luau_native[18:20] == b"\xb7\x00"
+                    and b"/system/bin/linker64\x00" in luau_native
+                )
+                check(is_luau_arm64_elf, "Luau decompiler executable is Android ARM64 ELF")
+                manifest_name = "assets/engine_licenses/luau-decompiler-android-arm64.manifest"
+                checksum_name = "assets/engine_licenses/luau-decompiler-android-arm64.sha256"
+                check(manifest_name in names and checksum_name in names,
+                      "PumbaaDev Android build provenance and checksum packaged")
+                if manifest_name in names:
+                    manifest = outer.read(manifest_name).decode("utf-8", errors="replace")
+                    check("commit=ee07098c31e11601a9ca434bc12932a4ded65f7b" in manifest
+                          and "supported_luau_bytecode=3-9" in manifest,
+                          "PumbaaDev pinned commit/compatibility provenance verified")
+                    provenance_recorded = (
+                        re.search(r"(?m)^source_sha256=[0-9a-f]{64}$", manifest) is not None
+                        and re.search(r"(?m)^xop_protected_sha256=[0-9a-f]{64}$", manifest) is not None
+                    )
+                    check(provenance_recorded or not REQUIRE_XOP_PROVENANCE,
+                          "Luau original and XOP-protected hashes recorded"
+                          if REQUIRE_XOP_PROVENANCE else
+                          "Luau XOP provenance deferred to final XOP packaging")
+                if checksum_name in names:
+                    checksum_parts = outer.read(checksum_name).decode("ascii", errors="ignore").split()
+                    expected_hash = checksum_parts[0] if checksum_parts else ""
+                    check(expected_hash == hashlib.sha256(luau_native).hexdigest(),
+                          "PumbaaDev Android executable checksum verified")
             check("assets/chaquopy/app.imy" in names, "Chaquopy app bundle packaged")
             check("assets/nx/i.dat" in names, "sealed JAR index packaged")
             check(not any(n.startswith("assets/unluac/") and n.lower().endswith(".jar") for n in names),

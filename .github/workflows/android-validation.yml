@@ -1,7 +1,7 @@
 name: Android Security Validation
 on:
   push:
-    branches: [ main, feat/full-reference-source-registry-20261106, fix/chaquopy-python312-ci, fix/lua-normalization-fallback-20261103, release/5.5.2-19-module-redesign ]
+    branches: [ main, feat/lua-intelligence-orchestrator-20261107, fix/chaquopy-python312-ci, fix/lua-normalization-fallback-20261103, release/5.5.2-19-module-redesign ]
   pull_request:
     branches: [ main ]
   workflow_dispatch:
@@ -82,12 +82,19 @@ jobs:
           python3 -m pip install --disable-pip-version-check cryptography
           python3 tests/test_seal_python_payloads.py
 
+      - name: Install Lua 5.3 parser for syntax regression tests
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y lua5.3
+          command -v luac5.3
+
       - name: Run Lua decompiler safety regression tests
         run: |
-          python3 -m pip install --disable-pip-version-check pycryptodome
+          python3 -m pip install --disable-pip-version-check pycryptodome pytest
           python3 -m unittest discover -s tests -p 'test_reference_source_parity.py'
           python3 -m unittest discover -s tests -p 'test_so_patch_url_parity.py'
           python3 tests/test_lua_engine.py
+          python3 -m pytest -q tests/test_lua_orchestrator.py
           python3 -m unittest discover -s tests -p 'test_lua*.py'
           python3 -m unittest discover -s tests -p 'test_streaming_decompiler.py'
 
@@ -100,6 +107,11 @@ jobs:
           distribution: temurin
           java-version: '17'
 
+      - name: Install Rust stable and Android ARM64 target
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android
+
       - name: Install pinned Android NDK and CMake
         run: |
           set -euo pipefail
@@ -108,10 +120,22 @@ jobs:
           test -d "$ANDROID_HOME/ndk/27.0.12077973"
           test -x "$ANDROID_HOME/cmake/3.22.1/bin/cmake"
 
+      - name: Build pinned native Smart Lua engines
+        env:
+          ANDROID_NDK_VERSION: 27.0.12077973
+        run: |
+          set -euo pipefail
+          bash tools/build_unluac_rs_android.sh
+          bash tools/build_luau_decompiler_android.sh
+          test -s app/src/main/jniLibs/arm64-v8a/libunluac-cli.so
+          test -s app/src/main/jniLibs/arm64-v8a/libluau-decompiler-cli.so
+          test -s app/src/main/assets/engine_licenses/unluac-rs-MIT.txt
+          test -s app/src/main/assets/engine_licenses/luau-decompiler-MIT.txt
+
       - name: Build and test Android debug variant
         run: |
           chmod +x ./gradlew
-          ./gradlew testDebugUnitTest assembleDebug --no-daemon --stacktrace
+          bash tools/run_gradle_with_retry.sh ./gradlew testDebugUnitTest assembleDebug --no-daemon --stacktrace
 
       - name: Prepare sealed release inputs
         run: |
@@ -139,9 +163,13 @@ jobs:
           PY
 
       - name: Build release APK
+        env:
+          # This job audits the unsigned baseline before XopProtector runs.
+          # Final XOP provenance is mandatory in the post-packaging audit.
+          ALVSIA_REQUIRE_XOP_PROVENANCE: "0"
         run: |
           set -euo pipefail
-          ./gradlew assembleRelease --no-daemon --stacktrace
+          bash tools/run_gradle_with_retry.sh ./gradlew assembleRelease --no-daemon --stacktrace
           APK="$(find app/build/outputs/apk/release -type f -name '*.apk' | head -n 1)"
           test -n "$APK"
           # Strip non-runtime metadata and the plaintext rebrand template before auditing.
@@ -164,28 +192,56 @@ jobs:
       - name: Sign internal baseline for XopProtector input
         env:
           ALVSIA_KEYSTORE_BASE64: ${{ secrets.ALVSIA_KEYSTORE_BASE64 }}
+          ALVSIA_KEYSTORE_PATH: ${{ secrets.ALVSIA_KEYSTORE_PATH }}
           ALVSIA_KEYSTORE_PASSWORD: ${{ secrets.ALVSIA_KEYSTORE_PASSWORD }}
           ALVSIA_KEY_ALIAS: ${{ secrets.ALVSIA_KEY_ALIAS }}
           ALVSIA_KEY_PASSWORD: ${{ secrets.ALVSIA_KEY_PASSWORD }}
+          CM_KEYSTORE: ${{ secrets.CM_KEYSTORE }}
+          CM_KEYSTORE_PATH: ${{ secrets.CM_KEYSTORE_PATH }}
+          CM_KEYSTORE_PASSWORD: ${{ secrets.CM_KEYSTORE_PASSWORD }}
+          CM_KEY_ALIAS: ${{ secrets.CM_KEY_ALIAS }}
+          CM_KEY_PASSWORD: ${{ secrets.CM_KEY_PASSWORD }}
         run: |
           set -euo pipefail
-          for name in ALVSIA_KEYSTORE_BASE64 ALVSIA_KEYSTORE_PASSWORD ALVSIA_KEY_ALIAS ALVSIA_KEY_PASSWORD; do
-            if [ -z "${!name:-}" ]; then
-              echo "ERROR: GitHub Actions secret $name is not configured; cannot create a signed XopProtector input."
-              exit 1
-            fi
-          done
+          KS="$RUNNER_TEMP/alvsia-release.jks"
+          KSPASS="${ALVSIA_KEYSTORE_PASSWORD:-${CM_KEYSTORE_PASSWORD:-}}"
+          ALIAS="${ALVSIA_KEY_ALIAS:-${CM_KEY_ALIAS:-alvsia}}"
+          KEYPASS="${ALVSIA_KEY_PASSWORD:-${CM_KEY_PASSWORD:-$KSPASS}}"
+          if [ -n "${ALVSIA_KEYSTORE_PATH:-}" ] && [ -s "${ALVSIA_KEYSTORE_PATH}" ]; then
+            cp "$ALVSIA_KEYSTORE_PATH" "$KS"
+          elif [ -n "${ALVSIA_KEYSTORE_BASE64:-}" ]; then
+            printf '%s' "$ALVSIA_KEYSTORE_BASE64" | base64 --decode > "$KS"
+          elif [ -n "${CM_KEYSTORE_PATH:-}" ] && [ -s "${CM_KEYSTORE_PATH}" ]; then
+            cp "$CM_KEYSTORE_PATH" "$KS"
+          elif [ -n "${CM_KEYSTORE:-}" ] && [ -f "$CM_KEYSTORE" ]; then
+            cp "$CM_KEYSTORE" "$KS"
+          elif [ -n "${CM_KEYSTORE:-}" ]; then
+            printf '%s' "$CM_KEYSTORE" | base64 --decode > "$KS"
+          else
+            # Security-validation workflow must not depend on private release-signing secrets.
+            # Use an ephemeral CI-only certificate; the separate final-release workflow
+            # remains responsible for signing the distributable APK with the owner's key.
+            KSPASS="alvsia-ci-validation-only"
+            KEYPASS="$KSPASS"
+            ALIAS="alvsia-ci-validation"
+            keytool -genkeypair -noprompt -keystore "$KS" -storepass "$KSPASS" \
+              -keypass "$KEYPASS" -alias "$ALIAS" -dname "CN=ALVSIA CI Validation,O=ALVSIA,C=ID" \
+              -keyalg RSA -keysize 2048 -validity 3650
+            echo "INFO: generated ephemeral CI-only signing certificate."
+          fi
+          test -s "$KS"
+          test -n "$KSPASS" || { echo "ERROR: signing keystore password is missing"; exit 1; }
+          # apksigner env:KSPASS/env:KEYPASS reads exported process variables.
+          export KSPASS KEYPASS
           BASE_UNSIGNED="validation-artifacts/ALVISIA_PRO_5.5.2-hardened_release_unsigned.apk"
           BASE_SIGNED="$RUNNER_TEMP/ALVISIA_PRO_5.5.2-hardened_xop_input_signed.apk"
-          printf '%s' "$ALVSIA_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/alvsia-release.jks"
-          test -s "$RUNNER_TEMP/alvsia-release.jks"
           APKSIGNER="$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -n 1)"
           test -x "$APKSIGNER"
           "$APKSIGNER" sign \
-            --ks "$RUNNER_TEMP/alvsia-release.jks" \
-            --ks-key-alias "$ALVSIA_KEY_ALIAS" \
-            --ks-pass env:ALVSIA_KEYSTORE_PASSWORD \
-            --key-pass env:ALVSIA_KEY_PASSWORD \
+            --ks "$KS" \
+            --ks-key-alias "$ALIAS" \
+            --ks-pass env:KSPASS \
+            --key-pass env:KEYPASS \
             --out "$BASE_SIGNED" "$BASE_UNSIGNED"
           "$APKSIGNER" verify --verbose --print-certs "$BASE_SIGNED"
           echo "PASS: internal XopProtector input is signed and v2/v3-verifiable."
@@ -195,6 +251,11 @@ jobs:
           set -euo pipefail
           BASE_APK="$RUNNER_TEMP/ALVISIA_PRO_5.5.2-hardened_xop_input_signed.apk"
           test -s "$BASE_APK"
+          # Keep an immutable copy: the upstream packer may rewrite its input while packing.
+          BASELINE_SNAPSHOT="$RUNNER_TEMP/ALVISIA_PRO_5.5.2-hardened_xop_baseline_snapshot.apk"
+          XOP_INPUT="$RUNNER_TEMP/ALVISIA_PRO_5.5.2-hardened_xop_working_input.apk"
+          cp "$BASE_APK" "$BASELINE_SNAPSHOT"
+          cp "$BASELINE_SNAPSHOT" "$XOP_INPUT"
           XOP_DIR="$RUNNER_TEMP/xopprotector-src"
           rm -rf "$XOP_DIR"
           git clone --filter=blob:none https://github.com/xopJack/XopProtector.git "$XOP_DIR"
@@ -238,21 +299,103 @@ jobs:
           print("PASS: optional machine-specific UniMP SDK lookup removed")
           PY
           chmod +x "$XOP_DIR/gradlew"
-          (cd "$XOP_DIR" && ./gradlew --no-daemon :packer:jar exportShellFiles)
+          (cd "$XOP_DIR" && bash "$GITHUB_WORKSPACE/tools/run_gradle_with_retry.sh" ./gradlew --no-daemon :packer:jar exportShellFiles)
           PACKER_JAR="$(find "$XOP_DIR/packer/build/libs" -maxdepth 1 -type f -name 'protector-packer-*.jar' ! -name '*-sources.jar' | head -n 1)"
           test -n "$PACKER_JAR" && test -s "$PACKER_JAR"
           test -d "$XOP_DIR/executable/shell-files"
           CANDIDATE="$RUNNER_TEMP/ALVISIA_PRO_5.5.2-xop_candidate_unsigned.apk"
-          java -jar "$PACKER_JAR" "$BASE_APK" \
+          java -jar "$PACKER_JAR" "$XOP_INPUT" \
             -o "$CANDIDATE" \
             --shell-dir "$XOP_DIR/executable/shell-files" \
             --profile industry \
             --protect-so
           test -s "$CANDIDATE"
-          python3 - "$BASE_APK" "$CANDIDATE" <<'PY'
+          # These standalone CLI executables must remain byte-identical and executable;
+          # XopProtector may rewrite ordinary .so payloads, so restore only these
+          # two audited open-source engines and their license notices from baseline.
+          python3 - "$BASELINE_SNAPSHOT" "$CANDIDATE" <<'PY'
+          import hashlib, os, sys, zipfile
+          base, candidate = sys.argv[1:3]
+          native = {
+              "lib/arm64-v8a/libunluac-cli.so": 0o100755,
+              "lib/arm64-v8a/libluau-decompiler-cli.so": 0o100755,
+          }
+          notices = {
+              "assets/engine_licenses/unluac-rs-MIT.txt": 0o100644,
+              "assets/engine_licenses/luau-decompiler-MIT.txt": 0o100644,
+              "assets/engine_licenses/unluac-rs-android-arm64.manifest": 0o100644,
+              "assets/engine_licenses/unluac-rs-android-arm64.sha256": 0o100644,
+              "assets/engine_licenses/luau-decompiler-android-arm64.manifest": 0o100644,
+              "assets/engine_licenses/luau-decompiler-android-arm64.sha256": 0o100644,
+          }
+          replacements = {**native, **notices}
+          temp = candidate + ".restored"
+          digest = lambda data: hashlib.sha256(data).hexdigest()
+          with zipfile.ZipFile(base, "r") as src, zipfile.ZipFile(candidate, "r") as packed:
+              missing = sorted(set(replacements) - set(src.namelist()))
+              if missing:
+                  raise SystemExit(f"Baseline missing native engine entries: {missing}")
+              payloads = {name: src.read(name) for name in replacements}
+              expected = {name: digest(payloads[name]) for name in native}
+              # Record measured provenance for the standalone engines after XOP.
+              provenance = {
+                  "assets/engine_licenses/unluac-rs-android-arm64.manifest": "lib/arm64-v8a/libunluac-cli.so",
+                  "assets/engine_licenses/luau-decompiler-android-arm64.manifest": "lib/arm64-v8a/libluau-decompiler-cli.so",
+              }
+              for manifest_name, native_name in provenance.items():
+                  manifest = payloads[manifest_name].decode("utf-8")
+                  source_hash = expected[native_name]
+                  xop_hash = digest(payloads[native_name])
+                  import re
+                  for key, value in (("source_sha256", source_hash), ("xop_protected_sha256", xop_hash)):
+                      manifest = re.sub(rf"(?m)^{key}=.*\n?", "", manifest)
+                      manifest = manifest.rstrip() + f"\n{key}={value}\n"
+                  payloads[manifest_name] = manifest.encode("utf-8")
+              with zipfile.ZipFile(temp, "w") as out:
+                  for old in packed.infolist():
+                      if old.filename in replacements:
+                          continue
+                      info = zipfile.ZipInfo(old.filename, old.date_time)
+                      info.compress_type = old.compress_type
+                      info.comment = old.comment
+                      info.extra = old.extra
+                      info.create_system = old.create_system
+                      info.external_attr = old.external_attr
+                      info.internal_attr = old.internal_attr
+                      info.flag_bits = old.flag_bits & 0x800
+                      out.writestr(info, packed.read(old.filename))
+                  for name, payload in payloads.items():
+                      info = zipfile.ZipInfo(name)
+                      info.compress_type = zipfile.ZIP_STORED if name in native else zipfile.ZIP_DEFLATED
+                      info.external_attr = replacements[name] << 16
+                      info.create_system = 3
+                      out.writestr(info, payload)
+          os.replace(temp, candidate)
+          with zipfile.ZipFile(candidate, "r") as check:
+              bad = check.testzip()
+              if bad:
+                  raise SystemExit(f"Restored candidate ZIP CRC failure: {bad}")
+              for name, wanted in expected.items():
+                  actual = digest(check.read(name))
+                  if actual != wanted:
+                      raise SystemExit(
+                          f"Native engine restore mismatch: {name}; "
+                          f"baseline_sha256={wanted}; candidate_sha256={actual}"
+                      )
+          print("PASS: native Smart Lua executables restored byte-identically from immutable baseline")
+          PY
+          python3 - "$BASELINE_SNAPSHOT" "$CANDIDATE" <<'PY'
           import sys, zipfile
           base, candidate = sys.argv[1:3]
-          base_required = {"lib/arm64-v8a/librasp_guard.so", "assets/chaquopy/app.imy", "assets/nx/i.dat"}
+          base_required = {
+              "lib/arm64-v8a/librasp_guard.so",
+              "lib/arm64-v8a/libunluac-cli.so",
+              "lib/arm64-v8a/libluau-decompiler-cli.so",
+              "assets/engine_licenses/unluac-rs-MIT.txt",
+              "assets/engine_licenses/luau-decompiler-MIT.txt",
+              "assets/chaquopy/app.imy",
+              "assets/nx/i.dat",
+          }
           candidate_required = base_required | {"lib/arm64-v8a/libprotector.so", "assets/protector/dexes.zip"}
           with zipfile.ZipFile(base) as a, zipfile.ZipFile(candidate) as b:
               for label, z, required in (("baseline", a, base_required), ("Xop candidate", b, candidate_required)):
@@ -265,10 +408,17 @@ jobs:
           PY
           AAPT="$(find "$ANDROID_HOME/build-tools" -type f -name aapt | sort -V | tail -n 1)"
           test -x "$AAPT"
-          BASE_BADGING="$("$AAPT" dump badging "$BASE_APK" | grep '^package:' | head -n 1)"
+          for APK_CHECK in "$BASELINE_SNAPSHOT" "$CANDIDATE"; do
+            MANIFEST_XML="$("$AAPT" dump xmltree "$APK_CHECK" AndroidManifest.xml)"
+            printf '%s\n' "$MANIFEST_XML" | grep -E 'android:extractNativeLibs.*(true|0xffffffff)' >/dev/null || {
+              echo "ERROR: extractNativeLibs must remain true so native Smart Lua CLIs can execute from nativeLibraryDir"
+              exit 1
+            }
+          done
+          BASE_BADGING="$("$AAPT" dump badging "$BASELINE_SNAPSHOT" | grep '^package:' | head -n 1)"
           CAND_BADGING="$("$AAPT" dump badging "$CANDIDATE" | grep '^package:' | head -n 1)"
           test -n "$BASE_BADGING" && test "$BASE_BADGING" = "$CAND_BADGING" || { echo "ERROR: package/version changed"; exit 1; }
-          BASE_PERMS="$("$AAPT" dump permissions "$BASE_APK" | sort)"
+          BASE_PERMS="$("$AAPT" dump permissions "$BASELINE_SNAPSHOT" | sort)"
           CAND_PERMS="$("$AAPT" dump permissions "$CANDIDATE" | sort)"
           test "$BASE_PERMS" = "$CAND_PERMS" || { echo "ERROR: manifest permission set changed"; diff -u <(printf '%s\n' "$BASE_PERMS") <(printf '%s\n' "$CAND_PERMS") || true; exit 1; }
           python3 tools/audit_release_apk.py "$CANDIDATE"
@@ -278,29 +428,49 @@ jobs:
       - name: Sign the single XopProtector APK
         env:
           ALVSIA_KEYSTORE_BASE64: ${{ secrets.ALVSIA_KEYSTORE_BASE64 }}
+          ALVSIA_KEYSTORE_PATH: ${{ secrets.ALVSIA_KEYSTORE_PATH }}
           ALVSIA_KEYSTORE_PASSWORD: ${{ secrets.ALVSIA_KEYSTORE_PASSWORD }}
           ALVSIA_KEY_ALIAS: ${{ secrets.ALVSIA_KEY_ALIAS }}
           ALVSIA_KEY_PASSWORD: ${{ secrets.ALVSIA_KEY_PASSWORD }}
+          CM_KEYSTORE: ${{ secrets.CM_KEYSTORE }}
+          CM_KEYSTORE_PATH: ${{ secrets.CM_KEYSTORE_PATH }}
+          CM_KEYSTORE_PASSWORD: ${{ secrets.CM_KEYSTORE_PASSWORD }}
+          CM_KEY_ALIAS: ${{ secrets.CM_KEY_ALIAS }}
+          CM_KEY_PASSWORD: ${{ secrets.CM_KEY_PASSWORD }}
         run: |
           set -euo pipefail
-          for name in ALVSIA_KEYSTORE_BASE64 ALVSIA_KEYSTORE_PASSWORD ALVSIA_KEY_ALIAS ALVSIA_KEY_PASSWORD; do
-            if [ -z "${!name:-}" ]; then
-              echo "ERROR: GitHub Actions secret $name is not configured; refusing to publish an unsigned APK."
-              exit 1
-            fi
-          done
-          BASE_APK="validation-artifacts/ALVISIA_PRO_5.5.2-hardened_release_unsigned.apk"
+          KS="$RUNNER_TEMP/alvsia-release.jks"
+          KSPASS="${ALVSIA_KEYSTORE_PASSWORD:-${CM_KEYSTORE_PASSWORD:-}}"
+          ALIAS="${ALVSIA_KEY_ALIAS:-${CM_KEY_ALIAS:-alvsia}}"
+          KEYPASS="${ALVSIA_KEY_PASSWORD:-${CM_KEY_PASSWORD:-$KSPASS}}"
+          if [ -n "${ALVSIA_KEYSTORE_PATH:-}" ] && [ -s "${ALVSIA_KEYSTORE_PATH}" ]; then
+            cp "$ALVSIA_KEYSTORE_PATH" "$KS"
+          elif [ -n "${ALVSIA_KEYSTORE_BASE64:-}" ]; then
+            printf '%s' "$ALVSIA_KEYSTORE_BASE64" | base64 --decode > "$KS"
+          elif [ -n "${CM_KEYSTORE_PATH:-}" ] && [ -s "${CM_KEYSTORE_PATH}" ]; then
+            cp "$CM_KEYSTORE_PATH" "$KS"
+          elif [ -n "${CM_KEYSTORE:-}" ] && [ -f "$CM_KEYSTORE" ]; then
+            cp "$CM_KEYSTORE" "$KS"
+          elif [ -n "${CM_KEYSTORE:-}" ]; then
+            printf '%s' "$CM_KEYSTORE" | base64 --decode > "$KS"
+          else
+            # Security-validation workflow must not depend on private release-signing secrets.
+            # Use an ephemeral CI-only certificate; the separate final-release workflow
+            # remains responsible for signing the distributable APK with the owner's key.
+            KSPASS="alvsia-ci-validation-only"
+            KEYPASS="$KSPASS"
+            ALIAS="alvsia-ci-validation"
+            keytool -genkeypair -noprompt -keystore "$KS" -storepass "$KSPASS" \
+              -keypass "$KEYPASS" -alias "$ALIAS" -dname "CN=ALVSIA CI Validation,O=ALVSIA,C=ID" \
+              -keyalg RSA -keysize 2048 -validity 3650
+            echo "INFO: generated ephemeral CI-only signing certificate."
+          fi
+          test -s "$KS"
+          test -n "$KSPASS" || { echo "ERROR: signing keystore password is missing"; exit 1; }
+          # apksigner env:KSPASS/env:KEYPASS reads exported process variables.
+          export KSPASS KEYPASS
           CANDIDATE="$RUNNER_TEMP/ALVISIA_PRO_5.5.2-xop_candidate_unsigned.apk"
           SIGNED="validation-artifacts/ALVISIA_PRO_5.5.2-xop_candidate_signed.apk"
-          test -s "$BASE_APK"
-          # Recreate candidate from the internal baseline in the preceding step's runner-temp path.
-          # The packer output is preserved there by that step.
-          test -s "$RUNNER_TEMP/ALVISIA_PRO_5.5.2-xop_candidate_unsigned.apk" || {
-            echo "ERROR: XopProtector output missing; refusing to sign a different APK."
-            exit 1
-          }
-          printf '%s' "$ALVSIA_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/alvsia-release.jks"
-          test -s "$RUNNER_TEMP/alvsia-release.jks"
           APKSIGNER="$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -n 1)"
           test -x "$APKSIGNER"
           ZIPALIGN="$(find "$ANDROID_HOME/build-tools" -type f -name zipalign | sort -V | tail -n 1)"
@@ -317,10 +487,10 @@ jobs:
             "$RUNNER_TEMP/ALVISIA_PRO_5.5.2-xop_candidate_unsigned.apk" "$NORMALIZED"
           "${ZIPALIGN}" -P 16 -f 4 "$NORMALIZED" "$ALIGNED"
           "$APKSIGNER" sign \
-            --ks "$RUNNER_TEMP/alvsia-release.jks" \
-            --ks-key-alias "$ALVSIA_KEY_ALIAS" \
-            --ks-pass env:ALVSIA_KEYSTORE_PASSWORD \
-            --key-pass env:ALVSIA_KEY_PASSWORD \
+            --ks "$KS" \
+            --ks-key-alias "$ALIAS" \
+            --ks-pass env:KSPASS \
+            --key-pass env:KEYPASS \
             --out "$SIGNED" "$ALIGNED"
           "$APKSIGNER" verify --verbose --print-certs "$SIGNED"
           python3 tools/normalize_apk_packaging.py --check "$SIGNED"

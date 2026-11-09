@@ -115,7 +115,7 @@ class TestVersionSpecificFallbacks(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as td:
             src = Path(td) / "sample.lj"
-            src.write_bytes(b"\x1bLJ\x02" + b"\x00" * 16)
+            src.write_bytes(bytes.fromhex("1b4c4a02") + bytes(20))
             out = Path(td) / "out"
             with patch("lua_engine.pattern_registry.get_registry",
                        return_value=EmptyRegistry()):
@@ -247,6 +247,25 @@ class TestStandardZlib(unittest.TestCase):
                 self.assertEqual(preflight_magic(src), "zlib")
 
 class TestProtectionPatternFallback(unittest.TestCase):
+    def test_preflight_only_never_runs_standard_decompiler_backends(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            src = root / "plain.luac"
+            src.write_bytes(bytes.fromhex("1b4c75615300") + bytes(40))
+            out = root / "out"
+            with patch(
+                "lua_engine.streaming_decompiler.stream_unluac_jar",
+                side_effect=AssertionError("standard engine must be orchestrator-owned"),
+            ):
+                with patch(
+                    "lua_engine.streaming_decompiler.stream_decompile_lua53",
+                    side_effect=AssertionError("standard engine must be orchestrator-owned"),
+                ):
+                    result = decompile_large(src, out, preflight_only=True)
+            self.assertFalse(result["ok"])
+            self.assertEqual(result["mode"], "pattern_preflight")
+            self.assertFalse((out / "plain_decompiled.lua").exists())
+
     def test_partial_or_invalid_pattern_results_do_not_stop_fallback(self):
         """Only a validated full source artifact may count as recovery."""
         calls = []
@@ -271,7 +290,7 @@ class TestProtectionPatternFallback(unittest.TestCase):
                 if self.outcome == "invalid":
                     artifact.write_text("this is not Lua source", encoding="utf-8")
                 else:
-                    artifact.write_text("return 42\\n", encoding="utf-8")
+                    artifact.write_text("return 42\n", encoding="utf-8")
                 return {
                     "ok": True, "recovered": True, "mode": "fixture_recovery",
                     "out": str(artifact),

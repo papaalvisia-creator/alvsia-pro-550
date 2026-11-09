@@ -41,10 +41,13 @@ def test_python_auth_normalizes_java_string_and_lua_avoids_art_oom():
     assert "fun lock(@Suppress(\"UNUSED_PARAMETER\") ctx: Context)" in gate
     lock_body = gate.split("fun lock(@Suppress(\"UNUSED_PARAMETER\") ctx: Context)", 1)[1].split("\n    }", 1)[0]
     assert "synchronized(this)" in lock_body, "RASP lock must serialize with Python token validation"
-    assert "ART_SAFE_LIMIT = 1L * 1024L * 1024L" in unluac
-    lua_branch = impl.split("# ── 5  LUA Tools", 1)[1].split('if sid == "lua_analyze":', 1)[0]
-    assert "stream_result = decompile_large(Path(ip), dest_lua, jars_dir=jars)" in lua_branch
-    assert lua_branch.index("stream_result = decompile_large") < lua_branch.index("r = feat.run_lua_smart")
+    assert "ART_SAFE_LIMIT = 256L * 1024L" in unluac
+    lua_branch = impl.split("# ── 5  LUA Tools", 1)[1].split('if sid == "lua_format_probe":', 1)[0]
+    assert "result = feat.run_lua_smart(ip, dest_lua, jars_dir=jars)" in lua_branch
+    features = (ROOT / "app/src/main/python/alvsia_features.py").read_text(encoding="utf-8")
+    smart = features.split("def run_lua_smart(", 1)[1].split("def run_lua_universal(", 1)[0]
+    assert "decompile_large(" in smart and "preflight_only=True" in smart
+    assert "build_engine_registry" in smart and "run_decompiler_pipeline" in smart
     assert "if in_size > 1 * 1024 * 1024:" not in lua_branch
 
 def test_menu_ids_are_unique_and_reachable():
