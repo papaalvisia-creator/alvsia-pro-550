@@ -43,7 +43,7 @@ jobs:
           git -C lua-5.5.0 remote add origin https://github.com/lua/lua.git
           git -C lua-5.5.0 fetch --depth 1 origin v5.5.0
           git -C lua-5.5.0 checkout --detach FETCH_HEAD
-          test "$(git -C lua-5.5.0 rev-parse HEAD)"
+          echo "Lua 5.5.0 fetched commit: $(git -C lua-5.5.0 rev-parse HEAD)"
           LUA55_ROOT="lua-5.5.0"
           test -d "$LUA55_ROOT"
           test -f "$LUA55_ROOT/Makefile"
