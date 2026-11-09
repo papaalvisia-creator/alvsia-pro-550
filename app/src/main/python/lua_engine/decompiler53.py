@@ -317,6 +317,7 @@ class Decompiler:
         self.indent = "  " * depth
         # Register → expression string
         self.regs: Dict[int, str] = {}
+        self.invalid_constant_refs: List[tuple[int,int,str]] = []
         self.lines: List[str] = []
         # Track local variable names by register
         self.locals: Dict[int, str] = {}
@@ -374,6 +375,9 @@ class Decompiler:
         return best
 
     def _k(self, idx: int) -> str:
+        if idx < 0 or idx >= len(self.p.constants):
+            self.invalid_constant_refs.append((idx, len(self.p.constants), self.name))
+            return "nil"
         v = self.p.constants[idx]
         return self._lit(v)
 
