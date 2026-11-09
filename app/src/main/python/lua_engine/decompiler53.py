@@ -616,7 +616,7 @@ class Decompiler:
 
             elif opname == "NEWTABLE":
                 nm = self._local_at(i + 1, a) or f"_r{a}"
-                self.regs[a] = "{}"
+                self.regs[a] = nm
                 if lv_decls:
                     for r, nm2 in lv_decls:
                         if r == a:
