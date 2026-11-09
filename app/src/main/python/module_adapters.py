@@ -21,20 +21,20 @@ class AdapterSpec:
 
 def _lua_decompile(input_path: str | Path, output_path: str | Path) -> dict:
     from lua_engine.detector import detect_lua
-    from lua_engine.orchestrator import decompile
+    from lua_engine.orchestrator import run_decompiler_pipeline
     src = Path(input_path)
     dst = Path(output_path)
     if not src.is_file():
         return {"ok": False, "module": "lua", "operation": "decompile",
                 "error": "input file not found"}
     info = detect_lua(src)
-    if not getattr(info, "is_supported", True):
+    if info.kind == "unknown":
         return {"ok": False, "module": "lua", "operation": "decompile",
-                "error": "unsupported Lua/Luau input",
-                "format": getattr(info, "format", "unknown")}
+                "error": "unsupported or unrecognized Lua/Luau input",
+                "format": info.format}
     dst.parent.mkdir(parents=True, exist_ok=True)
     try:
-        result = decompile(src, dst)
+        result = run_decompiler_pipeline(src, dst, info)
     except Exception as exc:
         return {"ok": False, "module": "lua", "operation": "decompile",
                 "error": f"{type(exc).__name__}: {exc}"}
