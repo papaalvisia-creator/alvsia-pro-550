@@ -382,3 +382,39 @@ def test_large_source_validation_uses_bounded_lexical_scan(tmp_path):
 
     assert valid, note
     assert "structural heuristic accepted" in note
+
+
+def test_source_preflight_skips_bytecode_pattern_detectors(tmp_path):
+    from lua_engine import streaming_decompiler
+    from lua_engine.pattern_registry import Pattern, PatternRegistry
+
+    source = tmp_path / "ordinary_large_source.lua"
+    source.write_text("local value = 1\nreturn value\n", encoding="utf-8")
+    registry = PatternRegistry()
+    calls = []
+
+    def source_detector(_path):
+        calls.append("ALVSEAL3_SOURCE")
+        return False
+
+    def bytecode_detector(_path):
+        calls.append("BGMI_VM")
+        raise AssertionError("BGMI parser must not run for a source file")
+
+    registry.register(Pattern(
+        "ALVSEAL3_SOURCE", "source fixture", source_detector,
+        lambda _path, _out: {"ok": False},
+    ))
+    registry.register(Pattern(
+        "BGMI_VM", "bytecode fixture", bytecode_detector,
+        lambda _path, _out: {"ok": False},
+    ))
+
+    with patch("lua_engine.streaming_decompiler.preflight_magic", return_value="source"):
+        with patch("lua_engine.pattern_registry.get_registry", return_value=registry):
+            result = streaming_decompiler.decompile_large(
+                source, tmp_path / "out", preflight_only=True
+            )
+
+    assert result["mode"] == "pattern_preflight"
+    assert calls == ["ALVSEAL3_SOURCE"]
