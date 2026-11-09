@@ -604,7 +604,7 @@ class Decompiler:
                     out.append(f"{self.indent}{nm} = {expr}")
 
             elif opname == "SETTABLE":
-                tbl = self._reg(a, i)
+                tbl = self._local_at(i, a) or f"_r{a}"
                 key = self._rk(b, i)
                 val = self._rk(c, i)
                 if key.startswith('"') and key.endswith('"'):
