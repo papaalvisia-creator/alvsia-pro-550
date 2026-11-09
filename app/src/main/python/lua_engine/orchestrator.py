@@ -298,14 +298,49 @@ def run_decompiler_pipeline(
                 FusionCandidate(spec.name, candidate, note)
                 for spec, candidate, note in valid_candidates
             ])
-            if fusion.selected_engine is not None:
-                selected_tuple = next(
-                    item for item in valid_candidates
-                    if item[0].name == fusion.selected_engine
-                )
-                selected_spec, selected_path, selected_note = selected_tuple
-            else:
-                selected_spec, selected_path, selected_note = valid_candidates[0]
+            if fusion.status != "CONSENSUS" or fusion.selected_engine is None:
+                # Multiple independent outputs that disagree are evidence of
+                # uncertainty, not permission to publish the first candidate.
+                # Preserve candidates for diagnostics and return explicit
+                # failure rather than a false SUCCESS.
+                alternate_dir.mkdir(parents=True, exist_ok=True)
+                for spec, candidate, note in valid_candidates:
+                    retained = alternate_dir / (spec.name + ".lua")
+                    candidate.replace(retained)
+                    results.append(EngineResult(
+                        spec.name, True, str(retained),
+                        note + "; retained because fusion has no consensus",
+                    ))
+                return {
+                    "ok": False,
+                    "out": None,
+                    "selected_engine": None,
+                    "engines_attempted": [item.engine for item in results],
+                    "results": [
+                        {
+                            "engine": item.engine,
+                            "ok": item.ok,
+                            "output": item.output,
+                            "note": item.note,
+                            "selected": item.selected,
+                        }
+                        for item in results
+                    ],
+                    "alternates_dir": str(alternate_dir),
+                    "fusion": {
+                        "status": fusion.status,
+                        "confidence": fusion.confidence,
+                        "scores": fusion.scores,
+                        "agreement": fusion.agreement,
+                        "reasons": list(fusion.reasons),
+                    },
+                    "error": "multiple validated candidates disagree; semantic consensus required",
+                }
+            selected_tuple = next(
+                item for item in valid_candidates
+                if item[0].name == fusion.selected_engine
+            )
+            selected_spec, selected_path, selected_note = selected_tuple
         else:
             selected_spec, selected_path, selected_note = valid_candidates[0]
 
