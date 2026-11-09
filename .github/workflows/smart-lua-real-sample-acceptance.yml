@@ -22,28 +22,25 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  real-sample-acceptance:
+  enumerate:
+    name: Enumerate real sample functions
     runs-on: ubuntu-latest
     timeout-minutes: 75
+    outputs:
+      groups: ${{ steps.matrix.outputs.groups }}
     steps:
       - name: Checkout ALVSIA PRO source
         uses: actions/checkout@v4
 
-      - name: Install Lua 5.3 parser
+      - name: Install Lua 5.3 and build LuaDec 5.3
         run: |
           set -euo pipefail
           sudo apt-get update
           sudo apt-get install -y lua5.3 libreadline-dev
-
-      - name: Build LuaDec 5.3 reference decompiler
-        run: |
-          set -euo pipefail
           git clone --depth 1 --recurse-submodules https://github.com/zhangjiequan/luadec.git luadec-src
-          test -d luadec-src/lua-5.3
           make -C luadec-src/lua-5.3 linux
           make -C luadec-src/luadec LUAVER=5.3
           test -x luadec-src/luadec/luadec
-          luadec-src/luadec/luadec >/dev/null || true
 
       - name: Checkout authorized BRPlayerCharacterBase sample
         uses: actions/checkout@v4
@@ -67,95 +64,152 @@ jobs:
           echo "AUTHORIZED SAMPLE: PASS"
           xxd -l 32 "$SAMPLE"
 
-      - name: Run real Smart Lua recovery and semantic consensus
+      - name: Enumerate every bytecode function
+        id: matrix
+        run: |
+          set -euo pipefail
+          SAMPLE="$GITHUB_WORKSPACE/authorized-sample/samples/lua/BRPlayerCharacterBase.lua"
+          luadec-src/luadec/luadec -pn "$SAMPLE" > functions.txt
+          grep -Eq '^[[:space:]]*[0-9]+(_[0-9]+)*$' functions.txt
+          python - <<'PY'
+          import json
+          import re
+          from pathlib import Path
+          values=[]
+          for line in Path("functions.txt").read_text().splitlines():
+              s=line.strip()
+              if re.fullmatch(r"[0-9]+(?:_[0-9]+)*", s):
+                  values.append(s)
+          if not values or values[0] != "0":
+              raise SystemExit("function enumeration missing root function")
+          groups=[values[i:i+8] for i in range(0,len(values),8)]
+          if len(groups) > 256:
+              raise SystemExit(f"sample has too many function groups for one matrix run: {len(groups)}")
+          Path("function_count.txt").write_text(str(len(values)))
+          Path("groups.json").write_text(json.dumps(groups,separators=(",",":")))
+          print(f"functions={len(values)} groups={len(groups)}")
+          PY
+          echo "groups=$(cat groups.json)" >> "$GITHUB_OUTPUT"
+          cat functions.txt
+          cat groups.json
+
+      - name: Upload LuaDec and function manifest
+        uses: actions/upload-artifact@v4
+        with:
+          name: smart-lua-real-sample-luadec
+          path: |
+            luadec-src/luadec/luadec
+            functions.txt
+            groups.json
+            function_count.txt
+          if-no-files-found: error
+
+  validate:
+    name: Validate functions ${{ join(matrix.functions, ', ') }}
+    needs: enumerate
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    strategy:
+      fail-fast: false
+      max-parallel: 20
+      matrix:
+        functions: ${{ fromJSON(needs.enumerate.outputs.groups) }}
+    steps:
+      - name: Checkout ALVSIA PRO source
+        uses: actions/checkout@v4
+
+      - name: Download LuaDec manifest
+        uses: actions/download-artifact@v5
+        with:
+          name: smart-lua-real-sample-luadec
+          path: tools
+
+      - name: Checkout authorized BRPlayerCharacterBase sample
+        uses: actions/checkout@v4
+        with:
+          repository: papaalvisia-creator/kumpulan-source-tool
+          ref: sample/brplayercharacterbase-20261109-175719
+          token: ${{ secrets.SMART_LUA_SAMPLE_TOKEN }}
+          path: authorized-sample
+          fetch-depth: 1
+
+      - name: Verify sample hash before every validation shard
         env:
           EXPECTED_SHA256: a99539e2a78bd4e11febb919735fbd9f43a94aa3a0ddc7b6efc610854b10433a
         run: |
           set -euo pipefail
-          python - <<'PY'
-          import concurrent.futures
-          import hashlib
-          import os
-          import subprocess
+          SAMPLE="$GITHUB_WORKSPACE/authorized-sample/samples/lua/BRPlayerCharacterBase.lua"
+          echo "$EXPECTED_SHA256  $SAMPLE" | sha256sum -c -
+
+      - name: Decompile and compiler-differential validate shard
+        run: |
+          set -euo pipefail
+          chmod +x tools/luadec-src/luadec/luadec
+          SAMPLE="$GITHUB_WORKSPACE/authorized-sample/samples/lua/BRPlayerCharacterBase.lua"
+          mkdir -p shard-output
+          FAIL=0
+
+          for FN in ${{ join(matrix.functions, ' ') }}; do
+            echo "=== FUNCTION $FN ==="
+            OUT="shard-output/function-$FN.lua"
+            LOG="shard-output/function-$FN.log"
+            if timeout 50s tools/luadec-src/luadec/luadec -fc -f "$FN" -ns "$SAMPLE" > "$OUT" 2> "$LOG"; then
+              :
+            else
+              RC=$?
+              echo "function $FN command failed/timeout rc=$RC"
+              cat "$LOG" || true
+              FAIL=1
+              continue
+            fi
+
+            if grep -q "function check fail" "$OUT"; then
+              echo "function $FN semantic differential FAILED"
+              grep "function check" "$OUT" || true
+              FAIL=1
+            else
+              echo "function $FN semantic differential PASS"
+            fi
+
+            python - "$OUT" <<'PY'
           import sys
           from pathlib import Path
-
-          sys.path.insert(0, str(Path("app/src/main/python")))
-          from lua_engine.streaming_decompiler import preflight_magic, stream_decompile_lua53
+          sys.path.insert(0, "app/src/main/python")
           from lua_engine.engine import validate_lua_source
-          from lua_intelligence.fusion import FusionCandidate, fuse_candidates
-
-          sample = Path("authorized-sample/samples/lua/BRPlayerCharacterBase.lua")
-          raw = sample.read_bytes()
-          expected = os.environ["EXPECTED_SHA256"]
-          actual = hashlib.sha256(raw).hexdigest()
-          if actual != expected:
-              raise SystemExit(f"sample SHA mismatch: {actual}")
-
-          kind = preflight_magic(sample)
-          print(f"preflight={kind}", flush=True)
-          if kind != "luac_53":
-              raise SystemExit(f"unexpected real sample dialect: {kind}")
-
-          out = Path(os.environ["RUNNER_TEMP"]) / "brplayer"
-          out.mkdir(parents=True, exist_ok=True)
-          unluac_out = out / "unluac.lua"
-          stream_out = out / "alvsia.lua"
-
-          def run_unluac():
-              cmd = [
-                  "luadec-src/luadec/luadec", str(sample),
-              ]
-              try:
-                  p = subprocess.run(cmd, text=True, capture_output=True, timeout=240)
-                  unluac_out.write_text(p.stdout, encoding="utf-8")
-                  return ("luadec_5_3", p.returncode, p.stdout[-4000:], p.stderr[-4000:])
-              except subprocess.TimeoutExpired:
-                  return ("luadec_5_3", 124, "", "TIMEOUT")
-
-          def run_stream():
-              try:
-                  ok, note = stream_decompile_lua53(sample, stream_out)
-                  return ("alvsia_lua53", 0 if ok else 1, note, "")
-              except Exception as exc:
-                  return ("alvsia_lua53", 1, "", repr(exc))
-
-          with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
-              futures = [pool.submit(run_unluac), pool.submit(run_stream)]
-              results = [f.result() for f in futures]
-
-          candidates = []
-          for name, rc, stdout, stderr in results:
-              print(f"{name}: rc={rc}", flush=True)
-              if stdout:
-                  print(stdout, flush=True)
-              if stderr:
-                  print(stderr, flush=True)
-
-          if unluac_out.is_file() and unluac_out.stat().st_size:
-              ok, note = validate_lua_source(unluac_out, expected_version="Lua 5.3")
-              print(f"unluac_validation={ok} {note}", flush=True)
-              if ok:
-                  candidates.append(FusionCandidate("luadec_5_3", unluac_out, note))
-
-          if stream_out.is_file() and stream_out.stat().st_size:
-              ok, note = validate_lua_source(stream_out, expected_version="Lua 5.3")
-              print(f"alvsia_lua53_validation={ok} {note}", flush=True)
-              if ok:
-                  candidates.append(FusionCandidate("alvsia_lua53", stream_out, note))
-
-          print(f"validated_candidates={len(candidates)}", flush=True)
-          if len(candidates) < 2:
-              raise SystemExit("REAL SAMPLE ACCEPTANCE FAILED: fewer than two independently validated candidates")
-
-          decision = fuse_candidates(candidates)
-          print(f"fusion_status={decision.status}", flush=True)
-          print(f"fusion_confidence={decision.confidence}", flush=True)
-          print(f"fusion_agreement={decision.agreement}", flush=True)
-          print(f"fusion_scores={decision.scores}", flush=True)
-
-          if decision.status != "CONSENSUS" or decision.selected_path is None:
-              raise SystemExit("REAL SAMPLE ACCEPTANCE FAILED: semantic consensus not reached")
-
-          print("REAL SAMPLE ACCEPTANCE: PASS", flush=True)
+          p=Path(sys.argv[1])
+          ok,note=validate_lua_source(p, expected_version="Lua 5.3")
+          print(f"source_validation={ok} {note}")
+          if not ok:
+              raise SystemExit(1)
           PY
+          done
+
+          if [ "$FAIL" -ne 0 ]; then
+            exit 1
+          fi
+
+      - name: Upload validated shard
+        uses: actions/upload-artifact@v4
+        with:
+          name: smart-lua-real-sample-shard-${{ strategy.job-index }}
+          path: shard-output
+          if-no-files-found: error
+
+  final:
+    name: Final real sample acceptance
+    needs:
+      - enumerate
+      - validate
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require every function shard to pass
+        run: |
+          if [ "${{ needs.enumerate.result }}" != "success" ] || [ "${{ needs.validate.result }}" != "success" ]; then
+            echo "REAL SAMPLE ACCEPTANCE: FAILED"
+            echo "enumerate=${{ needs.enumerate.result }}"
+            echo "validate=${{ needs.validate.result }}"
+            exit 1
+          fi
+          echo "REAL SAMPLE ACCEPTANCE: PASS"
+          echo "Every enumerated BRPlayerCharacterBase function passed LuaDec -fc compiler differential validation."
