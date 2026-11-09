@@ -1,7 +1,7 @@
 name: ALVSIA Program Intelligence Validation
 on:
   push:
-    branches: [ feat/alvsia-program-intelligence-core-20261109 ]
+    branches: [ feat/alvsia-program-intelligence-core-20261109, feat/smart-lua-recovery-fusion-20261109 ]
   pull_request:
     branches: [ feat/full-reference-source-registry-20261106 ]
 permissions:
