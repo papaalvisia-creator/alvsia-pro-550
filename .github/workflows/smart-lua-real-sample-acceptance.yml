@@ -53,6 +53,17 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y lua5.3
 
+      - name: Inspect parser failure regions
+        run: |
+          set -euo pipefail
+          SAMPLE="$GITHUB_WORKSPACE/authorized-sample/samples/lua/BRPlayerCharacterBase.lua"
+          echo "== around 427680 =="
+          xxd -g1 -s 427680 -l 192 "$SAMPLE"
+          echo "== around 3216950 =="
+          xxd -g1 -s 3216950 -l 192 "$SAMPLE"
+          echo "== size =="
+          stat -c %s "$SAMPLE"
+
       - name: Smart Lua adaptive recovery
         run: |
           set -euo pipefail
