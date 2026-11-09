@@ -134,7 +134,12 @@ object RaspEngine {
         // Soft: degrade + report
         if (soft.isNotEmpty()) {
             Guard.degraded = true
-            val detail = soft.distinct().sorted().joinToString("|")
+            // FridaProbe and AntiHook inspect the same /proc/self/maps entry.
+            // Collapse their differently-prefixed aliases into one soft signal.
+            val detail = soft.map { signal ->
+                if (signal.startsWith("antihook_hooklib:")) signal.removePrefix("antihook_")
+                else signal
+            }.distinct().sorted().joinToString("|")
             if (shouldReportSoft(detail, System.currentTimeMillis())) {
                 try { ThreatReport.emit(ctx, "SOFT_THREAT", detail, license) } catch (_: Exception) {}
             }
