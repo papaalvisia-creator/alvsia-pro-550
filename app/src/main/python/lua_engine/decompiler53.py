@@ -736,6 +736,9 @@ class Decompiler:
                     args = [self._reg(j, i) for j in range(a + 1, a + 2)] + ["..."]
                 else:
                     args = [self._reg(j, i) for j in range(a + 1, a + 1 + arg_count)]
+                # C == 0 means multret; exact register arity is dynamic.
+                # Keep the reconstructed call syntactically valid instead of emitting
+                # an empty assignment target.
                 ret_count = c - 1
                 # Materialize complex call targets to preserve Lua precedence.
                 call_target = func
@@ -758,13 +761,20 @@ class Decompiler:
                             out.append(f"{self.indent}{nm} = {call_expr}")
                     else:
                         out.append(f"{self.indent}{nm} = {call_expr}")
+                elif c == 0:
+                    # Multret result count is unknown at this reconstruction layer.
+                    # Preserve execution order and syntax; downstream dataflow can
+                    # still inspect the original bytecode for exact arity.
+                    out.append(f"{self.indent}{call_expr}")
                 else:
                     rets = []
                     for j in range(a, a + ret_count):
                         nm = self._local_at(i + 1, j) or f"_r{j}"
+                        if not re.match(r"^[A-Za-z_][A-Za-z0-9_]*$", nm):
+                            nm = f"_r{j}"
                         self.regs[j] = nm
                         rets.append(nm)
-                    lhs = ", ".join(rets)
+                    lhs = ", ".join(rets) or f"_r{a}"
                     if lv_decls:
                         out.append(f"{self.indent}local {lhs} = {call_expr}")
                     else:
@@ -799,16 +809,25 @@ class Decompiler:
             elif opname == "VARARG":
                 nm = self._local_at(i + 1, a) or f"_r{a}"
                 self.regs[a] = "..."
-                if b == 1:
+                if b == 0:
+                    # B == 0 is multret vararg. Lua source cannot use "..." on
+                    # the left-hand side, so capture one value safely and retain
+                    # an explicit diagnostic comment.
+                    out.append(f"{self.indent}{nm} = ...")
+                    out.append(f"{self.indent}-- VARARG multret reconstructed from register {a}")
+                elif b == 1:
                     out.append(f"{self.indent}{nm} = ...")
                 else:
                     count = b - 1
                     names = []
                     for j in range(a, a + count):
                         nm2 = self._local_at(i + 1, j) or f"_r{j}"
+                        if not re.match(r"^[A-Za-z_][A-Za-z0-9_]*$", nm2):
+                            nm2 = f"_r{j}"
                         self.regs[j] = "..."
                         names.append(nm2)
-                    out.append(f"{self.indent}{', '.join(names)} = ...")
+                    lhs = ", ".join(names) or nm
+                    out.append(f"{self.indent}{lhs} = ...")
 
             elif opname == "CLOSURE":
                 sub = p.protos[bx]
