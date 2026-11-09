@@ -348,8 +348,8 @@ jobs:
                   xop_hash = digest(payloads[native_name])
                   import re
                   for key, value in (("source_sha256", source_hash), ("xop_protected_sha256", xop_hash)):
-                      manifest = re.sub(rf"(?m)^{key}=.*\\n?", "", manifest)
-                      manifest = manifest.rstrip() + f"\\n{key}={value}\\n"
+                      manifest = re.sub(rf"(?m)^{key}=.*\n?", "", manifest)
+                      manifest = manifest.rstrip() + f"\n{key}={value}\n"
                   payloads[manifest_name] = manifest.encode("utf-8")
               with zipfile.ZipFile(temp, "w") as out:
                   for old in packed.infolist():
