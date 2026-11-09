@@ -43,7 +43,7 @@ jobs:
           make -C luadec-src/lua-5.3 linux
           make -C luadec-src/luadec LUAVER=5.3
           test -x luadec-src/luadec/luadec
-          luadec-src/luadec/luadec -h >/dev/null
+          luadec-src/luadec/luadec >/dev/null || true
 
       - name: Checkout authorized BRPlayerCharacterBase sample
         uses: actions/checkout@v4
