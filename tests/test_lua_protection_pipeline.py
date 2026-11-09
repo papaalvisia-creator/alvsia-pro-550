@@ -60,3 +60,22 @@ def test_protect_file_does_not_publish_invalid_transform(tmp_path, monkeypatch):
     assert result["ok"] is False
     assert "forced rejection" in result["error"]
     assert not output.exists()
+
+
+def test_protect_file_reports_semantic_differential_gate(tmp_path):
+    source = tmp_path / "input.lua"
+    output = tmp_path / "protected.lua"
+    source.write_text(
+        'local function add(left, right)\n'
+        '  local message = "hello"\n'
+        '  return left + right, message\n'
+        'end\n'
+        'return add(1, 2)\n',
+        encoding="utf-8",
+    )
+
+    result = protect_file(source, output, "strong")
+
+    assert result["ok"] is True, result
+    assert result["differential"]["function_markers"] == 1
+    assert result["differential"]["return_markers"] == 2
