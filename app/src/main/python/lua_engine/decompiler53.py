@@ -694,7 +694,12 @@ class Decompiler:
 
             elif opname == "CONCAT":
                 parts = [self._reg(j, i) for j in range(b, c + 1)]
-                expr = "(" + " .. ".join(f"({part})" for part in parts) + ")"
+                if not parts:
+                    expr = '""'
+                elif len(parts) == 1:
+                    expr = parts[0]
+                else:
+                    expr = "(" + " .. ".join(f"({part})" for part in parts) + ")"
                 nm = self._local_at(i + 1, a) or f"_r{a}"
                 self.regs[a] = expr
                 out.append(f"{self.indent}{nm} = {expr}")
