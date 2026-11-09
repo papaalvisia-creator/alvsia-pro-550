@@ -1,0 +1,15 @@
+{
+  "name": "BRPlayerCharacterBase.lua",
+  "size_bytes": 5662310,
+  "sha256": "a99539e2a78bd4e11febb919735fbd9f43a94aa3a0ddc7b6efc610854b10433a",
+  "purpose": "large-file regression metadata",
+  "status": "external-fixture-required",
+  "note": "The real 5.4 MB sample is not duplicated into this repository. CI uses generated fixtures of comparable size; actual sample validation must be run against the authorized local file.",
+  "required_assertions": [
+    "front-door read is streaming/bounded",
+    "no silent truncation",
+    "candidate scoring remains deterministic",
+    "parser/differential oracle remain bounded",
+    "failure must be explicit rather than false success"
+  ]
+}
