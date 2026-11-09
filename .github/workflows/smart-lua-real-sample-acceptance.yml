@@ -106,6 +106,15 @@ jobs:
           print("SMART LUA REAL SAMPLE RECOVERY: PASS")
           PY
 
+      - name: Diagnose first recovered syntax failure
+        if: ${{ always() }}
+        run: |
+          set +e
+          lua5.3 -e 'assert(loadfile("acceptance/BRPlayerCharacterBase.lua"))' 2> acceptance/syntax-error.txt
+          nl -ba acceptance/BRPlayerCharacterBase.lua | sed -n '180,215p'
+          cat acceptance/syntax-error.txt
+          exit 0
+
       - name: Lua compiler syntax gate
         run: |
           set -euo pipefail
