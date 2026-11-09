@@ -1,7 +1,7 @@
 import tempfile
 import gzip, unittest, zipfile
 from pathlib import Path
-from app.src.main.python.lua_intelligence.core import IntelligenceEngine, IntelligenceConfig
+from app.src.main.python.lua_intelligence.core import IntelligenceEngine, IntelligenceConfig, analyze_file
 
 class IntelligenceCoreTests(unittest.TestCase):
     def test_lua_source_is_hashed_and_classified(self):
