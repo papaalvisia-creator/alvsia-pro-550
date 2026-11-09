@@ -1,7 +1,7 @@
 name: Smart Lua Native Engines Android ARM64 Candidate
 on:
   push:
-    branches: [ feat/lua-intelligence-orchestrator-20261107 ]
+    branches: [ feat/alvsia-program-intelligence-core-20261109 ]
     paths:
       - .github/workflows/unluac-rs-android-candidate.yml
       - tools/build_unluac_rs_android.sh
@@ -39,14 +39,15 @@ jobs:
         # Verify the archive checksum and src/Makefile before compiling the reference luac.
         run: |
           set -euo pipefail
-          curl --retry 10 --retry-delay 3 --connect-timeout 20 --max-time 120 --fail --silent --show-error --location https://www.lua.org/ftp/lua-5.5.0.tar.gz -o lua-5.5.0.tar.gz
-          echo "57ccc32bbbd005cab75bcc52444052535af691789dba2b9016d5c50640d68b3d  lua-5.5.0.tar.gz" | sha256sum -c -
-          tar -xzf lua-5.5.0.tar.gz
+          git init lua-5.5.0
+          git -C lua-5.5.0 remote add origin https://github.com/lua/lua.git
+          git -C lua-5.5.0 fetch --depth 1 origin v5.5.0
+          git -C lua-5.5.0 checkout --detach FETCH_HEAD
+          test "$(git -C lua-5.5.0 rev-parse HEAD)" = "$(git ls-remote https://github.com/lua/lua.git refs/tags/v5.5.0^{})" | awk '{print $1}'
           LUA55_ROOT="lua-5.5.0"
-          test -d "$LUA55_ROOT/src"
-          test -f "$LUA55_ROOT/src/Makefile"
-          test -f "$LUA55_ROOT/src/luac.c"
-          make -C "$LUA55_ROOT/src" -j2 linux
+          test -d "$LUA55_ROOT"
+          test -f "$LUA55_ROOT/Makefile"
+          make -C "$LUA55_ROOT" linux
           test -x "$LUA55_ROOT/src/luac"
           "$LUA55_ROOT/src/luac" -v
           echo "Lua 5.5 reference root: $LUA55_ROOT"
