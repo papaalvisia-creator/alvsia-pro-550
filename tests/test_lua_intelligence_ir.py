@@ -23,6 +23,25 @@ class IRTests(unittest.TestCase):
             self.assertTrue(s.valid_header)
             self.assertEqual(s.sections[0],"puc-lua-header")
 
+
+    def test_lua53_header_metadata_is_decoded_without_instruction_execution(self):
+        with tempfile.TemporaryDirectory() as td:
+            p = Path(td) / "x.luac"
+            header = (
+                b"\x1bLua\x53\x00\x01\x04\x04\x04\x08\x08\x00"
+                + b"\\x01" * 8
+                + b"\\x00" * 8
+                + b"\\x00" * 5
+            )
+            p.write_bytes(header + b"\x00" * 128)
+            s = analyze_bytecode_structure(p, "lua-5.3")
+            self.assertTrue(s.valid_header)
+            self.assertEqual(s.version, "Lua 5.3")
+            self.assertEqual(s.instruction_size, 4)
+            self.assertEqual(s.payload_offset, 33)
+            self.assertIn("bytecode-payload", s.sections)
+
+
     def test_invalid_ir_rejected(self):
         ir=ProgramIR(functions=[IRFunction("x",instructions=[IRInstruction("",confidence=2.0)])])
         v=validate_ir(ir)
