@@ -491,7 +491,7 @@ class Decompiler:
                 if lv_decls:
                     for r, nm in lv_decls:
                         if r == a:
-                            out.append(f"{self.indent}local {nm} = {src}")
+                            out.append(f"{self.indent}{nm} = {src}")
                             self.regs[a] = nm
                             break
                     else:
@@ -510,7 +510,7 @@ class Decompiler:
                 if lv_decls:
                     for r, nm2 in lv_decls:
                         if r == a:
-                            out.append(f"{self.indent}local {nm2} = {val}")
+                            out.append(f"{self.indent}{nm2} = {val}")
                             self.regs[a] = nm2
                             break
                     else:
@@ -571,7 +571,7 @@ class Decompiler:
                 if lv_decls:
                     for r, nm2 in lv_decls:
                         if r == a:
-                            out.append(f"{self.indent}local {nm2} = {expr}")
+                            out.append(f"{self.indent}{nm2} = {expr}")
                             self.regs[a] = nm2
                             break
                     else:
@@ -606,7 +606,7 @@ class Decompiler:
                 if lv_decls:
                     for r, nm2 in lv_decls:
                         if r == a:
-                            out.append(f"{self.indent}local {nm2} = {expr}")
+                            out.append(f"{self.indent}{nm2} = {expr}")
                             self.regs[a] = nm2
                             break
                     else:
@@ -631,7 +631,7 @@ class Decompiler:
                 if lv_decls:
                     for r, nm2 in lv_decls:
                         if r == a:
-                            out.append(f"{self.indent}local {nm2} = {{}}")
+                            out.append(f"{self.indent}{nm2} = {{}}")
                             self.regs[a] = nm2
                             break
                     else:
@@ -667,7 +667,7 @@ class Decompiler:
                 if lv_decls:
                     for r, nm2 in lv_decls:
                         if r == a:
-                            out.append(f"{self.indent}local {nm2} = {expr}")
+                            out.append(f"{self.indent}{nm2} = {expr}")
                             self.regs[a] = nm2
                             break
                     else:
@@ -684,7 +684,7 @@ class Decompiler:
                 if lv_decls:
                     for r, nm2 in lv_decls:
                         if r == a:
-                            out.append(f"{self.indent}local {nm2} = {expr}")
+                            out.append(f"{self.indent}{nm2} = {expr}")
                             self.regs[a] = nm2
                             break
                     else:
@@ -765,7 +765,7 @@ class Decompiler:
                     if lv_decls:
                         for r, nm2 in lv_decls:
                             if r == a:
-                                out.append(f"{self.indent}local {nm2} = {call_expr}")
+                                out.append(f"{self.indent}{nm2} = {call_expr}")
                                 self.regs[a] = nm2
                                 break
                         else:
@@ -787,7 +787,7 @@ class Decompiler:
                         rets.append(nm)
                     lhs = ", ".join(rets) or f"_r{a}"
                     if lv_decls:
-                        out.append(f"{self.indent}local {lhs} = {call_expr}")
+                        out.append(f"{self.indent}{lhs} = {call_expr}")
                     else:
                         out.append(f"{self.indent}{lhs} = {call_expr}")
 
@@ -867,13 +867,13 @@ class Decompiler:
                 if lv_decls:
                     for r, nm2 in lv_decls:
                         if r == a:
-                            out.append(f"{self.indent}local function {nm2}({', '.join(params)})")
+                            out.append(f"{self.indent}{nm2} = function({', '.join(params)})")
                             self.regs[a] = nm2
                             break
                     else:
-                        out.append(f"{self.indent}local function {sub_name}({', '.join(params)})")
+                        out.append(f"{self.indent}{sub_name} = function({', '.join(params)})")
                 else:
-                    out.append(f"{self.indent}local function {sub_name}({', '.join(params)})")
+                    out.append(f"{self.indent}{sub_name} = function({', '.join(params)})")
                 out.extend(sub_body)
                 out.append(f"{self.indent}end")
 
