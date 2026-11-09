@@ -1,0 +1,164 @@
+name: Smart Lua Real BRPlayerCharacterBase Acceptance
+
+on:
+  push:
+    branches:
+      - feat/smart-lua-recovery-fusion-20261109
+    paths:
+      - .github/workflows/smart-lua-real-sample-acceptance.yml
+      - app/src/main/python/lua_engine/**
+      - app/src/main/python/lua_intelligence/**
+      - tests/test_lua*.py
+  pull_request:
+    branches:
+      - feat/full-reference-source-registry-20261106
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: smart-lua-real-sample-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  real-sample-acceptance:
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    steps:
+      - name: Checkout ALVSIA PRO source
+        uses: actions/checkout@v4
+
+      - name: Install Lua 5.3 parser
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y lua5.3
+
+      - name: Build pinned unluac-rs host CLI
+        run: |
+          set -euo pipefail
+          git clone --depth 1 --branch v1.4.4 https://github.com/x3zvawq/unluac-rs.git candidate
+          test "$(grep -m1 '^version = ' candidate/Cargo.toml | cut -d '"' -f2)" = "1.4.4"
+          cargo build --locked --release -p unluac-cli --manifest-path candidate/Cargo.toml
+          test -x candidate/target/release/unluac-cli
+          candidate/target/release/unluac-cli --help >/dev/null
+
+      - name: Checkout authorized BRPlayerCharacterBase sample
+        uses: actions/checkout@v4
+        with:
+          repository: papaalvisia-creator/kumpulan-source-tool
+          ref: sample/brplayercharacterbase-20261109-175719
+          token: ${{ secrets.SMART_LUA_SAMPLE_TOKEN }}
+          path: authorized-sample
+          fetch-depth: 1
+
+      - name: Verify exact authorized sample
+        env:
+          EXPECTED_SHA256: a99539e2a78bd4e11febb919735fbd9f43a94aa3a0ddc7b6efc610854b10433a
+          EXPECTED_SIZE: "5583230"
+        run: |
+          set -euo pipefail
+          SAMPLE="$GITHUB_WORKSPACE/authorized-sample/samples/lua/BRPlayerCharacterBase.lua"
+          test -f "$SAMPLE"
+          test "$(stat -c %s "$SAMPLE")" = "$EXPECTED_SIZE"
+          echo "$EXPECTED_SHA256  $SAMPLE" | sha256sum -c -
+          echo "AUTHORIZED SAMPLE: PASS"
+          xxd -l 32 "$SAMPLE"
+
+      - name: Run real Smart Lua recovery and semantic consensus
+        env:
+          EXPECTED_SHA256: a99539e2a78bd4e11febb919735fbd9f43a94aa3a0ddc7b6efc610854b10433a
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import concurrent.futures
+          import hashlib
+          import os
+          import subprocess
+          import sys
+          from pathlib import Path
+
+          sys.path.insert(0, str(Path("app/src/main/python")))
+          from lua_engine.streaming_decompiler import preflight_magic, stream_decompile_lua53
+          from lua_engine.engine import validate_lua_source
+          from lua_intelligence.fusion import FusionCandidate, fuse_candidates
+
+          sample = Path("authorized-sample/samples/lua/BRPlayerCharacterBase.lua")
+          raw = sample.read_bytes()
+          expected = os.environ["EXPECTED_SHA256"]
+          actual = hashlib.sha256(raw).hexdigest()
+          if actual != expected:
+              raise SystemExit(f"sample SHA mismatch: {actual}")
+
+          kind = preflight_magic(sample)
+          print(f"preflight={kind}", flush=True)
+          if kind != "luac_53":
+              raise SystemExit(f"unexpected real sample dialect: {kind}")
+
+          out = Path(os.environ["RUNNER_TEMP"]) / "brplayer"
+          out.mkdir(parents=True, exist_ok=True)
+          unluac_out = out / "unluac.lua"
+          stream_out = out / "alvsia.lua"
+
+          def run_unluac():
+              cmd = [
+                  "candidate/target/release/unluac-cli",
+                  "-i", str(sample),
+                  "-D", "lua5.3",
+                  "--ignore-debug",
+                  "--generate-mode", "permissive",
+                  "-o", str(unluac_out),
+              ]
+              try:
+                  p = subprocess.run(cmd, text=True, capture_output=True, timeout=240)
+                  return ("unluac", p.returncode, p.stdout[-4000:], p.stderr[-4000:])
+              except subprocess.TimeoutExpired:
+                  return ("unluac", 124, "", "TIMEOUT")
+
+          def run_stream():
+              try:
+                  ok, note = stream_decompile_lua53(sample, stream_out)
+                  return ("alvsia_lua53", 0 if ok else 1, note, "")
+              except Exception as exc:
+                  return ("alvsia_lua53", 1, "", repr(exc))
+
+          with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
+              futures = [pool.submit(run_unluac), pool.submit(run_stream)]
+              results = [f.result() for f in futures]
+
+          candidates = []
+          for name, rc, stdout, stderr in results:
+              print(f"{name}: rc={rc}", flush=True)
+              if stdout:
+                  print(stdout, flush=True)
+              if stderr:
+                  print(stderr, flush=True)
+
+          if unluac_out.is_file() and unluac_out.stat().st_size:
+              ok, note = validate_lua_source(unluac_out, expected_version="Lua 5.3")
+              print(f"unluac_validation={ok} {note}", flush=True)
+              if ok:
+                  candidates.append(FusionCandidate("unluac_rs_v1_4_4", unluac_out, note))
+
+          if stream_out.is_file() and stream_out.stat().st_size:
+              ok, note = validate_lua_source(stream_out, expected_version="Lua 5.3")
+              print(f"alvsia_lua53_validation={ok} {note}", flush=True)
+              if ok:
+                  candidates.append(FusionCandidate("alvsia_lua53", stream_out, note))
+
+          print(f"validated_candidates={len(candidates)}", flush=True)
+          if len(candidates) < 2:
+              raise SystemExit("REAL SAMPLE ACCEPTANCE FAILED: fewer than two independently validated candidates")
+
+          decision = fuse_candidates(candidates)
+          print(f"fusion_status={decision.status}", flush=True)
+          print(f"fusion_confidence={decision.confidence}", flush=True)
+          print(f"fusion_agreement={decision.agreement}", flush=True)
+          print(f"fusion_scores={decision.scores}", flush=True)
+
+          if decision.status != "CONSENSUS" or decision.selected_path is None:
+              raise SystemExit("REAL SAMPLE ACCEPTANCE FAILED: semantic consensus not reached")
+
+          print("REAL SAMPLE ACCEPTANCE: PASS", flush=True)
+          PY
