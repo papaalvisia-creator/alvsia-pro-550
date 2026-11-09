@@ -135,7 +135,7 @@ def semantic_signature(path: Path) -> dict:
                     n = tokens.count(k)
                     if n:
                         keyword_counts[k] = keyword_counts.get(k, 0) + n
-                strings += len(re.findall(r'"(?:\\\\.|[^"\\\\])*"|\\'(?:\\\\.|[^\\'\\\\])*\\'', line))
+                strings += len(re.findall(r"""(?:"(?:\\\\.|[^"\\\\])*"|'(?:\\\\.|[^'\\\\])*')""", line))
                 functions += line.count("function")
                 returns += line.count("return")
     except OSError as exc:
