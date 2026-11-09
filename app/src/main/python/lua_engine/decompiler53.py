@@ -377,7 +377,7 @@ class Decompiler:
     def _k(self, idx: int) -> str:
         if idx < 0 or idx >= len(self.p.constants):
             self.invalid_constant_refs.append((idx, len(self.p.constants), self.name))
-            return "nil"
+            return f"nil -- INVALID_CONSTANT_INDEX_{idx}"
         v = self.p.constants[idx]
         return self._lit(v)
 
