@@ -39,15 +39,14 @@ jobs:
         # Verify the archive checksum and src/Makefile before compiling the reference luac.
         run: |
           set -euo pipefail
-          git init lua-5.5.0
-          git -C lua-5.5.0 remote add origin https://github.com/lua/lua.git
-          git -C lua-5.5.0 fetch --depth 1 origin v5.5.0
-          git -C lua-5.5.0 checkout --detach FETCH_HEAD
-          echo "Lua 5.5.0 fetched commit: $(git -C lua-5.5.0 rev-parse HEAD)"
+          set -euo pipefail
+          curl --fail --location --retry 6 --retry-all-errors --connect-timeout 15 --max-time 90 -o lua-5.5.0.tar.gz https://www.lua.org/ftp/lua-5.5.0.tar.gz
+          echo "57ccc32bbbd005cab75bcc52444052535af691789dba2b9016d5c50640d68b3d  lua-5.5.0.tar.gz" | sha256sum -c -
+          tar -xzf lua-5.5.0.tar.gz
           LUA55_ROOT="lua-5.5.0"
-          gcc -O2 -std=c99 -DLUA_USE_LINUX -DMAKE_LUAC -o "$LUA55_ROOT/luac" "$LUA55_ROOT/onelua.c" -lm -ldl
-          test -x "$LUA55_ROOT/luac"
-          "$LUA55_ROOT/luac" -v
+          make -C "$LUA55_ROOT" linux
+          test -x "$LUA55_ROOT/src/luac"
+          "$LUA55_ROOT/src/luac" -v
           echo "Lua 5.5 reference root: $LUA55_ROOT"
 
       - name: Build genuine Luau v7 reference compiler
