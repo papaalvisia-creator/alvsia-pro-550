@@ -44,6 +44,8 @@ def fingerprint(path: Path) -> Fingerprint:
         return Fingerprint("bytecode", "luajit", "LuaJIT", .99, features, notes)
     if head.startswith(b"Luau"):
         return Fingerprint("bytecode", "luau", "Luau", .98, features, notes)
+    if head.startswith(b"\x1f\x8b"):
+        return Fingerprint("container", "unknown", "GZIP", .98, features, notes)
     if head.lstrip().startswith((b"--",b"local ",b"return ",b"function ",b"do ",b"if ",b"for ",b"while ",b"repeat ")):
         return Fingerprint("source", "lua-family", "Lua source", .82, features, notes)
     if b"Lua" in head[:128]:
