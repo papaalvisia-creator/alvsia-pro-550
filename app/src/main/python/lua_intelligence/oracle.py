@@ -55,7 +55,7 @@ def parse_source(path: Path) -> OracleResult:
                 text = carry + raw.decode("utf-8", "replace")
                 carry = text[-128:]
                 scan = text[:-128] if len(text) > 128 else ""
-                parts = re.findall(r"[A-Za-z_][A-Za-z0-9_]*|\\d+(?:\\.\\d+)?|==|~=|<=|>=|\\.\\.\\.|[{}()\\[\\],;:.+*/%^#=<>~-]", scan)
+                parts = re.findall(r"[A-Za-z_][A-Za-z0-9_]*|\d+(?:\.\d+)?|==|~=|<=|>=|\.\.\.|[{}()\\[\\],;:.+*/%^#=<>~-]", scan)
                 tokens += len(parts)
                 kw += sum(t in keywords for t in parts)
                 control += sum(t in {"if","for","while","repeat","function","do"} for t in parts)
@@ -67,7 +67,7 @@ def parse_source(path: Path) -> OracleResult:
                             mismatches += 1
                         else:
                             balance[pairs[tok]] -= 1
-        tokens += len(re.findall(r"[A-Za-z_][A-Za-z0-9_]*|\\d+(?:\\.\\d+)?|==|~=|<=|>=|\\.\\.\\.|[{}()\\[\\],;:.+*/%^#=<>~-]", carry))
+        tokens += len(re.findall(r"[A-Za-z_][A-Za-z0-9_]*|\d+(?:\.\d+)?|==|~=|<=|>=|\.\.\.|[{}()\\[\\],;:.+*/%^#=<>~-]", carry))
         remaining = sum(balance.values())
         if size == 0:
             return OracleResult(False, "parser", 0.0, {"error": "empty source"})
@@ -126,13 +126,13 @@ def semantic_signature(path: Path) -> dict:
     try:
         with path.open("r", encoding="utf-8", errors="replace") as fh:
             for line in fh:
-                tokens = re.findall(r"[A-Za-z_][A-Za-z0-9_]*|\\d+(?:\\.\\d+)?|==|~=|<=|>=|\\.\\.\\.|\\S", line)
+                tokens = re.findall(r"[A-Za-z_][A-Za-z0-9_]*|\d+(?:\.\d+)?|==|~=|<=|>=|\.\.\.|\\S", line)
                 token_count += len(tokens)
                 for k in keywords:
                     n = tokens.count(k)
                     if n:
                         keyword_counts[k] = keyword_counts.get(k, 0) + n
-                strings += len(re.findall(r"""(?:"(?:\\\\.|[^"\\\\])*"|'(?:\\\\.|[^'\\\\])*')""", line))
+                strings += len(re.findall(r"""(?:"(?:\\\.|[^"\\\\])*"|'(?:\\\.|[^'\\\\])*')""", line))
                 functions += line.count("function")
                 returns += line.count("return")
     except OSError as exc:
