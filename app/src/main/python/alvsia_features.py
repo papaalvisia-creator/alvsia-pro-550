@@ -562,6 +562,34 @@ def run_lua_smart(input_path, out_dir, jars_dir=None):
     result["layer_count"] = len(intelligence.artifacts)
     result["layer_graph_root"] = intelligence.root_id
     result["analysis_status"] = intelligence.status
+
+    # Candidate fusion is an explicit validation layer: engine output is only
+    # considered a recovery candidate until structural evidence is measured.
+    try:
+        from lua_intelligence.candidates import score_source_candidate, candidates_json
+        candidates = []
+        out_value = result.get("out")
+        if out_value and Path(str(out_value)).is_file():
+            candidates.append(score_source_candidate(
+                Path(str(out_value)),
+                dialect=str(result.get("format") or result.get("version") or "unknown"),
+                engine=str(result.get("selected_engine") or "legacy-smart"),
+            ))
+        if candidates:
+            result["candidate_manifest"] = candidates_json(candidates)
+            best = max(candidates, key=lambda c: c.rank())
+            result["candidate_score"] = best.score
+            result["candidate_status"] = best.status
+            manifest = out_dir / (input_path.stem + "_candidates.json")
+            import json
+            manifest.write_text(
+                json.dumps(result["candidate_manifest"], ensure_ascii=False, indent=2),
+                encoding="utf-8",
+            )
+            result["candidate_manifest_path"] = str(manifest)
+    except Exception as exc:
+        # Candidate scoring must never turn a valid legacy result into a crash.
+        result["candidate_fusion_error"] = f"{type(exc).__name__}: {exc}"
     return result
 
 # ---------------------------------------------------------------------------
