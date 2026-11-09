@@ -29,7 +29,7 @@ object ToolCatalog {
         ToolItem(15, "String Recover",  "Obfuscated string restore · constant pool dump"),
         ToolItem(16, "Lua Inject",      "Patch Lua bytes · prepend hook source · repack edited PAK tree"),
         ToolItem(17, "Anti-RE Audit",   "Detect weak points in target APK · generate report"),
-        ToolItem(18, "Lua Protector",    "AES-256-GCM encrypt Lua source into authenticated protected payload"),
+        ToolItem(18, "Lua Protector",    "Smart source protection · AES-256-GCM · VM wrapper"),
         // --- PRIVATE MODULE ---
         ToolItem(19, "ALVSIA PRIVATE TOOL", "Private analysis suite · sealed runtime required"),
     )

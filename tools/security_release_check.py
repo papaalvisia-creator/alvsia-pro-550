@@ -45,7 +45,7 @@ required_modules = {
     "lua_engine/engine.py", "lua_engine/decompiler53.py", "lua_engine/bgmi.py",
     "lua_engine/luajit_decompiler.py", "lua_engine/container.py",
     "lua_engine/detector.py", "lua_engine/multi_format.py",
-    "lua_engine/streaming_decompiler.py", "lua_engine/vm_deobfuscator.py",
+    "lua_engine/streaming_decompiler.py", "lua_engine/orchestrator.py", "lua_engine/protection.py", "lua_engine/protection_pipeline.py", "lua_engine/vm_deobfuscator.py",
 }
 script_modules = set(re.findall(r'"([^"]+\.py)"', seal_script.split("MODULES = (",1)[-1].split(")",1)[0]))
 loader_modules = set(re.findall(r'"([^"]+)":', loader.split("_MAP = {", 1)[-1].split("}", 1)[0]))

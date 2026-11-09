@@ -35,6 +35,27 @@ object RaspEngine {
     private val handler      = Handler(Looper.getMainLooper())
     private val hardKillCount = AtomicInteger(0)
 
+    // Soft heuristic signals (for example, a bundled hook-support library) must not
+    // generate a Telegram alert on every 4-second RASP tick.
+    private const val SOFT_REPORT_COOLDOWN_MS = 15 * 60 * 1000L
+    @Volatile private var lastSoftSignature: String = ""
+    @Volatile private var lastSoftReportAt: Long = 0L
+
+    @Synchronized
+    private fun shouldReportSoft(signature: String, now: Long): Boolean {
+        if (signature.isBlank()) {
+            lastSoftSignature = ""
+            lastSoftReportAt = 0L
+            return false
+        }
+        if (signature != lastSoftSignature || now - lastSoftReportAt >= SOFT_REPORT_COOLDOWN_MS) {
+            lastSoftSignature = signature
+            lastSoftReportAt = now
+            return true
+        }
+        return false
+    }
+
     @Volatile var threatLevel: Int = 0
         private set
 
@@ -74,7 +95,10 @@ object RaspEngine {
         // ④⑤⑥⑨ Root / emulator / clone / ADB (soft — legitimate testers may use these)
         emulatorSignals().forEach { soft += it }
 
-        // ⑧ Network MITM
+        // ⑧ Network MITM / proxy guard. Guard health is distinct from
+        // whether a proxy is currently present on a legitimate clean network.
+        if (!NetworkGuard.net_guard(ctx)) soft += "net_guard_unavailable"
+        if (NetworkGuard.detect_proxy(ctx)) soft += "proxy_detected"
         NetworkGuard.signals(ctx).forEach { soft += it }
 
         // ⑩ Hook packages (legacy — kept for back-compat with FridaProbe)
@@ -101,7 +125,6 @@ object RaspEngine {
             hardKillCount.incrementAndGet()
             val detail = hard.joinToString("|")
             try { ThreatReport.emit(ctx, "THREAT", detail, license) } catch (_: Exception) {}
-            try { TelegramNotifier.notify(ctx, "THREAT", detail, license) } catch (_: Exception) {}
             try {
                 SessionGate.onThreat()
                 RamToolVault.wipeAll()
@@ -111,8 +134,17 @@ object RaspEngine {
         // Soft: degrade + report
         if (soft.isNotEmpty()) {
             Guard.degraded = true
-            val detail = soft.joinToString("|")
-            try { ThreatReport.emit(ctx, "SOFT_THREAT", detail, license) } catch (_: Exception) {}
+            // FridaProbe and AntiHook inspect the same /proc/self/maps entry.
+            // Collapse their differently-prefixed aliases into one soft signal.
+            val detail = soft.map { signal ->
+                if (signal.startsWith("antihook_hooklib:")) signal.removePrefix("antihook_")
+                else signal
+            }.distinct().sorted().joinToString("|")
+            if (shouldReportSoft(detail, System.currentTimeMillis())) {
+                try { ThreatReport.emit(ctx, "SOFT_THREAT", detail, license) } catch (_: Exception) {}
+            }
+        } else {
+            shouldReportSoft("", System.currentTimeMillis())
         }
     }
 

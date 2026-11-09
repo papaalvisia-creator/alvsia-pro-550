@@ -1,0 +1,33 @@
+name: ALVSIA Program Intelligence Validation
+on:
+  push:
+    branches: [ feat/alvsia-program-intelligence-core-20261109 ]
+  pull_request:
+    branches: [ feat/full-reference-source-registry-20261106 ]
+permissions:
+  contents: read
+jobs:
+  intelligence:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Compile Python sources
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          files = sorted(Path("app/src/main/python").rglob("*.py"))
+          for p in files:
+              compile(p.read_text(encoding="utf-8"), str(p), "exec")
+          print("PYTHON SYNTAX PASS", len(files))
+          PY
+      - name: Run Program Intelligence tests
+        run: |
+          python -m unittest tests/test_lua_intelligence_core.py -v
+          python -m unittest tests/test_lua_intelligence_candidates.py -v
+          python -m unittest tests/test_lua_intelligence_ir.py -v
+          python -m unittest tests/test_lua_intelligence_oracle.py -v

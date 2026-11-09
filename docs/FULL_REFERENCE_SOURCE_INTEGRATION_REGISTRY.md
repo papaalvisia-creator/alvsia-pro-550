@@ -253,3 +253,120 @@ The following repository sources are now retained byte-for-byte under ALVISIA8/k
 - ZmaDumpernub4.py — direct Telegram sendDocument of local files and shell terminal clearing.
 
 The incoming-manifest entries LUCKY_HUB_BYPASS_DUMPER.py, bypass.cpp, magic noban.lua and mem_dump.py are absent from the current source-tool Git tree. They are classified as quarantine-only; absence is not represented as a physical move. The separate root-level dump.py parser remains an offline file-based metadata parser and is not a live memory acquisition tool.
+
+
+## Unified Lua Intelligence Orchestrator — 2026-11-07
+
+The Smart Lua entry point now delegates compatible decompilation to
+`lua_engine.orchestrator.run_decompiler_pipeline` after format detection and
+container normalization. The orchestrator is intentionally an internal
+coordinator: the existing Lua Center remains the user-facing entry point.
+
+### Current engine routing
+
+| Detected input | Candidate engine | Current status |
+|---|---|---|
+| Lua 5.3 bytecode | ALVSIA streaming Lua 5.3 decompiler | Wired as first candidate |
+| Lua 5.3 bytecode | Unluac JAR family | Wired as additional candidate when Java + JAR are available |
+| Lua 5.1 / 5.2 / 5.4 bytecode | Unluac JAR family | Wired when Java + JAR are available; sample compatibility still required |
+| LuaJIT bytecode | ALVSIA LuaJIT disassembler | Wired as format-specific candidate |
+| Unknown / unsupported format | No forced decompiler | Honest unsupported result + existing analysis/recovery path |
+
+The orchestrator executes compatible candidates to separate output files,
+validates each candidate with the Lua source validator, selects the first
+validated result according to priority, and retains additional validated
+outputs in a sibling `*_alternates/` directory. Failed or structurally invalid
+candidate files are deleted. Original input bytes are never modified.
+
+### Unluac asset inventory
+
+The following four asset paths were confirmed in the application repository
+using Git blob identities:
+
+| Asset | Git blob SHA | Inventory note |
+|---|---|---|
+| `app/src/main/assets/unluac/unluac_2025_12_23.jar` | `3380709e36efe5be6b9f1e63620dfe013864ca98` | Present |
+| `app/src/main/assets/unluac/unluac_pro.jar` | `55754aa27d6099026f8a5290e6c1962dff5a785d` | Present |
+| `app/src/main/assets/unluac/unluac_patched.jar` | `44f9017e1117aadba46b86a262fa23b0d96fc825` | Present |
+| `app/src/main/assets/unluac/unluac.jar` | `3380709e36efe5be6b9f1e63620dfe013864ca98` | Present; byte-identical blob to dated JAR |
+
+The dated JAR and generic `unluac.jar` resolve to the same Git blob and must
+not be counted as two unique engines. The three unique JAR blobs are not yet
+claimed to be three independently compatible decompilers: manifest metadata,
+license/provenance, supported bytecode versions, and representative fixtures
+must be checked before assigning unique capability claims.
+
+### Explicit remaining inventory
+
+LuaDec / luadec JARs or executables, LuaC compiler binaries for 5.1–5.4,
+standalone Lua runtimes, and additional platform-specific libraries have not
+yet been verified in the current app asset inventory. The orchestrator does
+not invent command-line flags or execute unknown binaries. They remain
+inventory targets; each will be added only after format/version, ABI,
+provenance/license, and invocation contract are established.
+
+### Tests added
+
+`tests/test_lua_orchestrator.py` covers compatible engine filtering,
+priority-based selection, retaining a validated alternate, rejection of
+invalid output, original-input preservation, and honest engine failure
+reporting. Android Security Validation discovers this test through the
+`test_lua*.py` unittest pattern. CI execution is still required before this
+increment is considered verified.
+
+
+### LuaDec source candidate — 2026-11-07
+
+A suitable source candidate was identified for a separate native engine:
+[`zhangjiequan/luadec`](https://github.com/zhangjiequan/luadec). Its repository
+documents Lua 5.1 support and Lua 5.2/5.3 support, and its fork describes
+improved handling of stripped-debug 5.2/5.3 chunks. The upstream repository
+includes an MIT license. This makes it a viable source candidate, not yet an
+ALVSIA runtime engine.
+
+Integration plan:
+1. Pin an exact upstream commit and preserve the MIT license/credits.
+2. Build separate ARM64 Android and Windows artifacts; do not ship a Windows
+   `.exe`/`.dll` as if Android could execute it.
+3. Establish a version/ABI manifest and SHA-256 for each built artifact.
+4. Add a bounded, no-shell runner with per-version routing and timeout.
+5. Validate output against known Lua 5.1, 5.2 and 5.3 fixtures, including
+   stripped-debug samples, before enabling the engine in Smart Lua.
+
+The upstream README describes Lua 5.2/5.3 as experimental in the general
+project overview, so ALVSIA must keep per-version confidence and fixture
+results rather than assume all versions are equally reliable.
+
+
+### Additional Lua formats and protection families to inventory — 2026-11-07
+
+The user's "Luaraph" is likely **Luraph** (spelling to be confirmed). Luraph is
+a commercial Lua obfuscator/virtualizer, not a general-purpose bytecode
+decompiler. ALVSIA should identify likely Luraph-protected wrappers and route
+them to a dedicated, version-aware *static analysis / authorized recovery*
+workflow. Do not label ordinary Unluac/LuaDec as Luraph deobfuscators: their
+bytecode engines do not automatically undo a custom virtual machine.
+
+Candidate families and tools to investigate, with separate compatibility
+profiles and fixtures:
+
+- **Luraph** — wrapper / VM-family identification, version fingerprinting,
+  static payload and opcode-structure analysis; only enable recovery paths
+  where the format and authorized test fixtures are understood.
+- **Luau** — keep separate from standard PUC Lua bytecode; investigate
+  luauDec, Unluau, Tovek and other maintained candidates, then pin versions
+  and licenses before integration.
+- **Lua 5.4 / 5.5** — verify modern unluac-family support against real fixtures;
+  never infer compatibility from a tool's name.
+- **LuaJIT 2.1** — retain dedicated bytecode/disassembly route; do not pass
+  LuaJIT chunks to standard Lua 5.x decompilers as if formats were identical.
+- **ChunkSpy / LuaAssemblyTools** — investigate as disassembly and bytecode
+  inspection helpers, not source decompilers.
+- **Lua ART** — exact product/project name remains unresolved. Do not invent
+  an engine or claim support until the user supplies a spelling, link, APK
+  filename, or screenshot that identifies it.
+
+These candidates join the central inventory alongside Unluac, LuaDec, LuaC,
+LuaJIT, VM/T24/PUBG/DST analyzers, XOR layers and multi-XOR probes. Each item
+must record role, supported dialect/version, platform/ABI, source/license,
+SHA-256, invocation contract, fixtures and verified result.

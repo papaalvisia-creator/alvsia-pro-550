@@ -11,7 +11,7 @@ import android.content.Context
  * coordinates, storage paths and file contents are never included.
  */
 object ThreatReport {
-    private val acceptedKinds = setOf("TAMPER", "FRIDA", "ROOT", "DEBUG", "SIG_BLOCK", "THREAT")
+    private val acceptedKinds = setOf("TAMPER", "FRIDA", "ROOT", "DEBUG", "SIG_BLOCK", "THREAT", "SOFT_THREAT")
     private val sensitiveField = Regex(
         "(?i)\\b(token|api[_-]?key|password|license(?:[_-]?key)?|session[_-]?token|hwid|device[_-]?id)\\b\\s*[:=]\\s*[^\\s,;]+"
     )

@@ -314,13 +314,16 @@ def run_lua_multi_xor(input_path, out_dir, keys=None):
     return {"ok": True, "mode": "multi_xor", "candidates": results[:8], "best": results[0] if results else None}
 
 
-def run_lua_smart(input_path, out_dir, jars_dir=None):
+from lua_intelligence import analyze_file, IntelligenceConfig
+
+def _run_lua_smart_legacy(input_path, out_dir, jars_dir=None):
     """
-    Unified LUA pipeline:
-    1) detect LuaS header / unwrap container
-    2) pure-Python Lua 5.3 decompiler (no Java needed — works on Android)
-    3) try unluac jar if Java available
-    4) on failure → constants + strings + multi-xor
+    Unified Smart Lua pipeline:
+    1) identify source, bytecode dialect, container and confidence
+    2) run protection-pattern detection only (no standard engine execution)
+    3) pass pattern recovery and compatible engines into one candidate selector
+    4) validate candidates, retain valid alternatives, and report partial recovery honestly
+    5) use constants/strings/XOR only as clearly labelled fallback diagnostics
     """
     input_path = Path(input_path)
     out_dir = Path(out_dir)
@@ -329,13 +332,15 @@ def run_lua_smart(input_path, out_dir, jars_dir=None):
     report = {"file": str(input_path), "size": len(data), "steps": []}
     info = detect_lua(input_path)
     if info.kind == "unknown":
-        report["steps"].append({"step": "detect", "ok": False, "note": "not recognized Lua/source/container"})
-        r = run_lua_bytecode_strings(input_path, out_dir)
-        report["steps"].append({"step": "strings", **r})
-        return {"ok": False, "mode": "smart_nonlua", **report}
-    report["steps"].append({"step": "detect", "ok": True, "format": info.format,
-                             "version": info.version, "wrapped": info.wrapped,
-                             "container": info.container, "chunks": info.container_chunks})
+        report["steps"].append({
+            "step": "detect", "ok": False,
+            "note": "standard Lua signature not recognized; checking known protection patterns before fallback",
+            "format": info.format, "confidence": info.confidence,
+        })
+    else:
+        report["steps"].append({"step": "detect", "ok": True, "format": info.format,
+                                 "version": info.version, "wrapped": info.wrapped,
+                                 "container": info.container, "chunks": info.container_chunks})
 
     # Normalize a comment-prefixed Lua/LuaJIT payload for every downstream
     # engine. The original input remains untouched and is still used for
@@ -374,50 +379,117 @@ def run_lua_smart(input_path, out_dir, jars_dir=None):
         except Exception as e:
             report["steps"].append({"step": "unwrap", "ok": False, "error": str(e)})
 
-    # ── Step 2: pure-Python Lua 5.3 decompiler (primary — no Java) ─────────
-    work_data = work_input.read_bytes()
-    is_lua53 = (len(work_data) > 4 and
-                work_data[:4] == b"\x1bLua" and
-                work_data[4] == 0x53)
-
-    if _decompile53_file is not None and is_lua53:
-        try:
-            out_lua = out_dir / (input_path.stem + "_decompiled.lua")
-            pr = _decompile53_file(work_input, out_lua)
-            report["steps"].append({"step": "py_decompile53", **pr})
-            if pr.get("ok") and out_lua.exists() and out_lua.stat().st_size > 0:
-                # Use the same source validator as the Unluac path. A keyword alone
-                # can appear in damaged or partially recovered text and is not proof.
-                valid, validation_note = validate_lua_source(out_lua)
+    # ── Protected-format preflight (diagnostics only) ────────────────────
+    vm_partial_seen = False
+    protected_partial_seen = False
+    pattern_candidate = None
+    try:
+        from lua_engine.streaming_decompiler import decompile_large
+        pattern_result = decompile_large(
+            work_input, out_dir, jars_dir=jars_dir, preflight_only=True
+        )
+        report["steps"].append({
+            "step": "protected_pattern_preflight",
+            **pattern_result,
+        })
+        if pattern_result.get("ok") and pattern_result.get("recovered") is True:
+            candidate = Path(str(pattern_result.get("out") or ""))
+            if candidate.is_file() and candidate.suffix.lower() == ".lua":
+                pattern_candidate = candidate
                 report["steps"].append({
-                    "step": "validate_py53_source",
-                    "ok": bool(valid),
-                    "note": str(validation_note),
-                    "file": str(out_lua),
+                    "step": "pattern_candidate_staged",
+                    "ok": True,
+                    "pattern_id": pattern_result.get("pattern_id"),
+                    "file": str(candidate),
                 })
-                if valid:
-                    report["ok"] = True
-                    report["final_status"] = "SUCCESS"
-                    return {"ok": True, "mode": "smart_py53",
-                            "out": str(out_lua), "lines": pr.get("lines", 0), **report}
-                out_lua.unlink(missing_ok=True)
-        except Exception as e:
-            report["steps"].append({"step": "py_decompile53", "ok": False, "error": str(e)})
+        if pattern_result.get("recovered") is False:
+            protected_partial_seen = True
+            vm_partial_seen = pattern_result.get("mode") == "bgmi_vm_partial"
+            report["steps"].append({
+                "step": "vm_partial_not_final" if vm_partial_seen else "protected_partial_not_final",
+                "ok": False,
+                "note": "Protection analysis is diagnostic only; compatible decompiler engines will still be tried",
+                "pattern_id": pattern_result.get("pattern_id"),
+                "protos_parsed": pattern_result.get("protos_parsed", 0),
+                "main_instructions": pattern_result.get("main_code_count", 0),
+                "main_constants": pattern_result.get("main_const_count", 0),
+                "parse_errors": pattern_result.get("parse_errors", 0),
+            })
+    except Exception as exc:
+        report["steps"].append({
+            "step": "protected_pattern_preflight",
+            "ok": False,
+            "error": f"{type(exc).__name__}: {exc}",
+        })
 
-    # ── Step 3: unluac jar (fallback — needs Java, works in Termux) ─────────
-    ur = run_unluac(work_input, out_dir, jars_dir=jars_dir)
-    report["steps"].append({"step": "unluac", **ur})
-    if ur.get("ok"):
-        return {"ok": True, "mode": "smart_unluac", **report}
+    # ── One engine registry and one candidate-selection pipeline ──────────
+    try:
+        from lua_engine.orchestrator import (
+            EngineSpec, build_engine_registry, run_decompiler_pipeline,
+        )
+        normalized_info = detect_lua(work_input)
+        registry = build_engine_registry(normalized_info, jars_dir=jars_dir)
+        if pattern_candidate is not None:
+            def _run_pattern_candidate(_src, dst, candidate=pattern_candidate):
+                shutil.copy2(candidate, dst)
+                return True, "protection-pattern recovery candidate"
+            registry.append(EngineSpec(
+                "protected_pattern_recovery",
+                (normalized_info.format,),
+                _run_pattern_candidate,
+                -10,
+            ))
+        out_lua = out_dir / (input_path.stem + "_decompiled.lua")
+        pipeline = run_decompiler_pipeline(
+            work_input, out_lua, normalized_info,
+            jars_dir=jars_dir, registry=registry,
+        )
+        if pattern_candidate is not None and pipeline.get("selected_engine") == "source_passthrough":
+            protected_partial_seen = True
+            report["steps"].append({
+                "step": "pattern_candidate_rejected",
+                "ok": False,
+                "note": "Recovered candidate did not validate; returning wrapper source only as partial output",
+            })
+        if pattern_candidate is not None:
+            pattern_candidate.unlink(missing_ok=True)
+        report["steps"].append({"step": "engine_orchestrator", **pipeline})
+        if pipeline.get("ok"):
+            report["ok"] = True
+            report["vm_obfuscated"] = bool(vm_partial_seen)
+            report["source_recovered"] = not protected_partial_seen
+            report["artifact_kind"] = (
+                "vm_wrapper_source" if vm_partial_seen
+                else "protected_wrapper_source" if protected_partial_seen
+                else "lua_source"
+            )
+            report["final_status"] = "PARTIAL" if protected_partial_seen else "SUCCESS"
+            return {
+                "ok": True,
+                "mode": (
+                    "smart_orchestrated_vm_wrapper" if vm_partial_seen
+                    else "smart_orchestrated_partial" if protected_partial_seen
+                    else "smart_orchestrated"
+                ),
+                "out": pipeline.get("out"),
+                "selected_engine": pipeline.get("selected_engine"),
+                **report,
+            }
+    except Exception as exc:
+        report["steps"].append({
+            "step": "engine_orchestrator",
+            "ok": False,
+            "error": f"{type(exc).__name__}: {exc}",
+        })
 
     # ── Step 4: partial recovery ─────────────────────────────────────────────
-    cr = extract_lua_constants(input_path, out_dir)
+    cr = extract_lua_constants(work_input, out_dir)
     report["steps"].append({"step": "constants", **cr})
 
-    sr = run_lua_bytecode_strings(input_path, out_dir)
+    sr = run_lua_bytecode_strings(work_input, out_dir)
     report["steps"].append({"step": "strings", **sr})
 
-    xr = run_lua_multi_xor(input_path, out_dir)
+    xr = run_lua_multi_xor(work_input, out_dir)
     report["steps"].append({"step": "multi_xor", **{k: xr[k] for k in ("ok", "mode", "best") if k in xr}})
 
     # Honest final status: never SUCCESS decompile without validated source
@@ -427,10 +499,9 @@ def run_lua_smart(input_path, out_dir, jars_dir=None):
         for cand in out_dir.glob("*_decompiled.lua"):
             v = validate_decompile_text(cand.read_text(encoding="utf-8", errors="replace"))
             report["steps"].append({"step": "validate_source", "file": str(cand), **v})
-            if v.get("is_lua_source"):
-                final_status = "SUCCESS"
-                report["ok"] = True
-                break
+            # This legacy text classifier is diagnostic only. It cannot
+            # upgrade PARTIAL to SUCCESS: only a concrete engine candidate
+            # accepted by the Smart Lua validator may do that.
         else:
             # strings file is recovery only
             for cand in out_dir.glob("*_strings.txt"):
@@ -445,7 +516,7 @@ def run_lua_smart(input_path, out_dir, jars_dir=None):
         "size=%s" % report.get("size"),
         "final_status=%s" % final_status,
         "mode=smart_fallback",
-        "note=py_decompile53 + unluac both failed — recovery artifacts only",
+        "note=all compatible decompiler engines failed validation — recovery artifacts only",
         "",
     ]
     for st in report.get("steps") or []:
@@ -463,6 +534,63 @@ def run_lua_smart(input_path, out_dir, jars_dir=None):
     }
 
 
+
+
+
+def run_lua_smart(input_path, out_dir, jars_dir=None):
+    """Program-intelligence front door with legacy engine orchestration as a validated adapter."""
+    input_path = Path(input_path)
+    out_dir = Path(out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    intelligence = analyze_file(
+        input_path, out_dir / "intelligence",
+        IntelligenceConfig(
+            max_depth=int(os.environ.get("ALVSIA_LUA_MAX_DEPTH", "12")),
+            max_artifacts=int(os.environ.get("ALVSIA_LUA_MAX_ARTIFACTS", "128")),
+            max_file_bytes=int(os.environ.get("ALVSIA_LUA_MAX_BYTES", str(256 * 1024 * 1024))),
+            max_elapsed_seconds=float(os.environ.get("ALVSIA_LUA_MAX_SECONDS", "45")),
+        ),
+    )
+    try:
+        legacy = _run_lua_smart_legacy(input_path, out_dir, jars_dir=jars_dir)
+    except Exception as exc:
+        legacy = {"ok": False, "final_status": "FAILED",
+                  "error": f"{type(exc).__name__}: {exc}"}
+    result = dict(legacy)
+    result["intelligence"] = intelligence.to_dict()
+    result["intelligence_report"] = intelligence.report_path
+    result["layer_count"] = len(intelligence.artifacts)
+    result["layer_graph_root"] = intelligence.root_id
+    result["analysis_status"] = intelligence.status
+
+    # Candidate fusion is an explicit validation layer: engine output is only
+    # considered a recovery candidate until structural evidence is measured.
+    try:
+        from lua_intelligence.candidates import score_source_candidate, candidates_json
+        candidates = []
+        out_value = result.get("out")
+        if out_value and Path(str(out_value)).is_file():
+            candidates.append(score_source_candidate(
+                Path(str(out_value)),
+                dialect=str(result.get("format") or result.get("version") or "unknown"),
+                engine=str(result.get("selected_engine") or "legacy-smart"),
+            ))
+        if candidates:
+            result["candidate_manifest"] = candidates_json(candidates)
+            best = max(candidates, key=lambda c: c.rank())
+            result["candidate_score"] = best.score
+            result["candidate_status"] = best.status
+            manifest = out_dir / (input_path.stem + "_candidates.json")
+            import json
+            manifest.write_text(
+                json.dumps(result["candidate_manifest"], ensure_ascii=False, indent=2),
+                encoding="utf-8",
+            )
+            result["candidate_manifest_path"] = str(manifest)
+    except Exception as exc:
+        # Candidate scoring must never turn a valid legacy result into a crash.
+        result["candidate_fusion_error"] = f"{type(exc).__name__}: {exc}"
+    return result
 
 # ---------------------------------------------------------------------------
 # LUA ENGINE v5.5 — unified detection / analysis / fallback

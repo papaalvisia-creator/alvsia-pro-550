@@ -1,0 +1,10 @@
+# Runner activation trigger
+# Intentionally empty workflow; adding this file triggers the existing release workflow path filter.
+name: Runner Activation Trigger
+on:
+  workflow_dispatch:
+jobs:
+  noop:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "runner activation trigger"

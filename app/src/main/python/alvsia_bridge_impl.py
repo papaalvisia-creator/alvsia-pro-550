@@ -342,118 +342,55 @@ def run_tool(module_id, sub_id, input_path, out_root, engine_dir, jars_dir):
                 return "\n".join(lines)
             dest_lua = out_dir("LUA")
             if sid == "lua_decompile":
-                if not need_file(): return "\n".join(lines)
-                # ART unluac may reject a valid source/container or a Lua format
-                # unsupported by its embedded class. Always run the independent
-                # streaming pipeline after ART failure, including inputs <= 1 MiB.
-                # This path is bounded and checks registered VM/container formats.
-                try:
-                    from lua_engine.streaming_decompiler import decompile_large
-                    stream_result = decompile_large(Path(ip), dest_lua, jars_dir=jars)
-                    stream_result.setdefault("lines", 0)
-                    stream_result.setdefault("mode", "streaming_fallback")
-                    # BGMI-VM structural recovery is useful but is not original source.
-                    if stream_result.get("mode") == "bgmi_vm_partial" or stream_result.get("recovered") is False:
-                        lines.append("PARTIAL mode=%s lines=0" % (stream_result.get("mode", "partial")))
-                        lines.append(
-                            "DIAGNOSTIC: protos=%s main_instructions=%s main_constants=%s parse_errors=%s"
-                            % (stream_result.get("protos_parsed", 0), stream_result.get("main_code_count", 0),
-                               stream_result.get("main_const_count", 0), stream_result.get("parse_errors", 0))
-                        )
-                        for key, label in (
-                            ("structure_out", "STRUCTURE MAP"),
-                            ("constants_out", "CONSTANT DUMP"),
-                            ("report_out", "RECOVERY REPORT"),
-                        ):
-                            artifact = stream_result.get(key)
-                            if artifact and Path(artifact).is_file():
-                                lines.append("OUT %s -> %s" % (label, artifact))
-                        if stream_result.get("note"):
-                            lines.append("NOTE: %s" % stream_result.get("note"))
-                        lines.append(
-                            "NOTE: no validated Lua source was produced. Full recovery needs the matching VM opcode/dispatcher map; "
-                            "raising the ART size limit cannot decode a custom VM by itself."
-                        )
-                        return "\n".join(lines)
-                    if stream_result.get("ok"):
-                        lines.append("OK mode=%s lines=%s" % (stream_result.get("mode","?"), stream_result.get("lines",0)))
-                        lines.append("OUT -> %s" % stream_result.get("out","(see OUT/LUA/)"))
-                        if stream_result.get("note"):
-                            lines.append("NOTE: %s" % stream_result.get("note"))
-                        if stream_result.get("container"):
-                            lines.append("OK container=%s" % stream_result.get("container"))
-                        return "\n".join(lines)
-                    # Keep actual failure details before the secondary smart fallback.
-                    lines.append("... streaming decompiler produced no validated source")
-                    lines.append("DIAGNOSTIC: input_format=%s error=%s" % (
-                        stream_result.get("format", "unknown"), stream_result.get("error", "no detail")))
-                    probe = stream_result.get("header_probe") or {}
-                    if probe:
-                        lines.append(
-                            "DIAGNOSTIC: Lua header offset=%s version=%s format=%s luac_data_ok=%s field_sizes=%s replacement_markers=%s"
-                            % (probe.get("magic_offset"), probe.get("version"), probe.get("format_byte"),
-                               probe.get("luac_data_ok"), probe.get("field_sizes"),
-                               probe.get("utf8_replacement_markers"))
-                        )
-                        lines.append("DIAGNOSTIC: first_48_bytes=%s" % probe.get("first_48_hex", ""))
-                        try:
-                            replacement_markers = int(probe.get("utf8_replacement_markers") or 0)
-                        except (TypeError, ValueError):
-                            replacement_markers = 0
-                        if replacement_markers > 0:
-                            lines.append(
-                                "WARNING: input contains %s UTF-8 replacement sequences (EF BF BD); "
-                                "the binary may have been decoded as text before reaching the decompiler. "
-                                "Original bytes cannot be reconstructed by guessing a Lua header."
-                                % replacement_markers
-                            )
-                            try:
-                                from lua_engine.detector import diagnose_text_corruption
-                                _diag = diagnose_text_corruption(
-                                    __import__("pathlib").Path(ip).read_bytes()[:8 * 1024 * 1024])
-                                lines.append(
-                                    "VERDICT: %s — %s byte(s) destroyed, %s CRLF pair(s) injected. "
-                                    "This signature is produced by decoding a binary as UTF-8 text "
-                                    "(errors=replace) and normalising line endings to CRLF."
-                                    % (_diag["verdict"], _diag["lost_bytes"], _diag["crlf_pairs"])
-                                )
-                                lines.append(
-                                    "VERDICT: ALVSIA staging copies bytes verbatim (SHA-256 verified), "
-                                    "so the damage happened before import — re-download the original "
-                                    "binary file instead of a text/chat copy."
-                                )
-                            except Exception:
-                                pass
-                    if stream_result.get("unluac_jar_error"):
-                        lines.append("DIAGNOSTIC: unluac_jar=%s" % str(stream_result.get("unluac_jar_error"))[:220])
-                    if stream_result.get("pattern_id_attempted"):
-                        lines.append("DIAGNOSTIC: pattern=%s pattern_error=%s" % (
-                            stream_result.get("pattern_id_attempted"), stream_result.get("pattern_error", "no detail")))
-                except Exception as exc:
-                    lines.append("... streaming decompiler exception: %s" % exc)
-                r = feat.run_lua_smart(ip, dest_lua, jars_dir=jars)
-                if r.get("ok"):
-                    lines.append("OK mode=%s lines=%s" % (r.get("mode","?"), r.get("lines",0)))
-                    lines.append("OUT -> %s" % r.get("out","(see OUT/LUA/)"))
-                    vm_notes = r.get("vm_notes") or []
-                    if r.get("vm_obfuscated"):
-                        lines.append("NOTE: VM obfuscation detected (confidence=%.2f)" % (r.get("vm_confidence",0)))
-                        lines.append("NOTE: File uses runtime VM — decompiled VM interpreter (not original source)")
-                        for n in (vm_notes[:3] if isinstance(vm_notes, list) else []):
-                            lines.append("  · %s" % n)
-                    else:
-                        lines.append("OK decompile complete")
+                if not need_file():
+                    return "\n".join(lines)
+                # One user-facing entry point: Smart Lua owns detection,
+                # container normalization, protected-format diagnostics,
+                # compatible engine selection and partial recovery.
+                result = feat.run_lua_smart(ip, dest_lua, jars_dir=jars)
+                if result.get("ok") and result.get("out"):
+                    lines.append("OK mode=%s engine=%s" % (
+                        result.get("mode", "smart"),
+                        result.get("selected_engine", result.get("pattern_id", "auto")),
+                    ))
+                    lines.append("OUT -> %s" % result.get("out"))
+                    if result.get("final_status"):
+                        lines.append("FINAL STATUS: %s" % result.get("final_status"))
+                    if result.get("source_recovered") is not None:
+                        lines.append("ORIGINAL SOURCE RECOVERED: %s" % (
+                            "YES" if result.get("source_recovered") else "NO / NOT CONFIRMED",
+                        ))
+                    for step in (result.get("steps") or []):
+                        if step.get("step") == "engine_orchestrator":
+                            engine_results = step.get("results") or []
+                            if engine_results and engine_results[0].get("note"):
+                                lines.append("VALIDATION: %s" % str(engine_results[0].get("note"))[:420])
+                            break
+                    if result.get("source_recovered") is False and not result.get("vm_obfuscated"):
+                        lines.append("NOTE: Output is a protected wrapper or partial reconstruction, not confirmed original source")
+                    if result.get("vm_obfuscated"):
+                        lines.append("NOTE: VM protection detected; output type=%s" % (
+                            result.get("artifact_kind", "analysis"),
+                        ))
+                        lines.append("NOTE: VM wrapper/interpreter source is not the original protected script")
                 else:
-                    lines.append("X OUT -> operation failed")
-                    for step in (r.get("steps") or [])[-4:]:
+                    lines.append("X No validated Lua source was produced")
+                    lines.append("FINAL STATUS: %s" % result.get("final_status", "PARTIAL"))
+                    for step in (result.get("steps") or [])[-8:]:
                         detail = step.get("error") or step.get("note") or step.get("format") or ""
                         lines.append("  step=%s ok=%s%s" % (
                             step.get("step"), step.get("ok"),
-                            (" detail=" + str(detail)[:220]) if detail else ""))
-                    if r.get("stage_report"):
-                        lines.append("OUT RECOVERY REPORT -> %s" % r.get("stage_report"))
-                    if r.get("final_status"):
-                        lines.append("FINAL STATUS: %s" % r.get("final_status"))
+                            (" detail=" + str(detail)[:220]) if detail else "",
+                        ))
+                    for key, label in (
+                        ("stage_report", "RECOVERY REPORT"),
+                        ("structure_out", "STRUCTURE MAP"),
+                        ("constants_out", "CONSTANT DUMP"),
+                        ("report_out", "RECOVERY REPORT"),
+                    ):
+                        artifact = result.get(key)
+                        if artifact and Path(str(artifact)).is_file():
+                            lines.append("OUT %s -> %s" % (label, artifact))
                 return "\n".join(lines)
             if sid == "lua_format_probe":
                 try:
@@ -547,7 +484,7 @@ def run_tool(module_id, sub_id, input_path, out_root, engine_dir, jars_dir):
                     lines.append("Original input preserved; output written atomically")
                 except Exception as exc:
                     lines.append("X metadata v39 decode failed: %s" % str(exc)[:500])
-                return "\\n".join(lines)
+                return "\n".join(lines)
             if sid == "string_scan":
                 r = feat.run_strings_scan(ip, dest_sc)
                 lines.append(str(r))
@@ -1002,6 +939,22 @@ def run_tool(module_id, sub_id, input_path, out_root, engine_dir, jars_dir):
             if not need_file():
                 return "\n".join(lines)
             dest_dir = out_dir("LPROTECT")
+
+            if sid in ("lua_smart_protect", "lua_smart_protect_strong"):
+                try:
+                    from lua_engine.protection_pipeline import protect_file
+                    profile = "strong" if sid == "lua_smart_protect_strong" else "balanced"
+                    dest = dest_dir / (Path(ip).stem + "_protected.lua")
+                    result = protect_file(ip, dest, profile)
+                    if not result.get("ok"):
+                        lines.append("X Smart Lua Protect failed: %s" % result.get("error", "validation failed"))
+                        return "\n".join(lines)
+                    lines.append("OK SMART LUA PROTECT profile=%s" % profile)
+                    lines.append("SHA-256 %s" % result.get("sha256", ""))
+                    lines.append("OUT -> %s" % result.get("out", dest))
+                except Exception as exc:
+                    lines.append("X Smart Lua Protect failed: %s" % (str(exc)[:300] or type(exc).__name__))
+                return "\n".join(lines)
 
             # ── 18 / VM-protect: BGMI-style self-executing Lua source ────
             if sid == "lua_vm_protect":

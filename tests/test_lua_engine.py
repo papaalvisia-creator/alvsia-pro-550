@@ -42,12 +42,44 @@ def main():
             'end\n'
         )
         malformed_ok, malformed_msg = validate_lua_source(malformed_source)
-        assert not malformed_ok and "unclosed" in malformed_msg, malformed_msg
+        assert not malformed_ok and ("unclosed" in malformed_msg or "parser rejected" in malformed_msg), malformed_msg
+
+        # When the matching compiler is installed, parser validation must
+        # reject syntax errors that balanced block keywords cannot detect.
+        parser_invalid = td / "parser_invalid.lua"
+        parser_invalid.write_text("local = 1\\nreturn 1\\n", encoding="utf-8")
+        parser_ok, parser_msg = validate_lua_source(
+            parser_invalid, expected_version="Lua 5.3"
+        )
+        assert not parser_ok and "parser rejected" in parser_msg, parser_msg
+        parser_valid, parser_valid_msg = validate_lua_source(
+            src, expected_version="Lua 5.3"
+        )
+        assert parser_valid and "parser accepted" in parser_valid_msg, parser_valid_msg
         report=analyze_lua(src,td)
         assert report["ok"] and report["format"]=="lua-source"
         luac=td/"sample.luac"; luac.write_bytes(bytes.fromhex("1b4c756153") + bytes(32))
         li=detect_lua(luac)
         assert li.format=="luac" and li.version=="Lua 5.3"
+
+        lua55 = td / "sample_lua55.luac"
+        lua55.write_bytes(bytes.fromhex("1b4c75615500") + bytes(40))
+        li55 = detect_lua(lua55)
+        assert li55.format == "luac" and li55.version == "Lua 5.5", li55
+
+        # Luau has a distinct version/type/string-table/proto header and must
+        # not be mistaken for PUC Lua bytecode or arbitrary binary data.
+        luau = td / "sample.luau"
+        luau.write_bytes(bytes((13, 3, 0, 0, 1, 0, 0)))
+        luau_info = detect_lua(luau)
+        assert luau_info.format == "luau" and luau_info.version == "Luau bytecode v13", luau_info
+        luau_v7 = td / "sample_v7.luau"
+        luau_v7.write_bytes(bytes((7, 3, 0, 0, 1, 0, 0)))
+        luau_v7_info = detect_lua(luau_v7)
+        assert luau_v7_info.format == "luau" and luau_v7_info.version == "Luau bytecode v7", luau_v7_info
+        truncated_luau = td / "truncated_luau.bin"
+        truncated_luau.write_bytes(bytes((13, 3, 0, 1)))
+        assert detect_lua(truncated_luau).format == "unknown"
 
         # Decompile dispatch must initialize its output/backend state for
         # bytecode inputs even when no external unluac JAR is configured.
