@@ -737,7 +737,12 @@ class Decompiler:
                 else:
                     args = [self._reg(j, i) for j in range(a + 1, a + 1 + arg_count)]
                 ret_count = c - 1
-                call_expr = f"{func}({', '.join(args)})"
+                # Materialize complex call targets to preserve Lua precedence.
+                call_target = func
+                if not re.match(r"^[A-Za-z_][A-Za-z0-9_]*$", func):
+                    call_target = f"_alvsia_call_{i}"
+                    out.append(f"{self.indent}local {call_target} = {func}")
+                call_expr = f"{call_target}({', '.join(args)})"
                 if ret_count == 0:
                     out.append(f"{self.indent}{call_expr}")
                 elif ret_count == 1:
@@ -772,6 +777,9 @@ class Decompiler:
                     args = [self._reg(j, i) for j in range(a + 1, a + 2)] + ["..."]
                 else:
                     args = [self._reg(j, i) for j in range(a + 1, a + 1 + arg_count)]
+                if not re.match(r"^[A-Za-z_][A-Za-z0-9_]*$", func):
+                    func = f"_alvsia_tailcall_{i}"
+                    out.append(f"{self.indent}local {func} = {self._reg(a, i)}")
                 out.append(f"{self.indent}return {func}({', '.join(args)})")
 
             elif opname == "RETURN":
