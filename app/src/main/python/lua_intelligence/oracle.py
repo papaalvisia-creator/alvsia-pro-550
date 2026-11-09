@@ -129,31 +129,76 @@ def compile_trusted_fixture(
 
 
 def semantic_signature(path: Path) -> dict:
-    """Streaming dialect-neutral structural signature."""
+    """Streaming, dialect-neutral structural signature.
+
+    Names are retained only as normalized lexical categories so harmless
+    decompiler renaming does not break equivalence. Control-flow shape,
+    operators, literals, calls and function/return structure remain visible.
+    """
     token_count = 0
     keyword_counts = {}
-    strings = functions = returns = 0
-    keywords = {"function","return","if","then","elseif","else","end","for","while","repeat","until","local"}
+    strings = functions = returns = assignments = calls = branches = loops = 0
+    operators = {}
+    identifiers = numbers = 0
+    keywords = {
+        "function","return","if","then","elseif","else","end","for","while",
+        "repeat","until","local","do","break","goto",
+    }
+    control = {"if","elseif","else","for","while","repeat","until"}
+    loop = {"for","while","repeat"}
+    operator_set = {
+        "+","-","*","/","%","^","#","==","~=","<=",">=","<",">","=",
+        "..","and","or","not",
+    }
     try:
         with path.open("r", encoding="utf-8", errors="replace") as fh:
             for line in fh:
-                tokens = re.findall(r"[A-Za-z_][A-Za-z0-9_]*|\d+(?:\.\d+)?|==|~=|<=|>=|\.\.\.|\\S", line)
+                # Strip comments only for the structural token stream; strings
+                # remain tokens so string-bearing candidates are distinguishable.
+                tokens = re.findall(
+                    r"[A-Za-z_][A-Za-z0-9_]*|\d+(?:\.\d+)?|==|~=|<=|>=|\.\.\.|"
+                    r"[{}(),;:.+*/%^#=<>~\-\[\]]", line
+                )
                 token_count += len(tokens)
-                for k in keywords:
-                    n = tokens.count(k)
-                    if n:
-                        keyword_counts[k] = keyword_counts.get(k, 0) + n
-                strings += len(re.findall(r"""(?:"(?:\\\.|[^"\\\\])*"|'(?:\\\.|[^'\\\\])*')""", line))
-                functions += line.count("function")
-                returns += line.count("return")
+                for token in tokens:
+                    if token in keywords:
+                        keyword_counts[token] = keyword_counts.get(token, 0) + 1
+                    elif re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", token):
+                        identifiers += 1
+                    elif re.fullmatch(r"\d+(?:\.\d+)?", token):
+                        numbers += 1
+                    if token in operator_set:
+                        operators[token] = operators.get(token, 0) + 1
+                functions += tokens.count("function")
+                returns += tokens.count("return")
+                assignments += tokens.count("=")
+                branches += sum(tokens.count(k) for k in control)
+                loops += sum(tokens.count(k) for k in loop)
+                # A conservative call marker: identifier immediately followed
+                # by an opening parenthesis, excluding declarations/control.
+                for i in range(len(tokens) - 1):
+                    if re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", tokens[i]) and tokens[i + 1] == "(":
+                        if tokens[i] not in {"if","for","while","function"}:
+                            calls += 1
+                strings += len(re.findall(
+                    r"""(?:"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*')""",
+                    line,
+                ))
     except OSError as exc:
         raise exc
     return {
         "token_count": token_count,
         "keyword_counts": {k: keyword_counts[k] for k in sorted(keyword_counts)},
+        "operator_counts": {k: operators[k] for k in sorted(operators)},
         "string_literals": strings,
+        "numeric_literals": numbers,
+        "identifier_count": identifiers,
         "function_markers": functions,
         "return_markers": returns,
+        "assignment_markers": assignments,
+        "call_markers": calls,
+        "branch_markers": branches,
+        "loop_markers": loops,
     }
 
 def differential_validate(original: Path, reconstructed: Path) -> OracleResult:
