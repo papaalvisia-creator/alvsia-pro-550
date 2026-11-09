@@ -314,7 +314,9 @@ def run_lua_multi_xor(input_path, out_dir, keys=None):
     return {"ok": True, "mode": "multi_xor", "candidates": results[:8], "best": results[0] if results else None}
 
 
-def run_lua_smart(input_path, out_dir, jars_dir=None):
+from lua_intelligence import analyze_file, IntelligenceConfig
+
+def _run_lua_smart_legacy(input_path, out_dir, jars_dir=None):
     """
     Unified Smart Lua pipeline:
     1) identify source, bytecode dialect, container and confidence
@@ -532,6 +534,35 @@ def run_lua_smart(input_path, out_dir, jars_dir=None):
     }
 
 
+
+
+
+def run_lua_smart(input_path, out_dir, jars_dir=None):
+    """Program-intelligence front door with legacy engine orchestration as a validated adapter."""
+    input_path = Path(input_path)
+    out_dir = Path(out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    intelligence = analyze_file(
+        input_path, out_dir / "intelligence",
+        IntelligenceConfig(
+            max_depth=int(os.environ.get("ALVSIA_LUA_MAX_DEPTH", "12")),
+            max_artifacts=int(os.environ.get("ALVSIA_LUA_MAX_ARTIFACTS", "128")),
+            max_file_bytes=int(os.environ.get("ALVSIA_LUA_MAX_BYTES", str(256 * 1024 * 1024))),
+            max_elapsed_seconds=float(os.environ.get("ALVSIA_LUA_MAX_SECONDS", "45")),
+        ),
+    )
+    try:
+        legacy = _run_lua_smart_legacy(input_path, out_dir, jars_dir=jars_dir)
+    except Exception as exc:
+        legacy = {"ok": False, "final_status": "FAILED",
+                  "error": f"{type(exc).__name__}: {exc}"}
+    result = dict(legacy)
+    result["intelligence"] = intelligence.to_dict()
+    result["intelligence_report"] = intelligence.report_path
+    result["layer_count"] = len(intelligence.artifacts)
+    result["layer_graph_root"] = intelligence.root_id
+    result["analysis_status"] = intelligence.status
+    return result
 
 # ---------------------------------------------------------------------------
 # LUA ENGINE v5.5 — unified detection / analysis / fallback
