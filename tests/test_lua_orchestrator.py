@@ -49,6 +49,38 @@ def test_pipeline_runs_compatible_engines_and_keeps_valid_alternates(tmp_path):
     assert alternate.read_text(encoding="utf-8") == "return 2\n"
 
 
+
+def test_deep_scan_rejects_disagreeing_valid_candidates(tmp_path):
+    source = tmp_path / "input.luac"
+    source.write_bytes(b"fixture")
+    output = tmp_path / "result.lua"
+
+    def first(_src, dst):
+        Path(dst).write_text("function f(x) return x + 1 end\n", encoding="utf-8")
+        return True, "first"
+
+    def second(_src, dst):
+        Path(dst).write_text("function completely_different() return 9 end\n", encoding="utf-8")
+        return True, "second"
+
+    result = run_decompiler_pipeline(
+        source,
+        output,
+        _info(),
+        registry=[
+            EngineSpec("first", ("luac",), first, 10),
+            EngineSpec("second", ("luac",), second, 20),
+        ],
+        deep_scan=True,
+    )
+
+    assert result["ok"] is False
+    assert result["selected_engine"] is None
+    assert result["fusion"]["status"] != "CONSENSUS"
+    assert not output.exists()
+    assert result["alternates_dir"]
+
+
 def test_pipeline_stops_after_first_valid_engine_by_default(tmp_path):
     source = tmp_path / "input.luac"
     source.write_bytes(b"\x1bLua\x53\x00\x00\x00")
