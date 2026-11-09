@@ -38,6 +38,37 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y lua5.3 libreadline-dev
           git clone --depth 1 --recurse-submodules https://github.com/zhangjiequan/luadec.git luadec-src
+          python - <<'PY'
+          from pathlib import Path
+          p=Path("luadec-src/lua-5.3/src/lundump.c")
+          s=p.read_text()
+          old='''static void fchecksize (LoadState *S, size_t size, const char *tname) {
+  if (LoadByte(S) != size)
+    error(S, luaO_pushfstring(S->L, "%s size mismatch in", tname));
+}'''
+          new='''static void fchecksize (LoadState *S, size_t size, const char *tname) {
+  int declared = LoadByte(S);
+  if (strcmp(tname, "size_t") == 0) {
+    if (declared != 4 && declared != (int)size)
+      error(S, luaO_pushfstring(S->L, "%s size mismatch in", tname));
+    return;
+  }
+  if (declared != (int)size)
+    error(S, luaO_pushfstring(S->L, "%s size mismatch in", tname));
+}'''
+          if old not in s:
+              raise SystemExit("LuaDec lundump fchecksize pattern not found")
+          s=s.replace(old,new,1)
+          old2='''  size_t size;
+  LoadVar(S,size);'''
+          new2='''  unsigned int size;
+  LoadVar(S,size);'''
+          if old2 not in s:
+              raise SystemExit("LuaDec LoadString size_t pattern not found")
+          s=s.replace(old2,new2,1)
+          p.write_text(s)
+          print("patched LuaDec for Lua 5.3 32-bit size_t chunks")
+          PY
           make -C luadec-src/lua-5.3 linux
           make -C luadec-src/luadec LUAVER=5.3
           test -x luadec-src/luadec/luadec
