@@ -35,6 +35,27 @@ object RaspEngine {
     private val handler      = Handler(Looper.getMainLooper())
     private val hardKillCount = AtomicInteger(0)
 
+    // Soft heuristic signals (for example, a bundled hook-support library) must not
+    // generate a Telegram alert on every 4-second RASP tick.
+    private const val SOFT_REPORT_COOLDOWN_MS = 15 * 60 * 1000L
+    @Volatile private var lastSoftSignature: String = ""
+    @Volatile private var lastSoftReportAt: Long = 0L
+
+    @Synchronized
+    private fun shouldReportSoft(signature: String, now: Long): Boolean {
+        if (signature.isBlank()) {
+            lastSoftSignature = ""
+            lastSoftReportAt = 0L
+            return false
+        }
+        if (signature != lastSoftSignature || now - lastSoftReportAt >= SOFT_REPORT_COOLDOWN_MS) {
+            lastSoftSignature = signature
+            lastSoftReportAt = now
+            return true
+        }
+        return false
+    }
+
     @Volatile var threatLevel: Int = 0
         private set
 
@@ -114,8 +135,12 @@ object RaspEngine {
         // Soft: degrade + report
         if (soft.isNotEmpty()) {
             Guard.degraded = true
-            val detail = soft.joinToString("|")
-            try { ThreatReport.emit(ctx, "SOFT_THREAT", detail, license) } catch (_: Exception) {}
+            val detail = soft.distinct().sorted().joinToString("|")
+            if (shouldReportSoft(detail, System.currentTimeMillis())) {
+                try { ThreatReport.emit(ctx, "SOFT_THREAT", detail, license) } catch (_: Exception) {}
+            }
+        } else {
+            shouldReportSoft("", System.currentTimeMillis())
         }
     }
 
