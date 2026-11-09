@@ -22,6 +22,7 @@ class RecoveryCandidate:
     status: str = "PARTIAL"
     evidence: list[CandidateEvidence] = field(default_factory=list)
     score: float = 0.0
+    metadata: dict = field(default_factory=dict)
 
     def rank(self):
         self.score = max(0.0, min(1.0, sum(e.score for e in self.evidence)))
