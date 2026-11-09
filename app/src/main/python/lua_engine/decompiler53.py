@@ -744,7 +744,8 @@ class Decompiler:
                 ret_count = c - 1
                 # Materialize complex call targets to preserve Lua precedence.
                 call_target = func
-                if not re.match(r"^[A-Za-z_][A-Za-z0-9_]*$", func):
+                if (not re.match(r"^[A-Za-z_][A-Za-z0-9_]*$", func)
+                        or func in LUA_KEYWORDS):
                     call_target = f"_alvsia_call_{i}"
                     out.append(f"{self.indent}local {call_target} = {func}")
                 call_expr = f"{call_target}({', '.join(args)})"
@@ -791,7 +792,8 @@ class Decompiler:
                         args.append("...")
                 else:
                     args = [self._reg(j, i) for j in range(a + 1, a + 1 + arg_count)]
-                if not re.match(r"^[A-Za-z_][A-Za-z0-9_]*$", func):
+                if (not re.match(r"^[A-Za-z_][A-Za-z0-9_]*$", func)
+                        or func in LUA_KEYWORDS):
                     func = f"_alvsia_tailcall_{i}"
                     out.append(f"{self.indent}local {func} = {self._reg(a, i)}")
                 # Tail calls are terminal in bytecode, but later bytecode may
