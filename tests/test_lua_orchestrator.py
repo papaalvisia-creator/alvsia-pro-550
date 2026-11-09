@@ -379,9 +379,13 @@ def test_large_source_validation_uses_bounded_lexical_scan(tmp_path):
     with patch("lua_engine.engine._find_lua_parser", return_value=None):
         with patch("lua_engine.engine._lua_code_without_literals", side_effect=bounded_sample_only):
             valid, note = validate_lua_source(source)
+            smart_result = alvsia_features.run_lua_smart(source, tmp_path / "smart_out")
 
     assert valid, note
     assert "structural heuristic accepted" in note
+    assert smart_result["ok"] is True, smart_result
+    assert smart_result["selected_engine"] == "source_passthrough"
+    assert smart_result["final_status"] == "SUCCESS"
 
 
 def test_source_preflight_skips_bytecode_pattern_detectors(tmp_path):
