@@ -586,6 +586,93 @@ def run_lua_smart(input_path, out_dir, jars_dir=None):
     input_path = Path(input_path)
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
+
+    # Multi-GB inputs must not fall through to the legacy whole-file pipeline.
+    # Containers are inflated to disk in bounded chunks; only a resulting Lua
+    # payload within the parser budget is passed to the in-memory legacy engines.
+    max_in_memory = int(os.environ.get(
+        "ALVSIA_LUA_MAX_IN_MEMORY_BYTES", str(256 * 1024 * 1024)
+    ))
+    max_in_memory = max(16 * 1024 * 1024, min(max_in_memory, 512 * 1024 * 1024))
+    input_size = input_path.stat().st_size if input_path.is_file() else 0
+    if input_size > max_in_memory:
+        from lua_engine.streaming_decompiler import (
+            preflight_magic, stream_inflate_zlib, stream_inflate_deflate_container,
+        )
+        from lua_string_recover import recover_strings_file
+
+        fmt = preflight_magic(input_path)
+        work_input = input_path
+        unwrap_report = None
+        streamed_path = out_dir / (input_path.stem + "_stream_unwrapped.luac")
+        try:
+            if fmt == "zlib":
+                ok, message = stream_inflate_zlib(input_path, streamed_path)
+                unwrap_report = {"ok": ok, "format": fmt, "message": message}
+                if ok:
+                    work_input = streamed_path
+            elif fmt == "chunked_deflate":
+                ok, message = stream_inflate_deflate_container(input_path, streamed_path)
+                unwrap_report = {"ok": ok, "format": fmt, "message": message}
+                if ok:
+                    work_input = streamed_path
+            elif fmt == "gzip":
+                import gzip
+                total = 0
+                with gzip.open(input_path, "rb") as source, streamed_path.open("wb") as target:
+                    while True:
+                        block = source.read(4 * 1024 * 1024)
+                        if not block:
+                            break
+                        total += len(block)
+                        if total > 4 * 1024 * 1024 * 1024:
+                            raise ValueError("gzip output exceeds 4 GiB streaming cap")
+                        target.write(block)
+                work_input = streamed_path
+                unwrap_report = {"ok": True, "format": fmt, "bytes_out": total}
+        except Exception as exc:
+            unwrap_report = {"ok": False, "format": fmt,
+                             "error": f"{type(exc).__name__}: {exc}"}
+
+        if work_input != input_path and work_input.stat().st_size <= max_in_memory:
+            try:
+                legacy = _run_lua_smart_legacy(work_input, out_dir, jars_dir=jars_dir)
+                legacy["input_bytes"] = input_size
+                legacy["stream_unwrap"] = unwrap_report
+                legacy["mode"] = "smart_streaming_large_input"
+                return legacy
+            except Exception as exc:
+                decompile_report = {"ok": False, "error": f"{type(exc).__name__}: {exc}"}
+        else:
+            decompile_report = {
+                "ok": False,
+                "error": (
+                    f"input/payload exceeds in-memory Lua parser budget ({max_in_memory} bytes); "
+                    "large-file scanning and container inflation remain streaming, "
+                    "but full Lua 5.3 source reconstruction is not yet streaming"
+                ),
+            }
+        try:
+            recovery = recover_strings_file(
+                work_input if work_input.is_file() else input_path,
+                out_dir / "large_file_recovery", input_path.stem,
+            )
+        except Exception as exc:
+            recovery = {"ok": False, "error": f"{type(exc).__name__}: {exc}"}
+        return {
+            "ok": False,
+            "mode": "smart_streaming_large_input",
+            "final_status": "PARTIAL",
+            "input_bytes": input_size,
+            "stream_unwrap": unwrap_report,
+            "decompile": decompile_report,
+            "streaming_recovery": recovery,
+            "note": (
+                "Large input was processed without whole-file RAM loading. "
+                "Recovery artifacts are diagnostic; no full decompile SUCCESS is claimed."
+            ),
+        }
+
     intelligence = analyze_file(
         input_path, out_dir / "intelligence",
         IntelligenceConfig(
