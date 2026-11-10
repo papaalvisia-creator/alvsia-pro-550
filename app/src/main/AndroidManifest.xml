@@ -85,6 +85,11 @@
             </intent-filter>
         </activity>
 
+        <service
+            android:name=".tool.ToolExecutionService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
+
         <!-- File provider for output file sharing -->
         <provider
             android:name="androidx.core.content.FileProvider"
