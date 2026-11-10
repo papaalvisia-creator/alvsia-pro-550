@@ -43,14 +43,15 @@ object TaskCenter {
         id: String,
         stage: String? = null,
         progress: Int? = null,
-        logs: List<String>? = null
+        logs: List<String>? = null,
+        clearProgress: Boolean = false
     ) {
         val index = tasks.indexOfFirst { it.id == id }
         if (index < 0) return
         val old = tasks[index]
         tasks[index] = old.copy(
             stage = stage ?: old.stage,
-            progress = progress ?: old.progress,
+            progress = if (clearProgress) null else (progress ?: old.progress),
             logs = logs ?: old.logs,
             updatedAt = System.currentTimeMillis()
         )
