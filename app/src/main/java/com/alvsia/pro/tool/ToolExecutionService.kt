@@ -22,6 +22,8 @@ class ToolExecutionService : Service() {
         private const val NOTIFICATION_ID = 5501
         private val activeRuns = AtomicInteger(0)
 
+        fun isActive(): Boolean = activeRuns.get() > 0
+
         fun begin(context: Context) {
             activeRuns.incrementAndGet()
             val intent = Intent(context, ToolExecutionService::class.java).apply {
