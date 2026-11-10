@@ -144,36 +144,56 @@ def recover_strings(data: bytes, out_dir: Path, stem: str = "lua") -> dict:
 def _iter_ascii_file(path: Path, *, min_len: int = 4, xor_key: int | None = None,
                      xor_multi_key: bytes | None = None, chunk_size: int = 1024 * 1024,
                      max_run: int = 1024 * 1024):
-    """Yield printable runs from a file without retaining the complete input."""
+    """Yield printable runs using bounded chunks and C-level byte scanning.
+
+    Only the unfinished printable suffix is carried between reads. Long runs
+    are emitted in bounded pieces, so even multi-GB inputs cannot grow a
+    Python bytearray in proportion to the input size.
+    """
+    if chunk_size <= 0 or max_run <= 0 or min_len <= 0:
+        raise ValueError("chunk_size, max_run and min_len must be positive")
     if xor_multi_key is not None and not xor_multi_key:
         raise ValueError("multi-byte XOR key must not be empty")
+
+    printable_runs = re.compile(rb"[ -~]+")
     offset = 0
-    current = bytearray()
+    pending = b""
     with Path(path).open("rb") as source:
         while True:
             block = source.read(chunk_size)
-            if not block:
+            eof = not block
+            if not eof:
+                if xor_key is not None:
+                    if not 0 <= xor_key <= 255:
+                        raise ValueError("XOR key must be in 0..255")
+                    block = bytes(value ^ xor_key for value in block)
+                elif xor_multi_key is not None:
+                    key_len = len(xor_multi_key)
+                    block = bytes(value ^ xor_multi_key[(offset + i) % key_len]
+                                  for i, value in enumerate(block))
+                offset += len(block)
+
+            data = pending + block
+            pending = b""
+            for match in printable_runs.finditer(data):
+                run = match.group()
+                is_unfinished_tail = not eof and match.end() == len(data)
+                if is_unfinished_tail:
+                    while len(run) > max_run:
+                        piece, run = run[:max_run], run[max_run:]
+                        if len(piece) >= min_len:
+                            yield piece.decode("ascii")
+                    pending = run
+                    continue
+                for start in range(0, len(run), max_run):
+                    piece = run[start:start + max_run]
+                    if len(piece) >= min_len:
+                        yield piece.decode("ascii")
+
+            if eof:
                 break
-            if xor_key is not None:
-                block = bytes(value ^ xor_key for value in block)
-            elif xor_multi_key is not None:
-                key_len = len(xor_multi_key)
-                block = bytes(value ^ xor_multi_key[(offset + i) % key_len]
-                              for i, value in enumerate(block))
-            offset += len(block)
-            for value in block:
-                if 32 <= value < 127:
-                    current.append(value)
-                    if len(current) >= max_run:
-                        if len(current) >= min_len:
-                            yield current.decode("ascii", "ignore")
-                        current.clear()
-                else:
-                    if len(current) >= min_len:
-                        yield current.decode("ascii", "ignore")
-                    current.clear()
-    if len(current) >= min_len:
-        yield current.decode("ascii", "ignore")
+    if len(pending) >= min_len:
+        yield pending.decode("ascii")
 
 
 def _write_stream_strings(path: Path, source: Path, *, min_len: int = 4,
