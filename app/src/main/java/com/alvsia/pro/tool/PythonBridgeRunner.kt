@@ -6,6 +6,7 @@ import android.content.Context
 import java.io.File
 import java.io.FileOutputStream
 import java.security.MessageDigest
+import java.util.concurrent.locks.ReentrantLock
 
 /**
  * Safe reflection-based runner for Chaquopy Python bridge.
@@ -16,6 +17,10 @@ import java.security.MessageDigest
 object PythonBridgeRunner {
     @Volatile private var startupError: String = "startup not attempted"
     @Volatile private var appContext: Context? = null
+    // Chaquopy hosts one process-wide Python runtime. Keep bridge calls single-flight
+    // so concurrent tool jobs remain independent at the task layer without racing the
+    // same interpreter/native engines and multiplying peak memory usage.
+    private val bridgeLock = ReentrantLock()
 
     fun startupDiagnostic(): String = startupError
 
@@ -126,6 +131,29 @@ object PythonBridgeRunner {
     }
 
     fun runBridge(
+        moduleId: Int,
+        subId: String,
+        inputPath: String,
+        extraName: String?,
+        workDirPath: String,
+        jarsDirPath: String
+    ): Pair<Boolean, List<String>> {
+        bridgeLock.lock()
+        return try {
+            runBridgeInternal(moduleId, subId, inputPath, extraName, workDirPath, jarsDirPath)
+        } finally {
+            bridgeLock.unlock()
+        }
+    }
+
+    private fun runBridgeInternal(
+        moduleId: Int,
+        subId: String,
+        inputPath: String,
+        extraName: String?,
+        workDirPath: String,
+        jarsDirPath: String
+    ): Pair<Boolean, List<String>> {
         moduleId: Int,
         subId: String,
         inputPath: String,
