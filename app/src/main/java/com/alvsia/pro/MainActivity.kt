@@ -21,6 +21,9 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.Alignment
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.lifecycle.lifecycleScope
 import com.alvsia.pro.media.PulseAudio
 import com.alvsia.pro.panel.Hwid
@@ -38,6 +41,8 @@ import com.alvsia.pro.tool.SubTool
 import com.alvsia.pro.tool.ToolCatalog
 import com.alvsia.pro.tool.CoreSession
 import com.alvsia.pro.tool.ToolEngine
+import com.alvsia.pro.tool.TaskCenter
+import com.alvsia.pro.tool.TaskStatus
 import com.alvsia.pro.ui.home.HomeScreen
 import com.alvsia.pro.ui.home.StudioItem
 import com.alvsia.pro.ui.home.StudioScreen
@@ -49,6 +54,7 @@ import com.alvsia.pro.ui.theme.AlvisiaTheme
 import com.alvsia.pro.ui.tool.SubMenuScreen
 import com.alvsia.pro.ui.tool.ToolWorkspaceScreen
 import com.alvsia.pro.ui.profile.ProfileScreen
+import com.alvsia.pro.ui.task.LiveTaskDock
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -98,8 +104,7 @@ class MainActivity : ComponentActivity() {
                 var pendingInputUri by remember { mutableStateOf<Uri?>(null) }
                 var moduleReturnScreen by remember { mutableStateOf("home") }
                 var activeSub by remember { mutableStateOf<SubTool?>(null) }
-                var logs by remember { mutableStateOf(listOf<String>()) }
-                var running by remember { mutableStateOf(false) }
+                var activeTaskId by remember { mutableStateOf<String?>(null) }
                 val ctx = LocalContext.current
                 val hwid = remember { Hwid.deviceId(ctx) }
 
@@ -147,306 +152,39 @@ class MainActivity : ComponentActivity() {
                 BackHandler(enabled = screen != "splash" && screen != "login") {
                     when (screen) {
                         "tool" -> {
-                            activeSub = null
-                            logs = emptyList()
-                            screen = "submenu"
-                        }
-                        "submenu" -> {
-                            moduleId = 0
-                            screen = moduleReturnScreen
-                        }
-                        "studio" -> {
-                            selectedStudio = null
-                            pendingInputUri = null
-                            screen = "home"
-                        }
-                        "output" -> screen = "home"
-                        "profile" -> screen = "home"
-                        else -> { }
-                    }
-                }
-
-                AnimatedContent(
-                    targetState = screen,
-                    transitionSpec = {
-                        fadeIn(tween(450)) togetherWith fadeOut(tween(350))
-                    },
-                    label = "screen"
-                ) { scr ->
-                when (scr) {
-                    "splash" -> SplashScreen {
-                        // Keep startup animation independent from expensive checks.
-                        // Login re-runs Guard checks; post-login performs Tamper checks and starts RASP.
-                        screen = "login"
-                    }
-
-                    // ── LOGIN — key-only authentication ─────────────────────────────
-                    "login" -> LoginScreen(
-                        hwidFull = hwid,
-                        hwidShort = hwid.take(16),
-                        loading = loading,
-                        error = error,
-                        onLogin = login@{ key ->
-                            val safeToLogin = try {
-                                Guard.checkAndReport(
-                                    this@MainActivity,
-                                    key,
-                                    hardEnforcement = false,
-                                )
-                            } catch (_: Exception) {
-                                false
-                            }
-                            if (!safeToLogin) {
-                                error = "Security check blocked login. Restart the app and try again."
-                                return@login
-                            }
-                            license = key
-                            loading = true
-                            error = null
-                            lifecycleScope.launch {
-                                // Panel login — returns session_token directly
-                                val res = withContext(Dispatchers.IO) { panel.login(key, hwid) }
-                                if (!res.ok) {
-                                    loading = false
-                                    error = res.message
-                                    return@launch
-                                }
-                                product = res.product.ifBlank { "PREMIUM" }
-                                expiry = res.expiry
-
-                                // Security gate post-login
-                                val safeAfterLogin = try {
-                                    Guard.checkAndReport(
-                                        this@MainActivity,
-                                        license,
-                                        hardEnforcement = true,
-                                    )
-                                } catch (_: Exception) { false }
-                                if (!safeAfterLogin) {
-                                    loading = false
-                                    SessionGate.lock(this@MainActivity)
-                                    error = "Security check blocked this session. Close debugging tools and retry."
-                                    screen = "login"
-                                    return@launch
-                                }
-
-                                screen = "loading"
-                                loadMsg = "Initializing secure core..."
-                                loadProgress = 0.1f
-
-                                // The new panel does not publish the legacy CoreBundle protocol.
-                                // Use the APK's bundled tool catalog and local engines; never parse
-                                // get_asset.php metadata or an arbitrary package as an executable bundle.
-                                tools = ToolCatalog.defaults()
-
-                                // Integrity gate
-                                val tamper = Tamper.evaluate(this@MainActivity)
-                                if (!tamper.ok && Tamper.expectedCertSha256.isNotEmpty()) {
-                                    ThreatReport.emit(
-                                        this@MainActivity,
-                                        "SIG_BLOCK",
-                                        tamper.reasons.joinToString("|"),
-                                        license
-                                    )
-                                    TacticalNotifier.post(
-                                        this@MainActivity,
-                                        "SECURITY CHECK BLOCKED",
-                                        "Integrity validation failed. Review the security status before retrying.",
-                                        552
-                                    )
-                                    loading = false
-                                    SessionGate.lock()
-                                    error = "Integrity check failed"
-                                    screen = "login"
-                                    return@launch
-                                }
-
-                                // Session token from panel login response
-                                val tok = res.sessionToken
-                                if (tok.isBlank()) {
-                                    loading = false
-                                    SessionGate.lock()
-                                    error = "Login OK but no session token from server"
-                                    screen = "login"
-                                    return@launch
-                                }
-                                SessionGate.unlock(this@MainActivity, tok, license)
-                                try {
-                                    RaspEngine.start(this@MainActivity, license)
-                                } catch (_: Exception) {
-                                }
-                                info = "SYSTEM ONLINE"
-                                TacticalNotifier.post(this@MainActivity, "SESSION ONLINE", "Authentication accepted. Secure workspace is ready.", 550)
-                                TelegramNotifier.notify(this@MainActivity, "SESSION_OK",
-                                    "Login successful", license)
-                                TelegramNotifier.notifySessionStart(this@MainActivity)
-                                loading = false
-                                loadMsg = "Opening secure channel..."
-                                loadProgress = 0.15f
-                                delay(700)
-                                loadMsg = "Syncing workspace..."
-                                loadProgress = 0.4f
-                                delay(900)
-                                loadMsg = "Preparing modules..."
-                                loadProgress = 0.7f
-                                delay(900)
-                                loadMsg = "Almost ready..."
-                                loadProgress = 0.92f
-                                delay(600)
-                                try {
-                                    PulseAudio.start(this@MainActivity, fadeMs = 2000)
-                                } catch (_: Exception) {
-                                }
-                                loadProgress = 1f
-                                delay(400)
-                                screen = "home"
-                            }
-                        }
-                    )
-
-                    "loading" -> LoadingScreen(subtitle = loadMsg, progress = loadProgress)
-
-                    "home" -> HomeScreen(
-                        product = product,
-                        expiry = expiry,
-                        tools = tools,
-                        status = info,
-                        messages = liveMessages,
-                        onMessageRead = { message ->
-                            lifecycleScope.launch {
-                                val ok = withContext(Dispatchers.IO) { panel.markMessageRead(hwid, message.id) }
-                                if (ok) liveMessages = liveMessages.map { if (it.id == message.id) it.copy(isRead = true) else it }
-                            }
-                        },
-                        onProfile = { screen = "profile" },
-                        onWorkspace = { screen = "output" },
-                        onStudio = { studio ->
-                            selectedStudio = studio
-                            screen = "studio"
-                        },
-                        onTool = { t ->
-                            moduleReturnScreen = "home"
-                            pendingInputUri = null
-                            moduleId = t.id
-                            activeSub = null
-                            logs = emptyList()
-                            screen = "submenu"
-                        }
-                    )
-                    "studio" -> {
-                        val studio = selectedStudio
-                        if (studio == null) {
-                            LaunchedEffect(Unit) { screen = "home" }
-                        } else {
-                            StudioScreen(
-                                studio = studio,
-                                tools = tools,
-                                onBack = { selectedStudio = null; pendingInputUri = null; screen = "home" },
-                                onTool = { t ->
-                                    moduleReturnScreen = "studio"
-                                    moduleId = t.id
-                                    activeSub = null
-                                    logs = emptyList()
-                                    screen = "submenu"
-                                }
-                            )
-                        }
-                    }
-                    "submenu" -> SubMenuScreen(
-                        moduleTitle = SubMenus.title(moduleId),
-                        moduleId = moduleId,
-                        items = SubMenus.forModule(moduleId),
-                        onBack = { screen = moduleReturnScreen },
-                        onSelect = { sub ->
-                            activeSub = sub
-                            logs = emptyList()
-                            screen = "tool"
-                        }
-                    )
-                    "tool" -> {
                         val sub = activeSub
+                        val task = TaskCenter.find(activeTaskId)
                         if (sub == null) {
                             LaunchedEffect(Unit) { screen = "submenu" }
                         } else {
                             ToolWorkspaceScreen(
-                                moduleTitle = SubMenus.title(moduleId),
-                                moduleId = moduleId,
-                                sub = sub,
-                                running = running,
-                                logs = logs,
-                                onBack = {
-                                    activeSub = null
-                                    logs = emptyList()
-                                    screen = "submenu"
-                                },
+                                moduleTitle = SubMenus.title(moduleId), moduleId = moduleId, sub = sub,
+                                running = task?.status == TaskStatus.RUNNING, logs = task?.logs ?: emptyList(),
+                                onBack = { activeTaskId = null; screen = "submenu" },
                                 onRun = { uri, extra ->
-                                    pendingInputUri = null
-                                    running = true
-                                    logs = listOf("> preparing ${sub.id}...")
+                                    val taskId = TaskCenter.start(moduleId, sub.id, sub.title, uri?.lastPathSegment?.substringAfterLast("/") ?: "", null)
+                                    activeTaskId = taskId
+                                    TaskCenter.update(taskId, stage = "STAGING INPUT", logs = listOf("> preparing ${sub.id}..."))
                                     lifecycleScope.launch {
                                         try {
                                             val result = withContext(Dispatchers.IO) {
-                                                try {
-                                                    engine.runSub(moduleId, sub.id, uri, extra)
-                                                } catch (t: Throwable) {
+                                                try { engine.runSub(moduleId, sub.id, uri, extra) }
+                                                catch (t: Throwable) {
                                                     val root = t.cause ?: t
-                                                    listOf(
-                                                        "X TOOL EXECUTION FAILED: ${root.javaClass.simpleName}: ${root.message ?: "no detail"}",
-                                                        "diagnostic: module=${moduleId}; subtool=${sub.id}",
-                                                        "Input file is preserved; no successful output is claimed."
-                                                    )
+                                                    listOf("X TOOL EXECUTION FAILED: ${root.javaClass.simpleName}: ${root.message ?: "no detail"}", "diagnostic: module=${moduleId}; subtool=${sub.id}", "Input file is preserved; no successful output is claimed.")
                                                 }
                                             }
-                                            logs = result
-                                            val success = result.any { it.startsWith("OK ") } &&
-                                                result.none { it.startsWith("X ") }
-                                            val eventDetail = "${sub.id}: " +
-                                                (result.firstOrNull { it.startsWith("X ") } ?: if (success) "operation completed" else "operation needs review")
-                                            val eventKind = if (success) "TOOL_OK" else "TOOL_ERROR"
+                                            val success = result.any { it.startsWith("OK ") } && result.none { it.startsWith("X ") }
+                                            val p = result.firstOrNull { it.matches(Regex("PROGRESS\\s+\\d{1,3}%")) }?.substringAfter(" ")?.removeSuffix("%")?.toIntOrNull()
+                                            TaskCenter.update(taskId, stage = if (success) "COMPLETED" else if (result.any { it.startsWith("X ") }) "NEEDS ATTENTION" else "REVIEW", progress = p, logs = result)
+                                            TaskCenter.complete(taskId, success, result)
+                                            val detail = "${sub.id}: " + (result.firstOrNull { it.startsWith("X ") } ?: if (success) "operation completed" else "operation needs review")
                                             try {
-                                                TelegramNotifier.notifyModuleStatus(
-                                                    this@MainActivity,
-                                                    sub.title,
-                                                    if (success) "SUCCESS" else "ATTENTION",
-                                                    eventDetail.take(200)
-                                                )
-                                                val scanLike = sub.id.contains("scan", ignoreCase = true) ||
-                                                    sub.title.contains("scan", ignoreCase = true)
-                                                if (scanLike) {
-                                                    val scanCounts = mapOf(
-                                                        "success" to result.count { it.startsWith("OK ") },
-                                                        "error" to result.count { it.startsWith("X ") },
-                                                        "other" to result.count { !it.startsWith("OK ") && !it.startsWith("X ") }
-                                                    )
-                                                    TelegramNotifier.notifyScanComplete(
-                                                        this@MainActivity,
-                                                        result.size,
-                                                        scanCounts
-                                                    )
-                                                }
-                                                TelegramNotifier.notify(
-                                                    this@MainActivity,
-                                                    eventKind,
-                                                    eventDetail.take(200),
-                                                    license
-                                                )
-                                                TacticalNotifier.post(
-                                                    this@MainActivity,
-                                                    if (success) "OPERATION COMPLETE" else "OPERATION NEEDS ATTENTION",
-                                                    "${sub.title}: ${result.firstOrNull { it.startsWith("X ") } ?: if (success) "Operation completed." else "Review the operation log for details."}",
-                                                    551
-                                                )
-                                            } catch (_: Throwable) {
-                                                // Notifications must never terminate a tool run.
-                                            }
+                                                TelegramNotifier.notifyModuleStatus(this@MainActivity, sub.title, if (success) "SUCCESS" else "ATTENTION", detail.take(200))
+                                                TelegramNotifier.notify(this@MainActivity, if (success) "TOOL_OK" else "TOOL_ERROR", detail.take(200), license)
+                                            } catch (_: Throwable) { }
                                         } catch (t: Throwable) {
-                                            logs = listOf(
-                                                "X UNEXPECTED TOOL FAILURE: ${t.javaClass.simpleName}: ${t.message ?: "no detail"}",
-                                                "diagnostic: module=${moduleId}; subtool=${sub.id}",
-                                                "Input file is preserved where staging completed."
-                                            )
-                                        } finally {
-                                            running = false
+                                            TaskCenter.complete(taskId, false, listOf("X UNEXPECTED TOOL FAILURE: ${t.javaClass.simpleName}: ${t.message ?: "no detail"}", "diagnostic: module=${moduleId}; subtool=${sub.id}", "Input file is preserved where staging completed."))
                                         }
                                     }
                                 },
@@ -471,10 +209,24 @@ class MainActivity : ComponentActivity() {
                     )
                 } // when (scr)
                 } // AnimatedContent
+                    if (TaskCenter.tasks.isNotEmpty()) {
+                        LiveTaskDock(
+                            tasks = TaskCenter.tasks,
+                            modifier = androidx.compose.ui.Modifier.align(Alignment.BottomCenter),
+                            onOpenTask = { live ->
+                                moduleId = live.moduleId
+                                activeSub = SubMenus.forModule(live.moduleId).firstOrNull { it.id == live.subId }
+                                activeTaskId = live.id
+                                moduleReturnScreen = "home"
+                                pendingInputUri = null
+                                screen = "tool"
+                            }
+                        )
+                    }
+                }
             }
         }
     }
-
     override fun onResume() {
         super.onResume()
         // Invalidate permission cache so a revoke-while-backgrounded state
