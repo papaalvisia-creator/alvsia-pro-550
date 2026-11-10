@@ -161,38 +161,47 @@ def run_unzip(src, dest_dir):
 def run_hash_file(path, out_txt=None):
     import hashlib
     path = Path(path)
-    data = path.read_bytes()
+    if not path.is_file():
+        return {"ok": False, "error": "input file not found"}
+    size = path.stat().st_size
+    md5 = hashlib.md5()
+    sha1 = hashlib.sha1()
+    sha256 = hashlib.sha256()
+    with path.open("rb") as source:
+        while True:
+            block = source.read(4 * 1024 * 1024)
+            if not block:
+                break
+            md5.update(block)
+            sha1.update(block)
+            sha256.update(block)
     lines = [
         f"file={path}",
-        f"size={len(data)}",
-        f"md5={hashlib.md5(data).hexdigest()}",
-        f"sha1={hashlib.sha1(data).hexdigest()}",
-        f"sha256={hashlib.sha256(data).hexdigest()}",
+        f"size={size}",
+        f"md5={md5.hexdigest()}",
+        f"sha1={sha1.hexdigest()}",
+        f"sha256={sha256.hexdigest()}",
     ]
-    text = "\n".join(lines)
+    report = "\n".join(lines)
     if out_txt:
-        Path(out_txt).write_text(text, encoding="utf-8")
-    return {"ok": True, "report": text, "out": str(out_txt) if out_txt else None}
+        Path(out_txt).write_text(report, encoding="utf-8")
+    return {"ok": True, "report": report, "out": str(out_txt) if out_txt else None}
 
 
 def run_string_scan(path, out_txt=None, min_len=4):
+    from lua_string_recover import _iter_ascii_file
     path = Path(path)
-    data = path.read_bytes()
-    cur = bytearray()
-    found = []
-    for b in data:
-        if 32 <= b < 127:
-            cur.append(b)
-        else:
-            if len(cur) >= min_len:
-                found.append(cur.decode("ascii", errors="ignore"))
-            cur = bytearray()
-    if len(cur) >= min_len:
-        found.append(cur.decode("ascii", errors="ignore"))
-    text = "\n".join(found[:5000])
+    if not path.is_file():
+        return {"ok": False, "error": "input file not found"}
+    found_count = 0
+    retained = []
+    for value in _iter_ascii_file(path, min_len=min_len):
+        found_count += 1
+        if len(retained) < 5000:
+            retained.append(value)
     if out_txt:
-        Path(out_txt).write_text(text, encoding="utf-8")
-    return {"ok": True, "count": len(found), "out": str(out_txt) if out_txt else None}
+        Path(out_txt).write_text("\n".join(retained), encoding="utf-8")
+    return {"ok": True, "count": found_count, "out": str(out_txt) if out_txt else None}
 
 
 def run_lua_bytecode_strings(input_path, out_dir):
@@ -586,6 +595,93 @@ def run_lua_smart(input_path, out_dir, jars_dir=None):
     input_path = Path(input_path)
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
+
+    # Multi-GB inputs must not fall through to the legacy whole-file pipeline.
+    # Containers are inflated to disk in bounded chunks; only a resulting Lua
+    # payload within the parser budget is passed to the in-memory legacy engines.
+    max_in_memory = int(os.environ.get(
+        "ALVSIA_LUA_MAX_IN_MEMORY_BYTES", str(256 * 1024 * 1024)
+    ))
+    max_in_memory = max(16 * 1024 * 1024, min(max_in_memory, 512 * 1024 * 1024))
+    input_size = input_path.stat().st_size if input_path.is_file() else 0
+    if input_size > max_in_memory:
+        from lua_engine.streaming_decompiler import (
+            preflight_magic, stream_inflate_zlib, stream_inflate_deflate_container,
+        )
+        from lua_string_recover import recover_strings_file
+
+        fmt = preflight_magic(input_path)
+        work_input = input_path
+        unwrap_report = None
+        streamed_path = out_dir / (input_path.stem + "_stream_unwrapped.luac")
+        try:
+            if fmt == "zlib":
+                ok, message = stream_inflate_zlib(input_path, streamed_path)
+                unwrap_report = {"ok": ok, "format": fmt, "message": message}
+                if ok:
+                    work_input = streamed_path
+            elif fmt == "chunked_deflate":
+                ok, message = stream_inflate_deflate_container(input_path, streamed_path)
+                unwrap_report = {"ok": ok, "format": fmt, "message": message}
+                if ok:
+                    work_input = streamed_path
+            elif fmt == "gzip":
+                import gzip
+                total = 0
+                with gzip.open(input_path, "rb") as source, streamed_path.open("wb") as target:
+                    while True:
+                        block = source.read(4 * 1024 * 1024)
+                        if not block:
+                            break
+                        total += len(block)
+                        if total > 4 * 1024 * 1024 * 1024:
+                            raise ValueError("gzip output exceeds 4 GiB streaming cap")
+                        target.write(block)
+                work_input = streamed_path
+                unwrap_report = {"ok": True, "format": fmt, "bytes_out": total}
+        except Exception as exc:
+            unwrap_report = {"ok": False, "format": fmt,
+                             "error": f"{type(exc).__name__}: {exc}"}
+
+        if work_input != input_path and work_input.stat().st_size <= max_in_memory:
+            try:
+                legacy = _run_lua_smart_legacy(work_input, out_dir, jars_dir=jars_dir)
+                legacy["input_bytes"] = input_size
+                legacy["stream_unwrap"] = unwrap_report
+                legacy["mode"] = "smart_streaming_large_input"
+                return legacy
+            except Exception as exc:
+                decompile_report = {"ok": False, "error": f"{type(exc).__name__}: {exc}"}
+        else:
+            decompile_report = {
+                "ok": False,
+                "error": (
+                    f"input/payload exceeds in-memory Lua parser budget ({max_in_memory} bytes); "
+                    "large-file scanning and container inflation remain streaming, "
+                    "but full Lua 5.3 source reconstruction is not yet streaming"
+                ),
+            }
+        try:
+            recovery = recover_strings_file(
+                work_input if work_input.is_file() else input_path,
+                out_dir / "large_file_recovery", input_path.stem,
+            )
+        except Exception as exc:
+            recovery = {"ok": False, "error": f"{type(exc).__name__}: {exc}"}
+        return {
+            "ok": False,
+            "mode": "smart_streaming_large_input",
+            "final_status": "PARTIAL",
+            "input_bytes": input_size,
+            "stream_unwrap": unwrap_report,
+            "decompile": decompile_report,
+            "streaming_recovery": recovery,
+            "note": (
+                "Large input was processed without whole-file RAM loading. "
+                "Recovery artifacts are diagnostic; no full decompile SUCCESS is claimed."
+            ),
+        }
+
     intelligence = analyze_file(
         input_path, out_dir / "intelligence",
         IntelligenceConfig(
