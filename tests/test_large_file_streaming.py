@@ -10,7 +10,7 @@ sys.path.insert(0, str(ROOT / "app/src/main/python"))
 
 from lua_engine.detector import detect_lua
 from lua_engine.streaming_decompiler import stream_decompile_lua53
-from lua_string_recover import recover_strings_file
+from lua_string_recover import _iter_ascii_file, recover_strings_file
 
 
 class TestLargeFileStreaming(unittest.TestCase):
@@ -39,6 +39,37 @@ class TestLargeFileStreaming(unittest.TestCase):
             text = (out / "sample_strings_plain.txt").read_text(encoding="utf-8")
             self.assertIn("PlayerCharacter", text)
             self.assertTrue(result["streaming"])
+
+    def test_string_iterator_scans_sparse_one_gib_file_with_bounded_memory(self):
+        # Sparse fixture keeps repository storage small while exercising a
+        # full 1-GiB sequential scan and both file boundaries.
+        with tempfile.TemporaryDirectory() as td:
+            path = Path(td) / "sparse-1g.bin"
+            size = 1024 * 1024 * 1024
+            with path.open("wb") as output:
+                output.write(b"BEGIN_GB_SCAN")
+                output.truncate(size - 32)
+                output.seek(size - 20)
+                output.write(b"END_GB_SCAN")
+                output.truncate(size)
+
+            with patch.object(Path, "read_bytes", side_effect=AssertionError("whole-file read")):
+                strings = list(_iter_ascii_file(path, chunk_size=1024 * 1024))
+
+            self.assertIn("BEGIN_GB_SCAN", strings)
+            self.assertIn("END_GB_SCAN", strings)
+
+    def test_string_iterator_preserves_multibyte_xor_phase_across_chunks(self):
+        with tempfile.TemporaryDirectory() as td:
+            path = Path(td) / "xor.bin"
+            expected = b"prefix_PlayerCharacter_suffix"
+            key = b"PUBG"
+            encoded = bytes(value ^ key[i % len(key)] for i, value in enumerate(expected))
+            path.write_bytes(encoded)
+            recovered = list(_iter_ascii_file(
+                path, min_len=4, xor_multi_key=key, chunk_size=7
+            ))
+            self.assertEqual(recovered, ["prefix_PlayerCharacter_suffix"])
 
     def test_lua53_parser_rejects_over_budget_before_loading(self):
         with tempfile.TemporaryDirectory() as td:
