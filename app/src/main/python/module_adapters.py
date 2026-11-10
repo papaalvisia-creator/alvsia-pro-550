@@ -21,7 +21,6 @@ class AdapterSpec:
 
 def _lua_decompile(input_path: str | Path, output_path: str | Path) -> dict:
     from lua_engine.detector import detect_lua
-    from lua_engine.orchestrator import run_decompiler_pipeline
     src = Path(input_path)
     dst = Path(output_path)
     if not src.is_file():
@@ -34,7 +33,11 @@ def _lua_decompile(input_path: str | Path, output_path: str | Path) -> dict:
                 "format": info.format}
     dst.parent.mkdir(parents=True, exist_ok=True)
     try:
-        result = run_decompiler_pipeline(src, dst, info)
+        from alvsia_features import run_lua_smart
+        result = run_lua_smart(src, dst.parent, jars_dir=None)
+        if isinstance(result, dict) and result.get("out") and Path(result["out"]) != dst:
+            Path(result["out"]).replace(dst)
+            result["out"] = str(dst)
     except Exception as exc:
         return {"ok": False, "module": "lua", "operation": "decompile",
                 "error": f"{type(exc).__name__}: {exc}"}
