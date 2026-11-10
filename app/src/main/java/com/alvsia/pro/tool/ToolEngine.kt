@@ -98,7 +98,7 @@ class ToolEngine(private val context: Context) {
         return digest.digest().joinToString("") { byte -> "%02x".format(byte.toInt() and 0xff) }
     }
 
-    private fun copyUri(uri: Uri, dest: File): String? {
+    private fun copyUri(uri: Uri, dest: File, onProgress: ((String, Int?) -> Unit)? = null): String? {
         return try {
             val declaredSize = context.contentResolver.query(
                 uri, arrayOf(android.provider.OpenableColumns.SIZE), null, null, null
@@ -117,6 +117,9 @@ class ToolEngine(private val context: Context) {
                         val count = ins.read(buffer)
                         if (count < 0) break
                         total += count
+                        if (declaredSize != null && declaredSize > 0L) {
+                            onProgress?.invoke("STAGING INPUT", ((total * 100L) / declaredSize).toInt().coerceIn(0, 100))
+                        }
                         if (total > MAX_DIRECT_FILE_BYTES) {
                             throw IllegalArgumentException("direct file import exceeds 5 GB")
                         }
@@ -136,7 +139,7 @@ class ToolEngine(private val context: Context) {
         }
     }
 
-    private fun stageInput(uri: Uri?, moduleId: Int): Pair<String, List<String>> {
+    private fun stageInput(uri: Uri?, moduleId: Int, onProgress: ((String, Int?) -> Unit)? = null): Pair<String, List<String>> {
         val notes = mutableListOf<String>()
         if (uri == null) return "" to notes
         val nameHint = uri.lastPathSegment?.substringAfterLast('/') ?: "input.bin"
@@ -151,7 +154,8 @@ class ToolEngine(private val context: Context) {
             return "" to notes
         }
         val staged = File(WorkPaths.moduleWork(moduleId), "in_${System.currentTimeMillis()}_$safe")
-        val sourceHash = copyUri(uri, staged)
+        onProgress?.invoke("STAGING INPUT", 0)
+        val sourceHash = copyUri(uri, staged, onProgress)
         if (sourceHash == null) {
             notes.add("X Failed to read selected file or per-file 5 GB limit was exceeded")
             return "" to notes
@@ -179,6 +183,7 @@ class ToolEngine(private val context: Context) {
         notes.add("size ${staged.length()} bytes")
         notes.add("SHA-256 ${sourceHash}")
         notes.add("OK INPUT source/staged bytes verified identical")
+        onProgress?.invoke("INPUT VERIFIED", null)
         return staged.absolutePath to notes
     }
 
@@ -201,7 +206,7 @@ class ToolEngine(private val context: Context) {
         return runSub(toolId, "mod_$toolId", inputUri, extraName)
     }
 
-    fun runSub(moduleId: Int, subId: String, inputUri: Uri?, extraName: String?): List<String> {
+    fun runSub(moduleId: Int, subId: String, inputUri: Uri?, extraName: String?, onProgress: ((String, Int?) -> Unit)? = null): List<String> {
         try {
             SessionGate.allowTools(context)
         } catch (e: SecurityException) {
@@ -223,13 +228,15 @@ class ToolEngine(private val context: Context) {
         installJarsFromAssets()
 
         val lines = mutableListOf<String>()
+        onProgress?.invoke("PREPARING", null)
         lines.add("> ${SubMenus.title(moduleId)} | $subId")
         lines.add("PIPELINE IN -> WORK -> OUT")
 
-        val (inputPath, stageNotes) = stageInput(inputUri, moduleId)
+        val (inputPath, stageNotes) = stageInput(inputUri, moduleId, onProgress)
         lines.addAll(stageNotes)
 
         // Bridge first for all modules; native fallback below
+        onProgress?.invoke("ENGINE PROCESSING", null)
 
         if (inputPath.isEmpty() && needsInput(moduleId, subId)) {
             lines.add("X No input file ? use SELECT FILE")
@@ -363,6 +370,7 @@ class ToolEngine(private val context: Context) {
         }
 
         // Only route to native implementations that actually match the selected module.
+        onProgress?.invoke("NATIVE PROCESSING", null)
         // Older routing sent PAK Compact to OBB extraction, Frida to hashing, and
         // Export Report to string scanning whenever Chaquopy was unavailable.
         when {
