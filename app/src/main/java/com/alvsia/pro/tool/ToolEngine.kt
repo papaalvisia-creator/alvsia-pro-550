@@ -110,6 +110,8 @@ class ToolEngine(private val context: Context) {
             val digest = MessageDigest.getInstance("SHA-256")
             val source = context.contentResolver.openInputStream(uri) ?: return null
             var total = 0L
+            var lastProgressAt = 0L
+            var lastProgress = -1
             source.use { ins ->
                 val buffer = ByteArray(1024 * 1024)
                 FileOutputStream(dest).use { outs ->
@@ -118,13 +120,25 @@ class ToolEngine(private val context: Context) {
                         if (count < 0) break
                         total += count
                         if (declaredSize != null && declaredSize > 0L) {
-                            onProgress?.invoke("STAGING INPUT", ((total * 100L) / declaredSize).toInt().coerceIn(0, 100))
+                            val pct = ((total * 100L) / declaredSize).toInt().coerceIn(0, 100)
+                            val now = System.currentTimeMillis()
+                            // The bytes continue streaming at full speed; only the
+                            // visual callback is throttled. This prevents a 1 MiB
+                            // callback cadence from flooding Compose for multi-GB files.
+                            if (pct != lastProgress || now - lastProgressAt >= 120L) {
+                                onProgress?.invoke("STAGING INPUT", pct)
+                                lastProgress = pct
+                                lastProgressAt = now
+                            }
                         }
                         if (total > MAX_DIRECT_FILE_BYTES) {
                             throw IllegalArgumentException("direct file import exceeds 5 GB")
                         }
                         digest.update(buffer, 0, count)
                         outs.write(buffer, 0, count)
+                    }
+                    if (declaredSize != null && declaredSize > 0L) {
+                        onProgress?.invoke("STAGING INPUT", 100)
                     }
                     outs.flush()
                     outs.fd.sync()
