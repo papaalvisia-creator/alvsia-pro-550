@@ -18,7 +18,7 @@ class TestLargeFileStreaming(unittest.TestCase):
         with tempfile.TemporaryDirectory() as td:
             path = Path(td) / "large.luac"
             with path.open("wb") as output:
-                output.write(b"\\x1bLua\\x53\\x00")
+                output.write(b"\x1bLua\x53\x00")
                 output.truncate(1024 * 1024 * 1024)
             with patch.object(Path, "read_bytes", side_effect=AssertionError("whole-file read")):
                 info = detect_lua(path)
@@ -30,7 +30,7 @@ class TestLargeFileStreaming(unittest.TestCase):
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
             source = root / "sample.bin"
-            source.write_bytes(b"PlayerCharacter function ServerRPC\\x00" + b"\\x00" * (2 * 1024 * 1024))
+            source.write_bytes(b"PlayerCharacter function ServerRPC\x00" + b"\x00" * (2 * 1024 * 1024))
             out = root / "out"
             with patch.object(Path, "read_bytes", side_effect=AssertionError("whole-file read")):
                 with patch("lua_string_recover.DEFAULT_SAMPLE_LIMIT", 4096):
@@ -44,7 +44,7 @@ class TestLargeFileStreaming(unittest.TestCase):
         with tempfile.TemporaryDirectory() as td:
             source = Path(td) / "large.luac"
             with source.open("wb") as output:
-                output.write(b"\\x1bLua\\x53")
+                output.write(b"\x1bLua\x53")
                 output.truncate(16 * 1024 * 1024 + 1)
             with patch.dict(os.environ, {"ALVSIA_LUA53_MAX_IN_MEMORY_BYTES": str(16 * 1024 * 1024)}):
                 ok, message = stream_decompile_lua53(source, Path(td) / "out.lua")
