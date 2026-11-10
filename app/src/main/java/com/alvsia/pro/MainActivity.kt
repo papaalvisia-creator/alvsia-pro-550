@@ -387,14 +387,14 @@ class MainActivity : ComponentActivity() {
                                     lifecycleScope.launch {
                                         try {
                                             val result = withContext(Dispatchers.IO) {
-                                                try { engine.runSub(moduleId, sub.id, uri, extra, taskId = taskId) { stage, progress ->
+                                                try { engine.runSub(moduleId, sub.id, uri, extra, onProgress = { stage, progress ->
                                                     TaskCenter.update(
                                                         taskId,
                                                         stage = stage,
                                                         progress = progress,
                                                         clearProgress = progress == null
                                                     )
-                                                } }
+                                                }, taskId = taskId) }
                                                 catch (t: Throwable) {
                                                     val root = t.cause ?: t
                                                     listOf("X TOOL EXECUTION FAILED: ${root.javaClass.simpleName}: ${root.message ?: "no detail"}", "diagnostic: module=${moduleId}; subtool=${sub.id}", "Input file is preserved; no successful output is claimed.")
