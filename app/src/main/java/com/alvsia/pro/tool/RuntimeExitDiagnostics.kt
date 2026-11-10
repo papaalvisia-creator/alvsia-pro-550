@@ -8,6 +8,28 @@ import java.io.File
 /** Persists previous process-exit diagnostics; never changes runtime behavior. */
 object RuntimeExitDiagnostics {
     private const val FILE_NAME = "runtime_exit_diagnostic.txt"
+    private var previousHandler: Thread.UncaughtExceptionHandler? = null
+
+    fun installExceptionRecorder(context: Context) {
+        try {
+            if (previousHandler != null) return
+            previousHandler = Thread.getDefaultUncaughtExceptionHandler()
+            val delegate = previousHandler
+            Thread.setDefaultUncaughtExceptionHandler { thread, error ->
+                try {
+                    File(context.filesDir, FILE_NAME).writeText(
+                        "reason=JAVA_UNCAUGHT_EXCEPTION\n" +
+                            "thread=" + thread.name + "\n" +
+                            "error=" + error.javaClass.name + ": " + (error.message ?: "") + "\n" +
+                            "was_tool_active=" + context.getSharedPreferences("runtime_exit", Context.MODE_PRIVATE).getBoolean("tool_active", false) + "\n" +
+                            "last_tool=" + context.getSharedPreferences("runtime_exit", Context.MODE_PRIVATE).getString("last_tool", "") + "\n",
+                        Charsets.UTF_8
+                    )
+                } catch (_: Throwable) {}
+                delegate?.uncaughtException(thread, error)
+            }
+        } catch (_: Throwable) {}
+    }
 
     fun recordPreviousExit(context: Context) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) return
