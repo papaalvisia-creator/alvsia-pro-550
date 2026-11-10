@@ -183,12 +183,15 @@ def run_tool(module_id, sub_id, input_path, out_root, engine_dir, jars_dir):
         if mid == 1 or sid.startswith("pak_full") or sid in ("pak_list", "pak_info", "pak_csv"):
             if not need_file(): return "\n".join(lines)
             try:
-                raw = Path(ip).read_bytes()
-                lines.append("preflight size=%s head=%s" % (len(raw), raw[:8].hex()))
-                if len(raw) < 64:
+                source_path = Path(ip)
+                source_size = source_path.stat().st_size
+                with source_path.open("rb") as source_file:
+                    header = source_file.read(8)
+                lines.append("preflight size=%s head=%s" % (source_size, header.hex()))
+                if source_size < 64:
                     lines.append("X File too small for PAK/LuaS")
                     return "\n".join(lines)
-                if raw[:4] == b"\x1bLua":
+                if header[:4] == b"\x1bLua":
                     lines.append("NOTE: magic LuaS bytecode (NOT a PAK) -> LUA smart")
                     dest = out_dir("LUA")
                     r = feat.run_lua_smart(ip, dest, jars_dir=jars)
@@ -204,7 +207,7 @@ def run_tool(module_id, sub_id, input_path, out_root, engine_dir, jars_dir):
                     else:
                         lines.append("X OUT -> operation failed")
                     return "\n".join(lines)
-                if raw[:2] == b"PK":
+                if header[:2] == b"PK":
                     lines.append("NOTE: ZIP magic — use OBB Tools")
                     return "\n".join(lines)
             except Exception as _e:
