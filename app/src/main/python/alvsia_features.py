@@ -161,38 +161,47 @@ def run_unzip(src, dest_dir):
 def run_hash_file(path, out_txt=None):
     import hashlib
     path = Path(path)
-    data = path.read_bytes()
+    if not path.is_file():
+        return {"ok": False, "error": "input file not found"}
+    size = path.stat().st_size
+    md5 = hashlib.md5()
+    sha1 = hashlib.sha1()
+    sha256 = hashlib.sha256()
+    with path.open("rb") as source:
+        while True:
+            block = source.read(4 * 1024 * 1024)
+            if not block:
+                break
+            md5.update(block)
+            sha1.update(block)
+            sha256.update(block)
     lines = [
         f"file={path}",
-        f"size={len(data)}",
-        f"md5={hashlib.md5(data).hexdigest()}",
-        f"sha1={hashlib.sha1(data).hexdigest()}",
-        f"sha256={hashlib.sha256(data).hexdigest()}",
+        f"size={size}",
+        f"md5={md5.hexdigest()}",
+        f"sha1={sha1.hexdigest()}",
+        f"sha256={sha256.hexdigest()}",
     ]
-    text = "\n".join(lines)
+    report = "\n".join(lines)
     if out_txt:
-        Path(out_txt).write_text(text, encoding="utf-8")
-    return {"ok": True, "report": text, "out": str(out_txt) if out_txt else None}
+        Path(out_txt).write_text(report, encoding="utf-8")
+    return {"ok": True, "report": report, "out": str(out_txt) if out_txt else None}
 
 
 def run_string_scan(path, out_txt=None, min_len=4):
+    from lua_string_recover import _iter_ascii_file
     path = Path(path)
-    data = path.read_bytes()
-    cur = bytearray()
-    found = []
-    for b in data:
-        if 32 <= b < 127:
-            cur.append(b)
-        else:
-            if len(cur) >= min_len:
-                found.append(cur.decode("ascii", errors="ignore"))
-            cur = bytearray()
-    if len(cur) >= min_len:
-        found.append(cur.decode("ascii", errors="ignore"))
-    text = "\n".join(found[:5000])
+    if not path.is_file():
+        return {"ok": False, "error": "input file not found"}
+    found_count = 0
+    retained = []
+    for value in _iter_ascii_file(path, min_len=min_len):
+        found_count += 1
+        if len(retained) < 5000:
+            retained.append(value)
     if out_txt:
-        Path(out_txt).write_text(text, encoding="utf-8")
-    return {"ok": True, "count": len(found), "out": str(out_txt) if out_txt else None}
+        Path(out_txt).write_text("\n".join(retained), encoding="utf-8")
+    return {"ok": True, "count": found_count, "out": str(out_txt) if out_txt else None}
 
 
 def run_lua_bytecode_strings(input_path, out_dir):
