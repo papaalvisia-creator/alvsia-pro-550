@@ -3,6 +3,7 @@ package com.alvsia.pro.tool
 import android.os.Handler
 import android.os.Looper
 import androidx.compose.runtime.mutableStateListOf
+import java.util.concurrent.ConcurrentHashMap
 
 enum class TaskStatus { RUNNING, COMPLETED, ERROR }
 
@@ -42,6 +43,11 @@ object TaskCenter {
     }
 
     private val mainHandler = Handler(Looper.getMainLooper())
+    // Engine callbacks can arrive once per chunk. Coalesce progress-only UI updates
+    // so a multi-GB import cannot enqueue thousands of Compose mutations and exhaust
+    // the main-thread queue. This does not alter the underlying work or percentage;
+    // it only reduces redraw frequency.
+    private val lastPostedProgressAt = ConcurrentHashMap<String, Long>()
 
     fun update(
         id: String,
@@ -52,8 +58,14 @@ object TaskCenter {
     ) {
         if (Looper.myLooper() != Looper.getMainLooper()) {
             // Engine callbacks arrive from Dispatchers.IO. Never mutate the
-            // Compose-backed task list from an engine/background thread:
-            // serialise every visual-state mutation onto the UI thread.
+            // Compose-backed task list from an engine/background thread.
+            // Progress-only callbacks are coalesced to protect the UI from a
+            // multi-GB staging stream producing thousands of main-thread posts.
+            if (progress != null && logs == null && !clearProgress) {
+                val now = System.currentTimeMillis()
+                val previous = lastPostedProgressAt.put(id, now)
+                if (previous != null && now - previous < 120L) return
+            }
             mainHandler.post {
                 update(id, stage, progress, logs, clearProgress)
             }
@@ -78,6 +90,7 @@ object TaskCenter {
         val index = tasks.indexOfFirst { it.id == id }
         if (index < 0) return
         val old = tasks[index]
+        lastPostedProgressAt.remove(id)
         tasks[index] = old.copy(
             status = if (success) TaskStatus.COMPLETED else TaskStatus.ERROR,
             progress = if (success) 100 else old.progress,
