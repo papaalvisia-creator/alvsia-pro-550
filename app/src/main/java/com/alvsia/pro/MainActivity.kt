@@ -416,7 +416,7 @@ class MainActivity : ComponentActivity() {
                                             )
                                             TaskCenter.complete(taskId, success, result)
                                             ToolExecutionService.end(this@MainActivity)
-                                            val detail = "${sub.id}: " (result.firstOrNull { it.startsWith("X ") } ?: if (success) "operation completed" else "operation needs review")
+                                            val detail = "${sub.id}: " + (result.firstOrNull { it.startsWith("X ") } ?: if (success) "operation completed" else "operation needs review")
                                             try {
                                                 TelegramNotifier.notifyModuleStatus(this@MainActivity, sub.title, if (success) "SUCCESS" else "ATTENTION", detail.take(200))
                                                 val scanLike = sub.id.contains("scan", ignoreCase = true) || sub.title.contains("scan", ignoreCase = true)
