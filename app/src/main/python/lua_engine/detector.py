@@ -265,27 +265,45 @@ def _classify_bytes(data: bytes) -> LuaInfo:
     return LuaInfo("unknown", None, "unknown", size, magic, 0.0)
 
 
-def detect_lua(path) -> LuaInfo:
-    p = Path(path)
-    data = p.read_bytes()
-    info = detect_bytes(data)
-    # Accept any valid zlib header: CMF=0x78 with FLG such that (CMF*256+FLG)%31==0
-    # (78 01, 78 5E, 78 9C, 78 DA are the common ones at various compression levels).
-    def _is_zlib_header(d: bytes) -> bool:
-        return len(d) >= 2 and d[0] == 0x78 and (d[0] * 256 + d[1]) % 31 == 0
+MAX_IN_MEMORY_CONTAINER_BYTES = 256 * 1024 * 1024
+MAX_TEXT_READ_BYTES = 64 * 1024 * 1024
 
-    if info.kind != "unknown" or not _is_zlib_header(data):
+
+def detect_lua(path) -> LuaInfo:
+    """Detect Lua using a bounded header read; only unwrap bounded containers."""
+    p = Path(path)
+    if not p.is_file():
+        return LuaInfo("unknown", None, "missing", 0, "", 0.0,
+                       ("input file not found",))
+    size = p.stat().st_size
+    with p.open("rb") as source:
+        sample = source.read(8192)
+    detected = detect_bytes(sample)
+    info = LuaInfo(detected.kind, detected.version, detected.format, size,
+                   sample[:8].hex(), detected.confidence, detected.notes)
+
+    def _is_zlib_header(data: bytes) -> bool:
+        return len(data) >= 2 and data[0] == 0x78 and (data[0] * 256 + data[1]) % 31 == 0
+
+    if info.kind != "unknown" or not _is_zlib_header(sample):
         return info
+    if size > MAX_IN_MEMORY_CONTAINER_BYTES:
+        return LuaInfo(
+            "unknown", None, "container-exceeds-memory-budget", size,
+            sample[:8].hex(), 0.10,
+            (f"compressed container exceeds in-memory unwrap budget ({MAX_IN_MEMORY_CONTAINER_BYTES} bytes); use streaming decompiler",),
+            True, "unknown", 0,
+        )
     try:
+        data = p.read_bytes()
         payload, ci = unwrap_lua_container(data)
-        inner = detect_bytes(payload)
-        return LuaInfo(inner.kind, inner.version, inner.format, len(data), data[:8].hex(),
+        inner = detect_bytes(payload[:8192])
+        return LuaInfo(inner.kind, inner.version, inner.format, size, sample[:8].hex(),
                        min(0.98, inner.confidence),
                        tuple(ci.notes) + tuple(inner.notes), True, ci.format, ci.chunks)
     except Exception as exc:
-        return LuaInfo("unknown", None, "container-unknown", len(data), data[:8].hex(), 0.10,
+        return LuaInfo("unknown", None, "container-unknown", size, sample[:8].hex(), 0.10,
                        (f"container detection failed: {exc}",), True, "unknown", 0)
-
 
 def read_lua_text_strict(path, *, allow_utf8_bom: bool = True) -> str:
     """Read a Lua *source* file as text without ever destroying bytes.
@@ -296,6 +314,11 @@ def read_lua_text_strict(path, *, allow_utf8_bom: bool = True) -> str:
     source should use this helper and surface the raised error to the user.
     """
     p = Path(path)
+    if p.stat().st_size > MAX_TEXT_READ_BYTES:
+        raise ValueError(
+            f"{p.name} exceeds the strict text-read limit ({MAX_TEXT_READ_BYTES} bytes); "
+            "use a streaming text operation"
+        )
     raw = p.read_bytes()
     if allow_utf8_bom and raw.startswith(b"\xef\xbb\xbf"):
         raw = raw[3:]
