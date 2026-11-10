@@ -152,6 +152,224 @@ class MainActivity : ComponentActivity() {
                 BackHandler(enabled = screen != "splash" && screen != "login") {
                     when (screen) {
                         "tool" -> {
+                            activeTaskId = null
+                            activeSub = null
+                            screen = "submenu"
+                        }
+                        "submenu" -> {
+                            moduleId = 0
+                            screen = moduleReturnScreen
+                        }
+                        "studio" -> {
+                            selectedStudio = null
+                            pendingInputUri = null
+                            screen = "home"
+                        }
+                        "output" -> screen = "home"
+                        "profile" -> screen = "home"
+                        else -> { }
+                    }
+                }
+
+                Box(Modifier.fillMaxSize()) {
+                AnimatedContent(
+                    targetState = screen,
+                    transitionSpec = {
+                        fadeIn(tween(450)) togetherWith fadeOut(tween(350))
+                    },
+                    label = "screen"
+                ) { scr ->
+                when (scr) {
+                    "splash" -> SplashScreen {
+                        // Keep startup animation independent from expensive checks.
+                        // Login re-runs Guard checks; post-login performs Tamper checks and starts RASP.
+                        screen = "login"
+                    }
+
+                    // ── LOGIN — key-only authentication ─────────────────────────────
+                    "login" -> LoginScreen(
+                        hwidFull = hwid,
+                        hwidShort = hwid.take(16),
+                        loading = loading,
+                        error = error,
+                        onLogin = login@{ key ->
+                            val safeToLogin = try {
+                                Guard.checkAndReport(
+                                    this@MainActivity,
+                                    key,
+                                    hardEnforcement = false,
+                                )
+                            } catch (_: Exception) {
+                                false
+                            }
+                            if (!safeToLogin) {
+                                error = "Security check blocked login. Restart the app and try again."
+                                return@login
+                            }
+                            license = key
+                            loading = true
+                            error = null
+                            lifecycleScope.launch {
+                                // Panel login — returns session_token directly
+                                val res = withContext(Dispatchers.IO) { panel.login(key, hwid) }
+                                if (!res.ok) {
+                                    loading = false
+                                    error = res.message
+                                    return@launch
+                                }
+                                product = res.product.ifBlank { "PREMIUM" }
+                                expiry = res.expiry
+
+                                // Security gate post-login
+                                val safeAfterLogin = try {
+                                    Guard.checkAndReport(
+                                        this@MainActivity,
+                                        license,
+                                        hardEnforcement = true,
+                                    )
+                                } catch (_: Exception) { false }
+                                if (!safeAfterLogin) {
+                                    loading = false
+                                    SessionGate.lock(this@MainActivity)
+                                    error = "Security check blocked this session. Close debugging tools and retry."
+                                    screen = "login"
+                                    return@launch
+                                }
+
+                                screen = "loading"
+                                loadMsg = "Initializing secure core..."
+                                loadProgress = 0.1f
+
+                                // The new panel does not publish the legacy CoreBundle protocol.
+                                // Use the APK's bundled tool catalog and local engines; never parse
+                                // get_asset.php metadata or an arbitrary package as an executable bundle.
+                                tools = ToolCatalog.defaults()
+
+                                // Integrity gate
+                                val tamper = Tamper.evaluate(this@MainActivity)
+                                if (!tamper.ok && Tamper.expectedCertSha256.isNotEmpty()) {
+                                    ThreatReport.emit(
+                                        this@MainActivity,
+                                        "SIG_BLOCK",
+                                        tamper.reasons.joinToString("|"),
+                                        license
+                                    )
+                                    TacticalNotifier.post(
+                                        this@MainActivity,
+                                        "SECURITY CHECK BLOCKED",
+                                        "Integrity validation failed. Review the security status before retrying.",
+                                        552
+                                    )
+                                    loading = false
+                                    SessionGate.lock()
+                                    error = "Integrity check failed"
+                                    screen = "login"
+                                    return@launch
+                                }
+
+                                // Session token from panel login response
+                                val tok = res.sessionToken
+                                if (tok.isBlank()) {
+                                    loading = false
+                                    SessionGate.lock()
+                                    error = "Login OK but no session token from server"
+                                    screen = "login"
+                                    return@launch
+                                }
+                                SessionGate.unlock(this@MainActivity, tok, license)
+                                try {
+                                    RaspEngine.start(this@MainActivity, license)
+                                } catch (_: Exception) {
+                                }
+                                info = "SYSTEM ONLINE"
+                                TacticalNotifier.post(this@MainActivity, "SESSION ONLINE", "Authentication accepted. Secure workspace is ready.", 550)
+                                TelegramNotifier.notify(this@MainActivity, "SESSION_OK",
+                                    "Login successful", license)
+                                TelegramNotifier.notifySessionStart(this@MainActivity)
+                                loading = false
+                                loadMsg = "Opening secure channel..."
+                                loadProgress = 0.15f
+                                delay(700)
+                                loadMsg = "Syncing workspace..."
+                                loadProgress = 0.4f
+                                delay(900)
+                                loadMsg = "Preparing modules..."
+                                loadProgress = 0.7f
+                                delay(900)
+                                loadMsg = "Almost ready..."
+                                loadProgress = 0.92f
+                                delay(600)
+                                try {
+                                    PulseAudio.start(this@MainActivity, fadeMs = 2000)
+                                } catch (_: Exception) {
+                                }
+                                loadProgress = 1f
+                                delay(400)
+                                screen = "home"
+                            }
+                        }
+                    )
+
+                    "loading" -> LoadingScreen(subtitle = loadMsg, progress = loadProgress)
+
+                    "home" -> HomeScreen(
+                        product = product,
+                        expiry = expiry,
+                        tools = tools,
+                        status = info,
+                        messages = liveMessages,
+                        onMessageRead = { message ->
+                            lifecycleScope.launch {
+                                val ok = withContext(Dispatchers.IO) { panel.markMessageRead(hwid, message.id) }
+                                if (ok) liveMessages = liveMessages.map { if (it.id == message.id) it.copy(isRead = true) else it }
+                            }
+                        },
+                        onProfile = { screen = "profile" },
+                        onWorkspace = { screen = "output" },
+                        onStudio = { studio ->
+                            selectedStudio = studio
+                            screen = "studio"
+                        },
+                        onTool = { t ->
+                            moduleReturnScreen = "home"
+                            pendingInputUri = null
+                            moduleId = t.id
+                            activeSub = null
+                            logs = emptyList()
+                            screen = "submenu"
+                        }
+                    )
+                    "studio" -> {
+                        val studio = selectedStudio
+                        if (studio == null) {
+                            LaunchedEffect(Unit) { screen = "home" }
+                        } else {
+                            StudioScreen(
+                                studio = studio,
+                                tools = tools,
+                                onBack = { selectedStudio = null; pendingInputUri = null; screen = "home" },
+                                onTool = { t ->
+                                    moduleReturnScreen = "studio"
+                                    moduleId = t.id
+                                    activeSub = null
+                                    logs = emptyList()
+                                    screen = "submenu"
+                                }
+                            )
+                        }
+                    }
+                    "submenu" -> SubMenuScreen(
+                        moduleTitle = SubMenus.title(moduleId),
+                        moduleId = moduleId,
+                        items = SubMenus.forModule(moduleId),
+                        onBack = { screen = moduleReturnScreen },
+                        onSelect = { sub ->
+                            activeSub = sub
+                            logs = emptyList()
+                            screen = "tool"
+                        }
+                    )
+                    "tool" -> {
                         val sub = activeSub
                         val task = TaskCenter.find(activeTaskId)
                         if (sub == null) {
