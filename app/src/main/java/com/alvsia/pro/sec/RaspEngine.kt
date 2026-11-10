@@ -70,8 +70,12 @@ object RaspEngine {
         // The previous main-looper scheduling could perform /proc, DEX, maps and
         // network checks on the UI thread while a heavy tool was running.
         scheduler.execute { safeTick(app, license) }
-        scheduler.scheduleAtFixedRate({ safeTick(app, license) }, 4_000L, 4_000L, TimeUnit.MILLISECONDS)
-        scheduler.scheduleAtFixedRate({ safeDeepTick(app, license) }, 30_000L, 30_000L, TimeUnit.MILLISECONDS)
+        // Keep continuous protection, but avoid competing with heavy tool work every
+        // few seconds. Tool dispatch still performs its own live SessionGate checks.
+        scheduler.scheduleAtFixedRate({ safeTick(app, license) }, 10_000L, 10_000L, TimeUnit.MILLISECONDS)
+        // Deep /proc fd scanning is substantially heavier than the lightweight tick.
+        // Retain it, but run it once per minute instead of every 30 seconds.
+        scheduler.scheduleAtFixedRate({ safeDeepTick(app, license) }, 60_000L, 60_000L, TimeUnit.MILLISECONDS)
     }
 
     fun tick(ctx: Context, license: String = "") {
