@@ -76,7 +76,7 @@ class TestLargeFileStreaming(unittest.TestCase):
         import hashlib
         with tempfile.TemporaryDirectory() as td:
             source = Path(td) / "hash-large.bin"
-            payload = b"ALVSIA_HASH_STREAM" + b"\\x00" * (2 * 1024 * 1024)
+            payload = b"ALVSIA_HASH_STREAM" + b"\x00" * (2 * 1024 * 1024)
             source.write_bytes(payload)
             with patch.object(Path, "read_bytes", side_effect=AssertionError("whole-file read")):
                 result = run_hash_file(source)
@@ -87,7 +87,7 @@ class TestLargeFileStreaming(unittest.TestCase):
     def test_generic_string_scan_uses_streaming_iterator(self):
         with tempfile.TemporaryDirectory() as td:
             source = Path(td) / "strings-large.bin"
-            source.write_bytes(b"FIRST_PLAYER\\x00" + b"\\x00" * (2 * 1024 * 1024) + b"LAST_CHARACTER")
+            source.write_bytes(b"FIRST_PLAYER\x00" + b"\x00" * (2 * 1024 * 1024) + b"LAST_CHARACTER")
             with patch.object(Path, "read_bytes", side_effect=AssertionError("whole-file read")):
                 result = run_string_scan(source)
             self.assertTrue(result["ok"], result)
