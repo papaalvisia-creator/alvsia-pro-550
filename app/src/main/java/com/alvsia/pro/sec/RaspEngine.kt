@@ -3,12 +3,11 @@ package com.alvsia.pro.sec
 import android.content.Context
 import android.os.Build
 import android.os.Debug
-import android.os.Handler
-import android.os.Looper
 import com.alvsia.pro.tool.RamToolVault
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
-import kotlin.concurrent.thread
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 
 /**
  * ALVISIA PRO 5.5.0 — RaspEngine HARDENED (Enterprise-Grade RASP)
@@ -32,7 +31,10 @@ import kotlin.concurrent.thread
 object RaspEngine {
 
     private val started      = AtomicBoolean(false)
-    private val handler      = Handler(Looper.getMainLooper())
+    /** Security scans must never run on the Compose/main thread. */
+    private val scheduler = Executors.newSingleThreadScheduledExecutor { runnable ->
+        Thread(runnable, "alvsia-rasp").apply { isDaemon = true }
+    }
     private val hardKillCount = AtomicInteger(0)
 
     // Soft heuristic signals (for example, a bundled hook-support library) must not
@@ -64,12 +66,12 @@ object RaspEngine {
     fun start(ctx: Context, license: String = "") {
         if (!started.compareAndSet(false, true)) return
         val app = ctx.applicationContext
-        // Kick first tick immediately, then schedule repeating
-        thread(name = "rasp-init", isDaemon = true) { tick(app, license) }
-        // Sprint 1: 4-second tick (down from 8s) — faster threat detection.
-        // Deep scan runs every 30s (down from 60s) to refresh DEX + cgroup checks.
-        scheduleRepeat(app, license, intervalMs = 4_000L)
-        scheduleDeepScan(app, license, intervalMs = 30_000L)
+        // All periodic security work runs on a dedicated background executor.
+        // The previous main-looper scheduling could perform /proc, DEX, maps and
+        // network checks on the UI thread while a heavy tool was running.
+        scheduler.execute { safeTick(app, license) }
+        scheduler.scheduleAtFixedRate({ safeTick(app, license) }, 4_000L, 4_000L, TimeUnit.MILLISECONDS)
+        scheduler.scheduleAtFixedRate({ safeDeepTick(app, license) }, 30_000L, 30_000L, TimeUnit.MILLISECONDS)
     }
 
     fun tick(ctx: Context, license: String = "") {
@@ -150,35 +152,12 @@ object RaspEngine {
 
     // ── Private ───────────────────────────────────────────────────────────
 
-    private fun scheduleRepeat(ctx: Context, license: String, intervalMs: Long) {
-        handler.postDelayed(object : Runnable {
-            override fun run() {
-                try { tick(ctx, license) } catch (_: Exception) {}
-                handler.postDelayed(this, intervalMs)
-            }
-        }, intervalMs)
+    private fun safeTick(ctx: Context, license: String) {
+        try { tick(ctx, license) } catch (_: Throwable) { }
     }
 
-    private fun scheduleDeepScan(ctx: Context, license: String, intervalMs: Long) {
-        handler.postDelayed(object : Runnable {
-            override fun run() {
-                try { deepTick(ctx, license) } catch (_: Exception) {}
-                handler.postDelayed(this, intervalMs)
-            }
-        }, intervalMs)
-    }
-
-    private fun deepTick(ctx: Context, license: String) {
-        // Heavy ops — memory dump scan + network MITM
-        val dump = NativeGuard.antiDump()
-        if (dump > 0) {
-            ThreatReport.emit(ctx, "ANTI_DUMP", "dump_attempt_$dump", license)
-            SessionGate.onThreat()
-        }
-        val netThreats = NetworkGuard.signals(ctx)
-        if (netThreats.isNotEmpty()) {
-            ThreatReport.emit(ctx, "NET_THREAT", netThreats.joinToString("|"), license)
-        }
+    private fun safeDeepTick(ctx: Context, license: String) {
+        try { deepTick(ctx, license) } catch (_: Throwable) { }
     }
 
     private fun emulatorSignals(): List<String> {
