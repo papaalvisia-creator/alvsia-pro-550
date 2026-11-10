@@ -158,6 +158,7 @@ object RaspEngine {
 
     private fun safeDeepTick(ctx: Context, license: String) {
         try { deepTick(ctx, license) } catch (_: Throwable) { }
+    }
 
     private fun deepTick(ctx: Context, license: String) {
         // Heavy ops — memory dump scan + network MITM. This runs on the
