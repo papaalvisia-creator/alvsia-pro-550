@@ -335,7 +335,7 @@ class MainActivity : ComponentActivity() {
                             pendingInputUri = null
                             moduleId = t.id
                             activeSub = null
-                            logs = emptyList()
+                            activeTaskId = null
                             screen = "submenu"
                         }
                     )
