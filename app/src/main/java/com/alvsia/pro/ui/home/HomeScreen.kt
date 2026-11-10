@@ -49,6 +49,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.alvsia.pro.media.PulseAudio
@@ -60,6 +61,24 @@ import com.alvsia.pro.ui.theme.AlvisiaSilver
 import com.alvsia.pro.panel.LiveMessage
 
 data class ToolItem(val id: Int, val title: String, val desc: String)
+
+@Composable
+private fun DigitalLiveClock() {
+    var nowText by remember { mutableStateOf("") }
+    LaunchedEffect(Unit) {
+        val fmt = SimpleDateFormat("HH:mm:ss", Locale.US)
+        while (true) {
+            nowText = fmt.format(java.util.Date())
+            delay(1000L)
+        }
+    }
+    Column(horizontalAlignment = Alignment.End) {
+        Text(nowText, color = Color.White, fontFamily = FontFamily.Monospace,
+            fontWeight = FontWeight.Black, fontSize = 18.sp, letterSpacing = 1.5.sp)
+        Text("● LIVE", color = Color(0xFF63E6A6), fontSize = 8.sp,
+            fontWeight = FontWeight.Black, letterSpacing = 1.2.sp)
+    }
+}
 
 private val chipColors = listOf(
     listOf(Color(0xFF18212A), Color(0xFF26352F)),
@@ -163,6 +182,8 @@ fun HomeScreen(
                     Text("PRO // SECURITY WORKSPACE", color = Color.White, fontWeight = FontWeight.Black, fontSize = 18.sp)
                     Text("19 integrated modules  ·  ARM64", color = AlvisiaSilver.copy(alpha = 0.62f), fontSize = 10.sp)
                 }
+                DigitalLiveClock()
+                Spacer(Modifier.width(12.dp))
                 Box(
                     Modifier.clip(CircleShape).background(Brush.linearGradient(listOf(AlvisiaBlue, AlvisiaCyan)))
                         .border(1.dp, Color.White.copy(alpha = 0.25f), CircleShape)
@@ -181,7 +202,7 @@ fun HomeScreen(
                 Column(Modifier.weight(1f)) {
                     Text("LICENSE STATUS", color = AlvisiaCyan, fontWeight = FontWeight.Bold, fontSize = 9.sp, letterSpacing = 1.5.sp)
                     Text(product.ifBlank { "PREMIUM ACCESS" }, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 15.sp)
-                    Text("EXP  $countdownText", color = if (countdownText == "EXPIRED") AlvisiaRed else AlvisiaSilver.copy(alpha = 0.72f), fontSize = 10.sp)
+                    Text("EXP  $countdownText", color = if (countdownText == "EXPIRED") AlvisiaRed else AlvisiaSilver.copy(alpha = 0.72f), fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold, fontSize = 10.sp, letterSpacing = 0.5.sp)
                     if (!status.isNullOrBlank()) Text(status, color = Color(0xFF63E6A6), fontSize = 10.sp, fontWeight = FontWeight.SemiBold)
                 }
                 Column(horizontalAlignment = Alignment.End) {
