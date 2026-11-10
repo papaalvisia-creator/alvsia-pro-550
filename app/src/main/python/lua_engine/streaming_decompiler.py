@@ -362,7 +362,7 @@ def stream_unluac_jar(input_path: Path, out_path: Path, jars_dir: Optional[str] 
     device memory while other compatible engines remain available as fallback.
     """
     android_mode = os.environ.get("ALVSIA_SEALED_RUNTIME") == "1"
-    effective_timeout = min(timeout, 120) if android_mode else timeout
+    # Android app process safety: do not spawn a second JVM from Chaquopy.\n    # A child Java VM can reserve a large heap beside the app/Chaquopy runtime\n    # and the OS may kill the entire app without a catchable Python exception.\n    # Use the in-process bounded parser/native engines instead.\n    if android_mode and os.environ.get("ALVSIA_DISABLE_UNLUAC_JAR_ANDROID", "1") == "1":\n        return False, "unluac_jar_disabled_on_android_process_safety"\n    effective_timeout = min(timeout, 120) if android_mode else timeout
     heap_limit = os.environ.get(
         "ALVSIA_UNLUAC_JAVA_HEAP", "192m" if android_mode else "512m"
     )
