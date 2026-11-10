@@ -45,9 +45,19 @@ def test_python_auth_normalizes_java_string_and_lua_avoids_art_oom():
     lua_branch = impl.split("# ── 5  LUA Tools", 1)[1].split('if sid == "lua_format_probe":', 1)[0]
     assert "result = feat.run_lua_smart(ip, dest_lua, jars_dir=jars)" in lua_branch
     features = (ROOT / "app/src/main/python/alvsia_features.py").read_text(encoding="utf-8")
-    smart = features.split("def run_lua_smart(", 1)[1].split("def run_lua_universal(", 1)[0]
-    assert "decompile_large(" in smart and "preflight_only=True" in smart
-    assert "build_engine_registry" in smart and "run_decompiler_pipeline" in smart
+    # run_lua_smart is the public front door; the detailed engine pipeline is
+    # intentionally delegated to _run_lua_smart_legacy after intelligence analysis.
+    smart_start = features.index("def run_lua_smart(")
+    smart_end = features.index("\ndef run_lua_universal(", smart_start)
+    smart = features[smart_start:smart_end]
+    legacy_start = features.index("def _run_lua_smart_legacy(")
+    legacy_end = features.find("\ndef ", legacy_start + 5)
+    legacy = features[legacy_start:legacy_end if legacy_end >= 0 else None]
+    streaming = (ROOT / "app/src/main/python/lua_engine/streaming_decompiler.py").read_text(encoding="utf-8")
+    assert "_run_lua_smart_legacy(" in smart and "analyze_file(" in smart
+    assert "decompile_large(" in legacy and "preflight_only=True" in legacy
+    assert "build_engine_registry" in legacy and "run_decompiler_pipeline" in legacy
+    assert "def decompile_large(" in streaming and "preflight_only" in streaming
     assert "if in_size > 1 * 1024 * 1024:" not in lua_branch
 
 def test_menu_ids_are_unique_and_reachable():
