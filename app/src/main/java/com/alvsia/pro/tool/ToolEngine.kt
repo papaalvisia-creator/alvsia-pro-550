@@ -314,8 +314,9 @@ class ToolEngine(private val context: Context) {
                             lines.add("Inspect the input-format/header diagnostic above; no source bytes were guessed or patched.")
                             return lines
                         }
-                    } catch (e: Exception) {
-                        lines.add("... Python bridge error during large Lua decompile: ${e.message ?: e.javaClass.simpleName}")
+                    } catch (t: Throwable) {
+                        val cause = t.cause ?: t
+                        lines.add("... Python bridge survived parser failure: ${cause.javaClass.simpleName}: ${cause.message ?: "no detail"}")
                     }
                 } else {
                     lines.add("... Python runtime not ready — Chaquopy diagnostic: ${PythonBridgeRunner.startupDiagnostic()}")
