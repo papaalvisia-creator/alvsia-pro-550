@@ -139,7 +139,7 @@ class ToolEngine(private val context: Context) {
         }
     }
 
-    private fun stageInput(uri: Uri?, moduleId: Int, onProgress: ((String, Int?) -> Unit)? = null): Pair<String, List<String>> {
+    private fun stageInput(uri: Uri?, moduleId: Int, taskId: String, onProgress: ((String, Int?) -> Unit)? = null): Pair<String, List<String>> {
         val notes = mutableListOf<String>()
         if (uri == null) return "" to notes
         val nameHint = uri.lastPathSegment?.substringAfterLast('/') ?: "input.bin"
@@ -153,7 +153,7 @@ class ToolEngine(private val context: Context) {
             notes.add("X Selected file exceeds the 5 GB per-file import limit")
             return "" to notes
         }
-        val staged = File(WorkPaths.moduleWork(moduleId), "in_${System.currentTimeMillis()}_$safe")
+        val staged = File(WorkPaths.taskModuleWork(taskId, moduleId), "in_${System.currentTimeMillis()}_$safe")
         onProgress?.invoke("STAGING INPUT", 0)
         val sourceHash = copyUri(uri, staged, onProgress)
         if (sourceHash == null) {
@@ -168,7 +168,7 @@ class ToolEngine(private val context: Context) {
         }
         // Also copy a snapshot under IN/ and verify it byte-for-byte.
         try {
-            val snap = File(WorkPaths.moduleIn(moduleId), safe)
+            val snap = File(WorkPaths.taskModuleIn(taskId, moduleId), safe)
             staged.copyTo(snap, overwrite = true)
             val snapshotHash = sha256(snap)
             if (snapshotHash != sourceHash) {
@@ -187,7 +187,7 @@ class ToolEngine(private val context: Context) {
         return staged.absolutePath to notes
     }
 
-    fun run(toolId: Int, inputUri: Uri?, extraName: String?): List<String> {
+    fun run(toolId: Int, inputUri: Uri?, extraName: String?, taskId: String = "standalone_${System.nanoTime()}"): List<String> {
         try {
             SessionGate.allowTools(context)
         } catch (e: SecurityException) {
@@ -203,10 +203,10 @@ class ToolEngine(private val context: Context) {
                 "Grant the missing permission(s) via system Settings and retry."
             )
         }
-        return runSub(toolId, "mod_$toolId", inputUri, extraName)
+        return runSub(toolId, "mod_$toolId", inputUri, extraName, taskId = taskId)
     }
 
-    fun runSub(moduleId: Int, subId: String, inputUri: Uri?, extraName: String?, onProgress: ((String, Int?) -> Unit)? = null): List<String> {
+    fun runSub(moduleId: Int, subId: String, inputUri: Uri?, extraName: String?, onProgress: ((String, Int?) -> Unit)? = null, taskId: String = "standalone_${System.nanoTime()}"): List<String> {
         try {
             SessionGate.allowTools(context)
         } catch (e: SecurityException) {
@@ -232,7 +232,7 @@ class ToolEngine(private val context: Context) {
         lines.add("> ${SubMenus.title(moduleId)} | $subId")
         lines.add("PIPELINE IN -> WORK -> OUT")
 
-        val (inputPath, stageNotes) = stageInput(inputUri, moduleId, onProgress)
+        val (inputPath, stageNotes) = stageInput(inputUri, moduleId, taskId, onProgress)
         lines.addAll(stageNotes)
 
         // Bridge first for all modules; native fallback below
@@ -240,12 +240,12 @@ class ToolEngine(private val context: Context) {
 
         if (inputPath.isEmpty() && needsInput(moduleId, subId)) {
             lines.add("X No input file ? use SELECT FILE")
-            lines.add("hint: output folder ${WorkPaths.moduleOut(moduleId).absolutePath}")
+            lines.add("hint: output folder ${WorkPaths.taskModuleOut(taskId, moduleId).absolutePath}")
             return lines
         }
 
         try {
-            File(context.filesDir, "sub_cmd.txt").writeText(subId)
+            File(WorkPaths.taskRoot(taskId), "sub_cmd.txt").writeText(subId)
         } catch (_: Exception) {
         }
 
@@ -253,10 +253,10 @@ class ToolEngine(private val context: Context) {
         if (subId == "lua_decompile" || subId.contains("unluac")) {
             if (inputPath.isNotEmpty()) {
                 val inFile = File(inputPath)
-                val outFile = File(WorkPaths.moduleOut(moduleId), inFile.nameWithoutExtension + "_decompiled.lua")
+                val outFile = File(WorkPaths.taskModuleOut(taskId, moduleId), inFile.nameWithoutExtension + "_decompiled.lua")
                 lines.addAll(UnluacRunner.decompile(inFile, outFile))
                 if (outFile.isFile && outFile.length() > 0) {
-                    lines.add("OK OUT -> ${WorkPaths.moduleOut(moduleId).absolutePath}")
+                    lines.add("OK OUT -> ${WorkPaths.taskModuleOut(taskId, moduleId).absolutePath}")
                     return lines
                 }
                 // Large-file path: hand off to Python streaming decompiler.
@@ -280,7 +280,7 @@ class ToolEngine(private val context: Context) {
                             subId = subId,
                             inputPath = inputPath,
                             extraName = null,
-                            workDirPath = WorkPaths.alvsiaRoot().absolutePath,
+                            workDirPath = WorkPaths.taskRoot(taskId).absolutePath,
                             jarsDirPath = jarsDir.absolutePath
                         )
                         lines.addAll(bridgeLines)
@@ -302,7 +302,7 @@ class ToolEngine(private val context: Context) {
                             }
                         }
 
-                        mirrorMsvToOut(moduleId, lines)
+                        mirrorMsvToOut(moduleId, taskId, lines)
                         if (bridgeOk && outFile.isFile && outFile.length() > 0) {
                             lines.add("OK Python streaming decompiler -> ${outFile.absolutePath}")
                             lines.add("bytes ${outFile.length()}")
@@ -339,15 +339,15 @@ class ToolEngine(private val context: Context) {
                     subId = subId,
                     inputPath = inputPath,
                     extraName = null,
-                    workDirPath = WorkPaths.alvsiaRoot().absolutePath,
+                    workDirPath = WorkPaths.taskRoot(taskId).absolutePath,
                     jarsDirPath = jarsDir.absolutePath
                 )
                 lines.addAll(bridgeLines)
-                mirrorMsvToOut(moduleId, lines)
+                mirrorMsvToOut(moduleId, taskId, lines)
                 if (!bridgeOk) {
                     lines.add("X OUT -> operation failed; see engine diagnostics above")
                 } else {
-                    lines.add("OK OUT -> ${WorkPaths.moduleOut(moduleId).absolutePath}")
+                    lines.add("OK OUT -> ${WorkPaths.taskModuleOut(taskId, moduleId).absolutePath}")
                 }
                 return lines
             } else {
@@ -376,9 +376,8 @@ class ToolEngine(private val context: Context) {
         when {
             moduleId == 7 && subId == "clear_work" -> {
                 try {
-                    WorkPaths.dirWork().deleteRecursively()
-                    WorkPaths.dirOut().deleteRecursively()
-                    WorkPaths.ensureTree()
+                    WorkPaths.taskRoot(taskId).deleteRecursively()
+                    WorkPaths.taskRoot(taskId).mkdirs()
                     lines.add("OK workspace cleared (native)")
                 } catch (e: Exception) {
                     lines.add("X workspace clear failed: ${e.message ?: e.javaClass.simpleName}")
@@ -397,7 +396,7 @@ class ToolEngine(private val context: Context) {
             }
             moduleId == 8 && inputPath.isNotEmpty() -> {
                 val input = File(inputPath)
-                val report = File(WorkPaths.moduleOut(8), "report_${input.name}_${System.currentTimeMillis()}.txt")
+                val report = File(WorkPaths.taskModuleOut(taskId, 8), "report_${input.name}_${System.currentTimeMillis()}.txt")
                 return try {
                     val sha256 = digest(input, "SHA-256")
                     report.writeText(
@@ -413,7 +412,7 @@ class ToolEngine(private val context: Context) {
             }
         }
 
-        return lines + nativeFallback(moduleId, subId, inputPath, extraName)
+        return lines + nativeFallback(moduleId, subId, inputPath, extraName, taskId)
     }
 
     private fun needsInput(moduleId: Int, subId: String): Boolean {
@@ -423,11 +422,11 @@ class ToolEngine(private val context: Context) {
         return subId !in setOf("frida_js_dump", "frida_spawn", "xor_batch")
     }
 
-    private fun mirrorMsvToOut(moduleId: Int, lines: MutableList<String>) {
+    private fun mirrorMsvToOut(moduleId: Int, taskId: String, lines: MutableList<String>) {
         try {
             val msv = File(context.filesDir, "MSV_WORK")
             if (!msv.exists()) return
-            val dest = WorkPaths.moduleOut(moduleId)
+            val dest = WorkPaths.taskModuleOut(taskId, moduleId)
             msv.walkTopDown().maxDepth(4).forEach { f ->
                 if (f.isFile && f.length() > 0 && f.length() < 80_000_000) {
                     val rel = f.relativeTo(msv).path
@@ -446,14 +445,14 @@ class ToolEngine(private val context: Context) {
     }
 
     // ?? Phase 2 proof: HASH ??
-    private fun runHash(subId: String, inputPath: String): List<String> {
+    private fun runHash(subId: String, inputPath: String, taskId: String): List<String> {
         val lines = mutableListOf<String>()
         if (inputPath.isEmpty()) {
             lines.add("X Select a file first")
             return lines
         }
         val f = File(inputPath)
-        val outDir = WorkPaths.moduleOut(6)
+        val outDir = WorkPaths.taskModuleOut(taskId, 6)
         try {
             val md5 = digest(f, "MD5")
             val sha1 = digest(f, "SHA-1")
@@ -512,14 +511,14 @@ class ToolEngine(private val context: Context) {
     }
 
     // ?? Phase 2 proof: OBB / ZIP ??
-    private fun runObb(subId: String, inputPath: String): List<String> {
+    private fun runObb(subId: String, inputPath: String, taskId: String): List<String> {
         val lines = mutableListOf<String>()
         if (inputPath.isEmpty()) {
             lines.add("X Select an .obb / .zip file first")
             return lines
         }
         val f = File(inputPath)
-        val outDir = WorkPaths.moduleOut(4)
+        val outDir = WorkPaths.taskModuleOut(taskId, 4)
         when (subId) {
             "obb_info" -> {
                 lines.addAll(zipInfo(f, outDir))
@@ -536,14 +535,14 @@ class ToolEngine(private val context: Context) {
         return lines
     }
 
-    private fun runObbRepack(subId: String, inputPath: String): List<String> {
+    private fun runObbRepack(subId: String, inputPath: String, taskId: String): List<String> {
         val lines = mutableListOf<String>()
         if (inputPath.isEmpty()) {
             lines.add("X Select source file / folder marker")
             return lines
         }
         val f = File(inputPath)
-        val outDir = WorkPaths.moduleOut(4)
+        val outDir = WorkPaths.taskModuleOut(taskId, 4)
         try {
             // If input is zip/obb, re-copy as staged repack baseline
             val dest = File(outDir, "repack_${f.name}")
@@ -658,14 +657,14 @@ class ToolEngine(private val context: Context) {
     }
 
     // ?? Phase 2 proof: STRINGS ??
-    private fun runStrings(subId: String, inputPath: String): List<String> {
+    private fun runStrings(subId: String, inputPath: String, taskId: String): List<String> {
         val lines = mutableListOf<String>()
         if (inputPath.isEmpty()) {
             lines.add("X Select a binary / package file first")
             return lines
         }
         val f = File(inputPath)
-        val outDir = WorkPaths.moduleOut(6)
+        val outDir = WorkPaths.taskModuleOut(taskId, 6)
         val minLen = if (subId == "str_filter") 4 else 4
         try {
             val found = extractAsciiStrings(f, minLen)
@@ -713,28 +712,28 @@ class ToolEngine(private val context: Context) {
         moduleId: Int,
         subId: String,
         inputPath: String,
-        extraName: String?
+        extraName: String?,
+        taskId: String
     ): List<String> {
         val lines = mutableListOf<String>()
         when (moduleId) {
             7 -> {
                 try {
-                    WorkPaths.dirWork().deleteRecursively()
-                    WorkPaths.dirOut().deleteRecursively()
-                    WorkPaths.ensureTree()
+                    WorkPaths.taskRoot(taskId).deleteRecursively()
+                    WorkPaths.taskRoot(taskId).mkdirs()
                     lines.add("OK workspace cleared (native)")
                 } catch (e: Exception) {
                     lines.add("X workspace clear failed: ${e.message ?: e.javaClass.simpleName}")
                 }
             }
             4 -> return when (subId) {
-                "obb_info", "obb_unzip" -> runObb(subId, inputPath)
-                "obb_rezip" -> runObbRepack(subId, inputPath)
+                "obb_info", "obb_unzip" -> runObb(subId, inputPath, taskId)
+                "obb_rezip" -> runObbRepack(subId, inputPath, taskId)
                 else -> listOf("X Unsupported OBB subtool in native fallback: $subId")
             }
             6 -> return when (subId) {
-                "string_scan" -> runStrings(subId, inputPath)
-                "hash_scan" -> runHash(subId, inputPath)
+                "string_scan" -> runStrings(subId, inputPath, taskId)
+                "hash_scan" -> runHash(subId, inputPath, taskId)
                 else -> listOf("X Unsupported scan subtool in native fallback: $subId")
             }
             else -> {
