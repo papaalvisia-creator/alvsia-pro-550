@@ -42,7 +42,8 @@ object WorkPaths {
         val name = moduleName(moduleId)
         return File(dirOut(), name).also { it.mkdirs() }
     }
-\n    /**
+
+    /**
      * Isolated workspace for one live task. Every concurrent tool run gets its
      * own IN/WORK/OUT tree so switching tools or running another task cannot
      * overwrite an active task's staged bytes or intermediate output.
