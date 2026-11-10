@@ -385,13 +385,13 @@ class ToolEngine(private val context: Context) {
                 return lines
             }
             moduleId == 4 -> return when (subId) {
-                "obb_info", "obb_unzip" -> lines + runObb(subId, inputPath)
-                "obb_rezip" -> lines + runObbRepack(subId, inputPath)
+                "obb_info", "obb_unzip" -> lines + runObb(subId, inputPath, taskId)
+                "obb_rezip" -> lines + runObbRepack(subId, inputPath, taskId)
                 else -> lines + listOf("X Unsupported OBB subtool in native fallback: $subId")
             }
             moduleId == 6 -> return when (subId) {
-                "string_scan" -> lines + runStrings(subId, inputPath)
-                "hash_scan" -> lines + runHash(subId, inputPath)
+                "string_scan" -> lines + runStrings(subId, inputPath, taskId)
+                "hash_scan" -> lines + runHash(subId, inputPath, taskId)
                 else -> lines + listOf("X Unsupported scan subtool in native fallback: $subId")
             }
             moduleId == 8 && inputPath.isNotEmpty() -> {
