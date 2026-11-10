@@ -44,6 +44,7 @@ import com.alvsia.pro.tool.CoreSession
 import com.alvsia.pro.tool.ToolEngine
 import com.alvsia.pro.tool.TaskCenter
 import com.alvsia.pro.tool.TaskStatus
+import com.alvsia.pro.tool.ToolExecutionService
 import com.alvsia.pro.ui.home.HomeScreen
 import com.alvsia.pro.ui.home.StudioItem
 import com.alvsia.pro.ui.home.StudioScreen
@@ -383,6 +384,10 @@ class MainActivity : ComponentActivity() {
                                 onRun = { uri, extra ->
                                     val taskId = TaskCenter.start(moduleId, sub.id, sub.title, uri?.lastPathSegment?.substringAfterLast("/") ?: "", null)
                                     activeTaskId = taskId
+                                    // Raise process importance for the lifetime of this real tool run.
+                                    // This does not replace or disable any engine; it protects long
+                                    // native/Python work from low-memory/background reclaim.
+                                    ToolExecutionService.begin(this@MainActivity)
                                     TaskCenter.update(taskId, stage = "STAGING INPUT", logs = listOf("> preparing ${sub.id}..."))
                                     lifecycleScope.launch {
                                         try {
@@ -410,7 +415,8 @@ class MainActivity : ComponentActivity() {
                                                 clearProgress = !success && p == null
                                             )
                                             TaskCenter.complete(taskId, success, result)
-                                            val detail = "${sub.id}: " + (result.firstOrNull { it.startsWith("X ") } ?: if (success) "operation completed" else "operation needs review")
+                                            ToolExecutionService.end(this@MainActivity)
+                                            val detail = "${sub.id}: " (result.firstOrNull { it.startsWith("X ") } ?: if (success) "operation completed" else "operation needs review")
                                             try {
                                                 TelegramNotifier.notifyModuleStatus(this@MainActivity, sub.title, if (success) "SUCCESS" else "ATTENTION", detail.take(200))
                                                 val scanLike = sub.id.contains("scan", ignoreCase = true) || sub.title.contains("scan", ignoreCase = true)
@@ -426,6 +432,7 @@ class MainActivity : ComponentActivity() {
                                             } catch (_: Throwable) { }
                                         } catch (t: Throwable) {
                                             TaskCenter.complete(taskId, false, listOf("X UNEXPECTED TOOL FAILURE: ${t.javaClass.simpleName}: ${t.message ?: "no detail"}", "diagnostic: module=${moduleId}; subtool=${sub.id}", "Input file is preserved where staging completed."))
+                                            ToolExecutionService.end(this@MainActivity)
                                         }
                                     }
                                 },
