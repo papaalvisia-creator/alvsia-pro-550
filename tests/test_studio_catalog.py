@@ -46,7 +46,7 @@ class StudioCatalogTests(unittest.TestCase):
         self.assertIn("moduleId = t.id", main)
         self.assertIn("SubMenus.forModule(moduleId)", main)
         self.assertIn("engine.runSub(moduleId, sub.id, uri, extra, onProgress = {", main)
-self.assertIn("}, taskId = taskId) }", main)
+        self.assertIn("}, taskId = taskId) }", main)
 
 
 if __name__ == "__main__":
