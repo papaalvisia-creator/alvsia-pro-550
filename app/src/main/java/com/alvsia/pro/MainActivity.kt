@@ -440,7 +440,7 @@ class MainActivity : ComponentActivity() {
                     if (TaskCenter.tasks.isNotEmpty()) {
                         LiveTaskDock(
                             tasks = TaskCenter.tasks,
-                            modifier = androidx.compose.ui.Modifier.align(Alignment.BottomCenter),
+                            modifier = androidx.compose.ui.Modifier.align(Alignment.TopCenter),
                             onOpenTask = { live ->
                                 moduleId = live.moduleId
                                 activeSub = SubMenus.forModule(live.moduleId).firstOrNull { it.id == live.subId }
