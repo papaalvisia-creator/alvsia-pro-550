@@ -4,6 +4,7 @@ import android.content.Context
 import android.os.Build
 import android.os.Debug
 import com.alvsia.pro.tool.RamToolVault
+import com.alvsia.pro.tool.ToolExecutionService
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.Executors
@@ -79,6 +80,17 @@ object RaspEngine {
     }
 
     fun tick(ctx: Context, license: String = "") {
+        // A real tool run already passed SessionGate/runtime checks at dispatch.
+        // Do not run the expensive periodic RASP matrix concurrently with Python/
+        // native processing: /proc/maps, APK ZIP hashing and native probes can
+        // compete for CPU/I/O/memory and were observed as a crash-risk on low-RAM
+        // devices. Security is not disabled: the next tool dispatch re-runs the
+        // complete gate, while this periodic loop resumes immediately after the run.
+        if (ToolExecutionService.isActive()) {
+            threatLevel = 0
+            return
+        }
+
         val hard = mutableListOf<String>()
         val soft = mutableListOf<String>()
 
@@ -165,6 +177,7 @@ object RaspEngine {
     }
 
     private fun deepTick(ctx: Context, license: String) {
+        if (ToolExecutionService.isActive()) return
         // Heavy ops — memory dump scan + network MITM. This runs on the
         // dedicated RASP executor, never on the Compose/main thread.
         val dump = NativeGuard.antiDump()
