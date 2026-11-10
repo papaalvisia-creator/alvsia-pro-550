@@ -15,6 +15,7 @@ import java.util.zip.ZipFile
 import java.util.zip.ZipInputStream
 
 class ToolEngine(private val context: Context) {
+    companion object { const val MAX_DIRECT_FILE_BYTES = 5L * 1024L * 1024L * 1024L }
     private val workDir = File(context.filesDir, "work").also { it.mkdirs() }
     private val engineDir = File(context.filesDir, "orchard").also { it.mkdirs() }
     private val jarsDir = File(context.filesDir, "citrus").also { it.mkdirs() }
@@ -99,14 +100,26 @@ class ToolEngine(private val context: Context) {
 
     private fun copyUri(uri: Uri, dest: File): String? {
         return try {
+            val declaredSize = context.contentResolver.query(
+                uri, arrayOf(android.provider.OpenableColumns.SIZE), null, null, null
+            )?.use { cursor ->
+                if (cursor.moveToFirst() && !cursor.isNull(0)) cursor.getLong(0) else null
+            }
+            if (declaredSize != null && declaredSize > MAX_DIRECT_FILE_BYTES) return null
+
             val digest = MessageDigest.getInstance("SHA-256")
             val source = context.contentResolver.openInputStream(uri) ?: return null
+            var total = 0L
             source.use { ins ->
                 val buffer = ByteArray(1024 * 1024)
                 FileOutputStream(dest).use { outs ->
                     while (true) {
                         val count = ins.read(buffer)
                         if (count < 0) break
+                        total += count
+                        if (total > MAX_DIRECT_FILE_BYTES) {
+                            throw IllegalArgumentException("direct file import exceeds 5 GB")
+                        }
                         digest.update(buffer, 0, count)
                         outs.write(buffer, 0, count)
                     }
@@ -128,10 +141,19 @@ class ToolEngine(private val context: Context) {
         if (uri == null) return "" to notes
         val nameHint = uri.lastPathSegment?.substringAfterLast('/') ?: "input.bin"
         val safe = nameHint.replace(Regex("[^A-Za-z0-9._-]"), "_").ifBlank { "input.bin" }
+        val declaredSize = context.contentResolver.query(
+            uri, arrayOf(android.provider.OpenableColumns.SIZE), null, null, null
+        )?.use { cursor ->
+            if (cursor.moveToFirst() && !cursor.isNull(0)) cursor.getLong(0) else null
+        }
+        if (declaredSize != null && declaredSize > MAX_DIRECT_FILE_BYTES) {
+            notes.add("X Selected file exceeds the 5 GB per-file import limit")
+            return "" to notes
+        }
         val staged = File(WorkPaths.moduleWork(moduleId), "in_${System.currentTimeMillis()}_$safe")
         val sourceHash = copyUri(uri, staged)
         if (sourceHash == null) {
-            notes.add("X Failed to read selected file")
+            notes.add("X Failed to read selected file or per-file 5 GB limit was exceeded")
             return "" to notes
         }
         val stagedHash = try { sha256(staged) } catch (_: Exception) { "" }
