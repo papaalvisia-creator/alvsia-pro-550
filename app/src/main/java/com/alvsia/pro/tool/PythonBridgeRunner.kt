@@ -154,13 +154,6 @@ object PythonBridgeRunner {
         workDirPath: String,
         jarsDirPath: String
     ): Pair<Boolean, List<String>> {
-        moduleId: Int,
-        subId: String,
-        inputPath: String,
-        extraName: String?,
-        workDirPath: String,
-        jarsDirPath: String
-    ): Pair<Boolean, List<String>> {
         try {
             val pyClass = Class.forName("com.chaquo.python.Python")
             val isStarted = pyClass.getMethod("isStarted").invoke(null) as Boolean
