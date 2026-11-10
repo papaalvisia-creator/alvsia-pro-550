@@ -45,6 +45,7 @@ import com.alvsia.pro.tool.ToolEngine
 import com.alvsia.pro.tool.TaskCenter
 import com.alvsia.pro.tool.TaskStatus
 import com.alvsia.pro.tool.ToolExecutionService
+import com.alvsia.pro.tool.RuntimeExitDiagnostics
 import com.alvsia.pro.ui.home.HomeScreen
 import com.alvsia.pro.ui.home.StudioItem
 import com.alvsia.pro.ui.home.StudioScreen
@@ -388,6 +389,7 @@ class MainActivity : ComponentActivity() {
                                     // This does not replace or disable any engine; it protects long
                                     // native/Python work from low-memory/background reclaim.
                                     ToolExecutionService.begin(this@MainActivity)
+                                    RuntimeExitDiagnostics.markToolStart(this@MainActivity, moduleId, sub.id)
                                     TaskCenter.update(taskId, stage = "STAGING INPUT", logs = listOf("> preparing ${sub.id}..."))
                                     lifecycleScope.launch {
                                         try {
@@ -416,6 +418,7 @@ class MainActivity : ComponentActivity() {
                                             )
                                             TaskCenter.complete(taskId, success, result)
                                             ToolExecutionService.end(this@MainActivity)
+                                            RuntimeExitDiagnostics.markToolEnd(this@MainActivity)
                                             val detail = "${sub.id}: " + (result.firstOrNull { it.startsWith("X ") } ?: if (success) "operation completed" else "operation needs review")
                                             try {
                                                 TelegramNotifier.notifyModuleStatus(this@MainActivity, sub.title, if (success) "SUCCESS" else "ATTENTION", detail.take(200))
@@ -433,6 +436,7 @@ class MainActivity : ComponentActivity() {
                                         } catch (t: Throwable) {
                                             TaskCenter.complete(taskId, false, listOf("X UNEXPECTED TOOL FAILURE: ${t.javaClass.simpleName}: ${t.message ?: "no detail"}", "diagnostic: module=${moduleId}; subtool=${sub.id}", "Input file is preserved where staging completed."))
                                             ToolExecutionService.end(this@MainActivity)
+                                            RuntimeExitDiagnostics.markToolEnd(this@MainActivity)
                                         }
                                     }
                                 },
