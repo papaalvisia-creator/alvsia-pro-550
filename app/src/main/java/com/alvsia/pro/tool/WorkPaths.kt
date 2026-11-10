@@ -42,6 +42,31 @@ object WorkPaths {
         val name = moduleName(moduleId)
         return File(dirOut(), name).also { it.mkdirs() }
     }
+\n    /**
+     * Isolated workspace for one live task. Every concurrent tool run gets its
+     * own IN/WORK/OUT tree so switching tools or running another task cannot
+     * overwrite an active task's staged bytes or intermediate output.
+     */
+    fun taskRoot(taskId: String): File {
+        val safe = taskId.replace(Regex("[^A-Za-z0-9._-]"), "_").take(160).ifBlank { "task" }
+        return File(alvsiaRoot(), "TASKS/$safe").also { it.mkdirs() }
+    }
+
+    fun taskModuleOut(taskId: String, moduleId: Int): File {
+        val name = moduleName(moduleId)
+        return File(taskRoot(taskId), "OUT/$name").also { it.mkdirs() }
+    }
+
+    fun taskModuleIn(taskId: String, moduleId: Int): File {
+        val name = moduleName(moduleId)
+        return File(taskRoot(taskId), "IN/$name").also { it.mkdirs() }
+    }
+
+    fun taskModuleWork(taskId: String, moduleId: Int): File {
+        val name = moduleName(moduleId)
+        return File(taskRoot(taskId), "WORK/$name").also { it.mkdirs() }
+    }
+
 
     fun moduleIn(moduleId: Int): File {
         val name = moduleName(moduleId)
