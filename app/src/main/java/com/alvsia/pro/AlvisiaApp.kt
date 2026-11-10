@@ -10,6 +10,7 @@ import com.alvsia.pro.sec.Guard
 import com.alvsia.pro.sec.RaspEngine
 import com.alvsia.pro.sec.ThreatReport
 import com.alvsia.pro.tool.PythonBridgeRunner
+import com.alvsia.pro.tool.RuntimeExitDiagnostics
 import java.util.concurrent.atomic.AtomicLong
 
 /**
@@ -37,6 +38,8 @@ class AlvisiaApp : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        RuntimeExitDiagnostics.recordPreviousExit(this)
+        RuntimeExitDiagnostics.installExceptionRecorder(this)
         initStartedAtMs.set(SystemClock.elapsedRealtime())
 
         // Bind the Telegram notifier to the application context so the queue
