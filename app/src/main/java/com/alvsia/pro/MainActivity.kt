@@ -399,6 +399,15 @@ class MainActivity : ComponentActivity() {
                                             val detail = "${sub.id}: " + (result.firstOrNull { it.startsWith("X ") } ?: if (success) "operation completed" else "operation needs review")
                                             try {
                                                 TelegramNotifier.notifyModuleStatus(this@MainActivity, sub.title, if (success) "SUCCESS" else "ATTENTION", detail.take(200))
+                                                val scanLike = sub.id.contains("scan", ignoreCase = true) || sub.title.contains("scan", ignoreCase = true)
+                                                if (scanLike) {
+                                                    val scanCounts = mapOf(
+                                                        "success" to result.count { it.startsWith("OK ") },
+                                                        "error" to result.count { it.startsWith("X ") },
+                                                        "other" to result.count { !it.startsWith("OK ") && !it.startsWith("X ") }
+                                                    )
+                                                    TelegramNotifier.notifyScanComplete(this@MainActivity, result.size, scanCounts)
+                                                }
                                                 TelegramNotifier.notify(this@MainActivity, if (success) "TOOL_OK" else "TOOL_ERROR", detail.take(200), license)
                                             } catch (_: Throwable) { }
                                         } catch (t: Throwable) {
