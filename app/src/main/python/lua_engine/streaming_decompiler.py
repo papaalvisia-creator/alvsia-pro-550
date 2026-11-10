@@ -362,13 +362,17 @@ def stream_unluac_jar(input_path: Path, out_path: Path, jars_dir: Optional[str] 
     device memory while other compatible engines remain available as fallback.
     """
     android_mode = os.environ.get("ALVSIA_SEALED_RUNTIME") == "1"
-    # Android app process safety: do not spawn a second JVM from Chaquopy.\n    # A child Java VM can reserve a large heap beside the app/Chaquopy runtime\n    # and the OS may kill the entire app without a catchable Python exception.\n    # Use the in-process bounded parser/native engines instead.\n    if android_mode and os.environ.get("ALVSIA_DISABLE_UNLUAC_JAR_ANDROID", "1") == "1":\n        return False, "unluac_jar_disabled_on_android_process_safety"\n    effective_timeout = min(timeout, 120) if android_mode else timeout
+    # Android safety: keep Unluac available, but bound the child JVM heap so
+    # Chaquopy + the app UI + the parser do not compete for an unbounded heap.
+    # This is a resource guard, NOT an engine disable: Unluac remains a real
+    # fallback and reports a normal parser/resource failure when its bound is
+    # insufficient, allowing the remaining registered engines to continue.
+    effective_timeout = min(timeout, 120) if android_mode else timeout
     heap_limit = os.environ.get(
-        "ALVSIA_UNLUAC_JAVA_HEAP", "192m" if android_mode else "512m"
+        "ALVSIA_UNLUAC_JAVA_HEAP", "96m" if android_mode else "512m"
     )
     if not re.fullmatch(r"[1-9][0-9]{1,3}m", heap_limit):
-        heap_limit = "192m" if android_mode else "512m"
-
+        heap_limit = "96m" if android_mode else "512m"
     java = _find_java()
     if not java:
         return False, "java_runtime_unavailable"
