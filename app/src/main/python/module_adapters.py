@@ -60,12 +60,12 @@ def _lua_protect(input_path: str | Path, output_path: str | Path,
 
 
 def _string_recover(input_path: str | Path, output_dir: str | Path) -> dict:
-    from lua_string_recover import recover_strings
+    from lua_string_recover import recover_strings_file
     src = Path(input_path)
     if not src.is_file():
         return {"ok": False, "module": "string-recovery", "operation": "recover",
                 "error": "input file not found"}
-    report = recover_strings(src.read_bytes(), Path(output_dir), src.stem)
+    report = recover_strings_file(src, Path(output_dir), src.stem)
     result = dict(report)
     result.update({"ok": True, "module": "string-recovery", "operation": "recover"})
     return result
