@@ -352,7 +352,7 @@ class MainActivity : ComponentActivity() {
                                     moduleReturnScreen = "studio"
                                     moduleId = t.id
                                     activeSub = null
-                                    logs = emptyList()
+                                    activeTaskId = null
                                     screen = "submenu"
                                 }
                             )
@@ -365,7 +365,7 @@ class MainActivity : ComponentActivity() {
                         onBack = { screen = moduleReturnScreen },
                         onSelect = { sub ->
                             activeSub = sub
-                            logs = emptyList()
+                            activeTaskId = TaskCenter.tasks.lastOrNull { it.moduleId == moduleId && it.subId == sub.id }?.id
                             screen = "tool"
                         }
                     )
