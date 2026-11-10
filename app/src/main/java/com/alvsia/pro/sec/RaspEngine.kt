@@ -160,6 +160,28 @@ object RaspEngine {
         try { deepTick(ctx, license) } catch (_: Throwable) { }
     }
 
+    private fun safeTick(ctx: Context, license: String) {
+        try { tick(ctx, license) } catch (_: Throwable) { }
+    }
+
+    private fun safeDeepTick(ctx: Context, license: String) {
+        try { deepTick(ctx, license) } catch (_: Throwable) { }
+    }
+
+    private fun deepTick(ctx: Context, license: String) {
+        // Heavy ops — memory dump scan + network MITM. This runs on the
+        // dedicated RASP executor, never on the Compose/main thread.
+        val dump = NativeGuard.antiDump()
+        if (dump > 0) {
+            ThreatReport.emit(ctx, "ANTI_DUMP", "dump_attempt_$dump", license)
+            SessionGate.onThreat()
+        }
+        val netThreats = NetworkGuard.signals(ctx)
+        if (netThreats.isNotEmpty()) {
+            ThreatReport.emit(ctx, "NET_THREAT", netThreats.joinToString("|"), license)
+        }
+    }
+
     private fun emulatorSignals(): List<String> {
         val sigs = mutableListOf<String>()
         val fp = Build.FINGERPRINT.lowercase()
