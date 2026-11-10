@@ -1,5 +1,7 @@
 package com.alvsia.pro.tool
 
+import android.os.Handler
+import android.os.Looper
 import androidx.compose.runtime.mutableStateListOf
 
 enum class TaskStatus { RUNNING, COMPLETED, ERROR }
@@ -39,6 +41,8 @@ object TaskCenter {
         return id
     }
 
+    private val mainHandler = Handler(Looper.getMainLooper())
+
     fun update(
         id: String,
         stage: String? = null,
@@ -46,6 +50,15 @@ object TaskCenter {
         logs: List<String>? = null,
         clearProgress: Boolean = false
     ) {
+        if (Looper.myLooper() != Looper.getMainLooper()) {
+            // Engine callbacks arrive from Dispatchers.IO. Never mutate the
+            // Compose-backed task list from an engine/background thread:
+            // serialise every visual-state mutation onto the UI thread.
+            mainHandler.post {
+                update(id, stage, progress, logs, clearProgress)
+            }
+            return
+        }
         val index = tasks.indexOfFirst { it.id == id }
         if (index < 0) return
         val old = tasks[index]
@@ -58,6 +71,10 @@ object TaskCenter {
     }
 
     fun complete(id: String, success: Boolean, logs: List<String>) {
+        if (Looper.myLooper() != Looper.getMainLooper()) {
+            mainHandler.post { complete(id, success, logs) }
+            return
+        }
         val index = tasks.indexOfFirst { it.id == id }
         if (index < 0) return
         val old = tasks[index]
