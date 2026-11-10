@@ -62,6 +62,14 @@ import com.alvsia.pro.ui.theme.AlvisiaRed
 import com.alvsia.pro.ui.theme.AlvisiaSilver
 import java.io.File
 
+private const val MAX_DIRECT_FILE_BYTES = 5L * 1024L * 1024L * 1024L
+
+private fun selectedSizeBytes(context: Context, uri: Uri): Long? = try {
+    context.contentResolver.query(uri, arrayOf(android.provider.OpenableColumns.SIZE), null, null, null)?.use { c ->
+        if (c.moveToFirst() && !c.isNull(0)) c.getLong(0) else null
+    }
+} catch (_: Exception) { null }
+
 /**
  * ALVSIA PRO 5.5.2 — ToolWorkspaceScreen (UX Sprint 1 rewrite)
  *
@@ -87,6 +95,8 @@ fun ToolWorkspaceScreen(
     val ctx = LocalContext.current
     var uri by remember { mutableStateOf<Uri?>(null) }
     var detectionResult by remember { mutableStateOf<FileMagic.DetectionResult?>(null) }
+    var selectedSize by remember { mutableStateOf<Long?>(null) }
+    var sizeRejected by remember { mutableStateOf(false) }
     var logMode by remember(sub.id) { mutableStateOf("simple") }
     var confirmClearWorkspace by remember(sub.id) { mutableStateOf(false) }
     val errorLine = logs.firstOrNull { it.startsWith("X ") }
@@ -115,6 +125,8 @@ fun ToolWorkspaceScreen(
     LaunchedEffect(initialUri) {
         if (initialUri != null) {
             uri = initialUri
+            selectedSize = selectedSizeBytes(ctx, initialUri)
+            sizeRejected = selectedSize?.let { it > MAX_DIRECT_FILE_BYTES } == true
             detectionResult = FileMagic.detect(ctx, initialUri)
             UXStore.addRecent(ctx, initialUri)
             recentFiles = UXStore.getRecentDisplayNames(ctx)
@@ -125,6 +137,8 @@ fun ToolWorkspaceScreen(
         ActivityResultContracts.GetContent()
     ) { u ->
         uri = u
+        selectedSize = u?.let { selectedSizeBytes(ctx, it) }
+        sizeRejected = selectedSize?.let { it > MAX_DIRECT_FILE_BYTES } == true
         if (u != null) {
             UXStore.addRecent(ctx, u)
             recentFiles = UXStore.getRecentDisplayNames(ctx)
@@ -187,6 +201,8 @@ fun ToolWorkspaceScreen(
                             .padding(horizontal = 8.dp, vertical = 4.dp)
                             .clickable {
                                 uri = Uri.parse(uriStr)
+                                selectedSize = selectedSizeBytes(ctx, Uri.parse(uriStr))
+                                sizeRejected = selectedSize?.let { it > MAX_DIRECT_FILE_BYTES } == true
                                 detectionResult = FileMagic.detect(ctx, Uri.parse(uriStr))
                             }
                     )
@@ -207,6 +223,22 @@ fun ToolWorkspaceScreen(
                     fontWeight = FontWeight.Bold, fontSize = 12.sp)
             }
             Spacer(Modifier.height(6.dp))
+
+            if (selectedSize != null) {
+                val gb = selectedSize!!.toDouble() / (1024.0 * 1024.0 * 1024.0)
+                Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp))
+                    .background(if (sizeRejected) Color(0x331F0808) else Color(0x3310C98A))
+                    .border(1.dp, if (sizeRejected) AlvisiaRed else Color(0xFF63E6A6), RoundedCornerShape(8.dp))
+                    .padding(8.dp)) {
+                    Text(
+                        if (sizeRejected) "✕ FILE OVER 5 GB — direct upload blocked"
+                        else "✓ FILE SIZE %.2f GB / 5.00 GB".format(java.util.Locale.US, gb),
+                        color = if (sizeRejected) AlvisiaRed else Color(0xFF63E6A6),
+                        fontSize = 10.sp, fontWeight = FontWeight.Bold
+                    )
+                }
+                Spacer(Modifier.height(6.dp))
+            }
 
             // Auto-detect banner
             detectionResult?.let { det ->
@@ -303,12 +335,12 @@ fun ToolWorkspaceScreen(
                     }
                 }
             },
-            enabled = !running && (!sub.needsFile || uri != null),
+            enabled = !running && (!sub.needsFile || (uri != null && !sizeRejected)),
             colors = ButtonDefaults.buttonColors(containerColor = AlvisiaBlue),
             shape = RoundedCornerShape(10.dp),
             modifier = Modifier.fillMaxWidth().height(44.dp)
         ) {
-            Text(if (running) "PROCESSING..." else "▶ RUN",
+            Text(if (running) "● LIVE PROCESS" else "▶ RUN",
                 fontWeight = FontWeight.Bold, fontSize = 13.sp)
         }
         Spacer(Modifier.height(6.dp))
@@ -397,10 +429,16 @@ fun ToolWorkspaceScreen(
                     fontSize = 12.sp
                 )
                 if (running) {
-                    LinearProgressIndicator(
-                        modifier = Modifier.fillMaxWidth(),
-                        color = AlvisiaCyan
-                    )
+                    val realProgress = logs.asReversed().firstNotNullOfOrNull { line ->
+                        Regex("""^PROGRESS\\s+(\\d{1,3})%$""").find(line)?.groupValues?.get(1)?.toIntOrNull()
+                    }?.coerceIn(0, 100)
+                    if (realProgress != null) {
+                        LinearProgressIndicator(progress = { realProgress / 100f }, modifier = Modifier.fillMaxWidth(), color = AlvisiaCyan)
+                        Text("$realProgress%", color = AlvisiaCyan, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold, fontSize = 11.sp)
+                    } else {
+                        LinearProgressIndicator(modifier = Modifier.fillMaxWidth(), color = AlvisiaCyan)
+                        Text("LIVE PROCESS • stage sedang berjalan", color = AlvisiaSilver.copy(alpha = 0.65f), fontSize = 9.sp)
+                    }
                 }
                 Text(simpleSummary, color = Color.White, fontSize = 12.sp)
                 if (successLine != null && errorLine == null) {
