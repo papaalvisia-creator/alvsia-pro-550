@@ -11,6 +11,7 @@ sys.path.insert(0, str(ROOT / "app/src/main/python"))
 from lua_engine.detector import detect_lua
 from lua_engine.streaming_decompiler import stream_decompile_lua53
 from lua_string_recover import _iter_ascii_file, recover_strings_file
+from alvsia_features import run_hash_file, run_string_scan
 
 
 class TestLargeFileStreaming(unittest.TestCase):
@@ -70,6 +71,27 @@ class TestLargeFileStreaming(unittest.TestCase):
                 path, min_len=4, xor_multi_key=key, chunk_size=7
             ))
             self.assertEqual(recovered, ["prefix_PlayerCharacter_suffix"])
+
+    def test_generic_hash_streams_without_whole_file_read(self):
+        import hashlib
+        with tempfile.TemporaryDirectory() as td:
+            source = Path(td) / "hash-large.bin"
+            payload = b"ALVSIA_HASH_STREAM" + b"\\x00" * (2 * 1024 * 1024)
+            source.write_bytes(payload)
+            with patch.object(Path, "read_bytes", side_effect=AssertionError("whole-file read")):
+                result = run_hash_file(source)
+            self.assertTrue(result["ok"], result)
+            self.assertIn(f"size={len(payload)}", result["report"])
+            self.assertIn(f"sha256={hashlib.sha256(payload).hexdigest()}", result["report"])
+
+    def test_generic_string_scan_uses_streaming_iterator(self):
+        with tempfile.TemporaryDirectory() as td:
+            source = Path(td) / "strings-large.bin"
+            source.write_bytes(b"FIRST_PLAYER\\x00" + b"\\x00" * (2 * 1024 * 1024) + b"LAST_CHARACTER")
+            with patch.object(Path, "read_bytes", side_effect=AssertionError("whole-file read")):
+                result = run_string_scan(source)
+            self.assertTrue(result["ok"], result)
+            self.assertEqual(result["count"], 2)
 
     def test_lua53_parser_rejects_over_budget_before_loading(self):
         with tempfile.TemporaryDirectory() as td:
