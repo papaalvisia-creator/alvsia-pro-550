@@ -387,7 +387,14 @@ class MainActivity : ComponentActivity() {
                                     lifecycleScope.launch {
                                         try {
                                             val result = withContext(Dispatchers.IO) {
-                                                try { engine.runSub(moduleId, sub.id, uri, extra, taskId = taskId) { stage, progress -> TaskCenter.update(taskId, stage = stage, progress = progress) } }
+                                                try { engine.runSub(moduleId, sub.id, uri, extra, taskId = taskId) { stage, progress ->
+                                                    TaskCenter.update(
+                                                        taskId,
+                                                        stage = stage,
+                                                        progress = progress,
+                                                        clearProgress = progress == null
+                                                    )
+                                                } }
                                                 catch (t: Throwable) {
                                                     val root = t.cause ?: t
                                                     listOf("X TOOL EXECUTION FAILED: ${root.javaClass.simpleName}: ${root.message ?: "no detail"}", "diagnostic: module=${moduleId}; subtool=${sub.id}", "Input file is preserved; no successful output is claimed.")
@@ -395,7 +402,13 @@ class MainActivity : ComponentActivity() {
                                             }
                                             val success = result.any { it.startsWith("OK ") } && result.none { it.startsWith("X ") }
                                             val p = result.firstOrNull { it.matches(Regex("PROGRESS\\s+\\d{1,3}%")) }?.substringAfter(" ")?.removeSuffix("%")?.toIntOrNull()
-                                            TaskCenter.update(taskId, stage = if (success) "COMPLETED" else if (result.any { it.startsWith("X ") }) "NEEDS ATTENTION" else "REVIEW", progress = p, logs = result)
+                                            TaskCenter.update(
+                                                taskId,
+                                                stage = if (success) "COMPLETED" else if (result.any { it.startsWith("X ") }) "NEEDS ATTENTION" else "REVIEW",
+                                                progress = p,
+                                                logs = result,
+                                                clearProgress = !success && p == null
+                                            )
                                             TaskCenter.complete(taskId, success, result)
                                             val detail = "${sub.id}: " + (result.firstOrNull { it.startsWith("X ") } ?: if (success) "operation completed" else "operation needs review")
                                             try {
