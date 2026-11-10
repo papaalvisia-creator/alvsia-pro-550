@@ -47,6 +47,17 @@ class SecurityWiringTests(unittest.TestCase):
         self.assertIn("NetworkGuard.detect_proxy(ctx)", rasp)
         self.assertIn("NetworkGuard.net_guard(ctx)", rasp)
 
+    def test_xop_apk_size_guard_measures_apk_not_dex(self):
+        integrity = read("app/src/main/java/com/alvsia/pro/sec/IntegrityBomb.kt")
+        self.assertIn("APK_MIN_BYTES", integrity)
+        self.assertIn("APK_MAX_BYTES", integrity)
+        self.assertIn("private fun apkSizeOk(ctx: Context)", integrity)
+        self.assertIn("File(ctx.applicationInfo.sourceDir)", integrity)
+        self.assertIn("apk.length() in APK_MIN_BYTES..APK_MAX_BYTES", integrity)
+        self.assertIn("DexGuardian.evaluate(ctx)", integrity)
+        self.assertNotIn("DEX_MAX", integrity)
+        self.assertNotIn("private fun dexSizeOk", integrity)
+
     def test_medium_lua_chunks_bypass_in_process_art_unluac(self):
         runner = read("app/src/main/java/com/alvsia/pro/tool/UnluacRunner.kt")
         self.assertIn("ART_SAFE_LIMIT = 256L * 1024L", runner)

@@ -275,6 +275,17 @@ def stream_decompile_lua53(input_path: Path, out_path: Path) -> Tuple[bool, str]
         from .decompiler53 import load_chunk, decompile_bytes
     except Exception as exc:
         return False, f"decompiler53_import_failed: {exc}"
+    input_size = Path(input_path).stat().st_size
+    max_parser_bytes = int(os.environ.get(
+        "ALVSIA_LUA53_MAX_IN_MEMORY_BYTES", str(256 * 1024 * 1024)
+    ))
+    max_parser_bytes = max(16 * 1024 * 1024, min(max_parser_bytes, 512 * 1024 * 1024))
+    if input_size > max_parser_bytes:
+        return False, (
+            f"lua53_parser_memory_limit: input={input_size} bytes "
+            f"limit={max_parser_bytes} bytes; container scanning/inflation is "
+            "streaming, but this Lua 5.3 parser still requires an in-memory buffer"
+        )
     try:
         data = memoryview(Path(input_path).read_bytes())
     except Exception as exc:
@@ -327,7 +338,9 @@ def stream_decompile_lua53(input_path: Path, out_path: Path) -> Tuple[bool, str]
 def stream_decompile_luajit(input_path: Path, out_path: Path) -> Tuple[bool, str]:
     """Try the LuaJIT disassembler path (proto-level ASM, not full source)."""
     try:
-        if not detect_luajit(Path(input_path).read_bytes()):
+        with Path(input_path).open("rb") as source:
+            header = source.read(4)
+        if not header.startswith(b"\\x1bLJ"):
             return False, "not_luajit"
     except Exception as exc:
         return False, f"detect_luajit_failed: {exc}"
