@@ -75,6 +75,7 @@ def run_tool(module_id, sub_id, input_path, out_root, engine_dir, jars_dir):
                     _adapter = _adapter_dispatch(
                         "lua", "decompile", input_path=ip,
                         output_path=out / "OUT" / "LUA" / (Path(ip).stem + "_smart.lua"),
+                        jars_dir=jars,
                     )
                 elif sid in ("lua_smart_protect", "lua_smart_protect_strong"):
                     _adapter = _adapter_dispatch(
