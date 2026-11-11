@@ -24,6 +24,12 @@ class LiveWorkspaceTests(unittest.TestCase):
         self.assertIn('LiveTaskDock(', main)
         self.assertIn('onOpenTask = { live ->', main)
 
+    def test_workspace_roots_do_not_precreate_57_empty_module_folders(self):
+        paths = (ROOT / 'app/src/main/java/com/alvsia/pro/tool/WorkPaths.kt').read_text(encoding='utf-8')
+        ensure = paths.split('fun ensureTree()', 1)[1].split('fun readme(', 1)[0]
+        self.assertIn('dirIn(); dirWork(); dirOut()', ensure)
+        self.assertNotIn('for (id in 1..19)', ensure)
+
     def test_output_browser_indexes_task_isolated_outputs(self):
         browser = (ROOT / 'app/src/main/java/com/alvsia/pro/ui/output/OutputBrowserScreen.kt').read_text(encoding='utf-8')
         self.assertIn('val tasksRoot = File(root, "TASKS")', browser)
