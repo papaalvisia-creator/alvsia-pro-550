@@ -87,8 +87,12 @@ object PythonBridgeRunner {
     /** Explicitly release Chaquopy native Python references before GC/finalization. */
     private fun closePyObjectQuietly(value: Any?) {
         if (value == null) return
-        try { value.javaClass.getMethod("close").invoke(value) }
-        catch (_: Throwable) { /* cleanup must never fail the tool */ }
+        try {
+            if (value is AutoCloseable) value.close()
+            else value.javaClass.getMethod("close").invoke(value)
+        } catch (_: Throwable) {
+            // Cleanup must never change the operation result.
+        }
     }
     private fun sha256Hex(value: String): String =
         MessageDigest.getInstance("SHA-256")
@@ -98,6 +102,7 @@ object PythonBridgeRunner {
 
     /** Verify and install the compact JWT signed by the current Unaux panel. */
     fun installOperationProof(grantToken: String, expectedOperation: String): Boolean {
+        bridgeLock.lock()
         return try {
             if (!SessionGate.isSessionAuthorized() || grantToken.split(".").size != 3) return false
             val pyClass = Class.forName("com.chaquo.python.Python")
@@ -127,9 +132,11 @@ object PythonBridgeRunner {
             closePyObjectQuietly(ultimate)
             decodedOk
         } catch (_: Throwable) { false }
+        finally { bridgeLock.unlock() }
     }
 
     fun proofStatus(): String {
+        bridgeLock.lock()
         return try {
             val pyClass = Class.forName("com.chaquo.python.Python")
             if (!(pyClass.getMethod("isStarted").invoke(null) as Boolean)) return ""
@@ -143,6 +150,7 @@ object PythonBridgeRunner {
             closePyObjectQuietly(core)
             status
         } catch (_: Throwable) { "" }
+        finally { bridgeLock.unlock() }
     }
 
     fun runBridge(
@@ -190,6 +198,7 @@ object PythonBridgeRunner {
             }
 
             val bridge = getModule.invoke(py, "alvsia_bridge") ?: return false to listOf("... alvsia_bridge unavailable")
+            try {
             // Configure the authenticated Python session through a bridge function.
             // This avoids relying on PyObject.get(String), which is not available in
             // some Chaquopy runtimes and caused "PyObject.get" reflection failures.
@@ -267,6 +276,7 @@ object PythonBridgeRunner {
             }
             val coreModule = getModule.invoke(py, "alvsia_core")
                 ?: return false to listOf("X AUTH: core session-binding helper unavailable")
+            try {
             val identityResult = callAttr.invoke(
                 coreModule,
                 "_alvsia_set_expected_operation_identity",
@@ -279,12 +289,8 @@ object PythonBridgeRunner {
             }
             closePyObjectQuietly(identityResult)
             if (!identityOk) {
-                closePyObjectQuietly(coreModule)
-                closePyObjectQuietly(bridge)
                 return false to listOf("X AUTH: trusted device/session identity could not be installed")
             }
-            closePyObjectQuietly(coreModule)
-
             // Protected operations require a panel-signed, short-lived RSA grant.
             // Fail closed if the endpoint is missing, the session is invalid, or the
             // Python verifier rejects the proof.
@@ -324,49 +330,65 @@ object PythonBridgeRunner {
                 it.startsWith("OK ") || it.startsWith("OUT ") || it.startsWith("> ")
             }
             val bridgeFailed = (explicitFalse && !explicitTrue) || hasErrorLine || (!explicitTrue && !hasSuccessLine)
-            closePyObjectQuietly(bridge)
             return !bridgeFailed to lines
+            } finally {
+                closePyObjectQuietly(bridge)
+            }
         } catch (e: Throwable) {
             return false to listOf("... bridge error: ${e.message ?: e.javaClass.simpleName}")
         }
     }
 
     fun setEnv(key: String, value: String) {
+        bridgeLock.lock()
+        var osMod: Any? = null
+        var environ: Any? = null
+        var result: Any? = null
         try {
             val pyClass = Class.forName("com.chaquo.python.Python")
             val isStarted = pyClass.getMethod("isStarted").invoke(null) as Boolean
             if (!isStarted) return
             val py = pyClass.getMethod("getInstance").invoke(null) ?: return
             val getModule = pyClass.getMethod("getModule", String::class.java)
-            val osMod = getModule.invoke(py, "os") ?: return
+            osMod = getModule.invoke(py, "os") ?: return
             val pyObjectCls = Class.forName("com.chaquo.python.PyObject")
             val callAttr = pyObjectCls.getMethod("callAttr", String::class.java, Array<Any?>::class.java)
             val getObj = pyObjectCls.getMethod("get", Any::class.java)
-            val environ = getObj.invoke(osMod, "environ") ?: return
-            val result = callAttr.invoke(environ, "__setitem__", arrayOf<Any?>(key, value))
+            environ = getObj.invoke(osMod, "environ") ?: return
+            result = callAttr.invoke(environ, "__setitem__", arrayOf<Any?>(key, value))
+        } catch (_: Throwable) {
+        } finally {
             closePyObjectQuietly(result)
             closePyObjectQuietly(environ)
             closePyObjectQuietly(osMod)
-        } catch (_: Throwable) { }
+            bridgeLock.unlock()
+        }
     }
 
     fun clearEnv(key: String) {
+        bridgeLock.lock()
+        var osMod: Any? = null
+        var environ: Any? = null
+        var result: Any? = null
         try {
             val pyClass = Class.forName("com.chaquo.python.Python")
             val isStarted = pyClass.getMethod("isStarted").invoke(null) as Boolean
             if (!isStarted) return
             val py = pyClass.getMethod("getInstance").invoke(null) ?: return
             val getModule = pyClass.getMethod("getModule", String::class.java)
-            val osMod = getModule.invoke(py, "os") ?: return
+            osMod = getModule.invoke(py, "os") ?: return
             val pyObjectCls = Class.forName("com.chaquo.python.PyObject")
             val callAttr = pyObjectCls.getMethod("callAttr", String::class.java, Array<Any?>::class.java)
             val getObj = pyObjectCls.getMethod("get", Any::class.java)
-            val environ = getObj.invoke(osMod, "environ") ?: return
-            val result = callAttr.invoke(environ, "pop", arrayOf<Any?>(key, null))
+            environ = getObj.invoke(osMod, "environ") ?: return
+            result = callAttr.invoke(environ, "pop", arrayOf<Any?>(key, null))
+        } catch (_: Throwable) {
+        } finally {
             closePyObjectQuietly(result)
             closePyObjectQuietly(environ)
             closePyObjectQuietly(osMod)
-        } catch (_: Throwable) { }
+            bridgeLock.unlock()
+        }
     }
 
 }
