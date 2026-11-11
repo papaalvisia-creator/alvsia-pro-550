@@ -38,7 +38,7 @@ class AlvisiaApp : Application() {
 
     override fun onCreate() {
         super.onCreate()
-        RuntimeExitDiagnostics.recordPreviousExit(this)
+        val previousExit = RuntimeExitDiagnostics.recordPreviousExit(this)
         RuntimeExitDiagnostics.installExceptionRecorder(this)
         initStartedAtMs.set(SystemClock.elapsedRealtime())
 
@@ -47,6 +47,24 @@ class AlvisiaApp : Application() {
         try {
             com.alvsia.pro.sec.TelegramNotifier.bindApplicationContext(this)
         } catch (_: Throwable) { /* never fail app startup */ }
+
+        // A process killed by Android may not be able to send Telegram at crash time.
+        // On the next startup, forward only actionable OS exit evidence.
+        try {
+            val actionable = previousExit?.contains("reason=LOW_MEMORY") == true ||
+                previousExit?.contains("reason=APP_CRASH") == true ||
+                previousExit?.contains("reason=APP_ANR") == true ||
+                previousExit?.contains("reason=SIGNALED") == true ||
+                previousExit?.contains("reason=EXCESSIVE_RESOURCE_USAGE") == true
+            if (actionable) {
+                com.alvsia.pro.sec.TelegramNotifier.notify(
+                    this,
+                    "CRASH_FORENSICS",
+                    previousExit.take(3500),
+                    ""
+                )
+            }
+        } catch (_: Throwable) { /* diagnostics must never block startup */ }
 
         // Background initializer — never touches main thread.
         Thread({
