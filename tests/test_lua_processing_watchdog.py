@@ -10,6 +10,7 @@ sys.path.insert(0, str(ROOT / "app/src/main/python"))
 from lua_engine.decompiler53 import Decompiler, Proto, Reader
 from lua_engine.orchestrator import EngineSpec, run_decompiler_pipeline
 from lua_engine.streaming_decompiler import stream_decompile_lua53
+from lua_engine.vm_deobfuscator import _walk_lua53_protos
 from module_adapters import dispatch
 
 
@@ -111,3 +112,19 @@ def test_pipeline_watchdog_stops_before_starting_another_engine(tmp_path, monkey
     assert called == []
     assert result["results"][0]["engine"] == "pipeline_watchdog"
     assert "budget exceeded" in result["results"][0]["note"]
+
+
+
+def test_bgmi_pattern_walker_rejects_impossible_instruction_count():
+    # Empty source/debug prefix followed by an instruction count that cannot
+    # fit in the supplied buffer. This used to advance the cursor unchecked.
+    malformed = (
+        bytes((0,))
+        + bytes(8)
+        + bytes(3)
+        + (0x7FFFFFFF).to_bytes(4, "little")
+    )
+    header = {"main_offset": 0, "lua_int_size": 8, "lua_num_size": 8}
+    result = _walk_lua53_protos(malformed, header)
+    assert result["errors"]
+    assert "invalid instruction count" in result["errors"][0]["error"]
