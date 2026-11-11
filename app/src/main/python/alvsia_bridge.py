@@ -1,4 +1,4 @@
-import os,re,json
+import os,re
 def _authorized():
  try:
   from com.alvsia.pro.sec import SessionGate
@@ -40,14 +40,11 @@ def run_tool(m,s,i,out_root,e,j):
   import alvsia_bridge_impl as impl
   result=impl.run_tool(m,s,i,out_root,e,j)
   if result is None:return "X ENGINE: operation handler returned no result"
-  if isinstance(result,bytes):result=result.decode("utf-8","replace")
-  elif not isinstance(result,str):result=json.dumps(result,ensure_ascii=False,default=str)
-  if not result.strip():return "X ENGINE: operation handler returned empty output"
+  result=result.decode("utf-8","replace") if isinstance(result,bytes) else str(result)
   try:
    from alvsia_features import scrub_foreign_branding,scrub_output_text_files
    result,_=scrub_foreign_branding(result);scrub_output_text_files(out_root)
   except:pass
-  if result is None or not str(result).strip():return "X ENGINE: output was empty after result normalization"
-  return str(result)
+  return result if result and result.strip() else "X ENGINE: operation handler returned empty output"
  except:return "X SEALED BRIDGE: operation failed"
 def bridge_run_sub(m,s,i,en,w,j):return run_tool(int(m),str(s),str(i) if i else "",str(w),str(j),str(j))
