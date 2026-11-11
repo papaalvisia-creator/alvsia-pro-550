@@ -261,18 +261,9 @@ def stream_inflate_deflate_container(input_path: Path, out_path: Path) -> Tuple[
         return False, f"stream_inflate_failed: {exc}"
 
 def stream_decompile_lua53(input_path: Path, out_path: Path) -> Tuple[bool, str]:
-    """Try the pure-Python Lua 5.3 decompiler against the given file.
-
-    decompiler53 normally loads the whole file into memory. For files
-    larger than STREAM_CHUNK_SIZE we still call it — Lua 5.3 chunks of
-    multiple GB are vanishingly rare in practice; the 4 GiB cap above
-    bounds memory on the inflated side. The decompiler53 reader uses
-    memoryview slicing so memory usage is roughly 1x the input size,
-    which is acceptable for inputs up to a few hundred MB.
-    """
+    """Run the Lua 5.3 recovery candidates under one cooperative wall-clock budget."""
     try:
-        # Use decompile_bytes / decompile_file, not a nonexistent "decompile".
-        from .decompiler53 import load_chunk, decompile_bytes
+        from .decompiler53 import decompile_bytes
     except Exception as exc:
         return False, f"decompiler53_import_failed: {exc}"
     input_size = Path(input_path).stat().st_size
@@ -283,34 +274,36 @@ def stream_decompile_lua53(input_path: Path, out_path: Path) -> Tuple[bool, str]
     if input_size > max_parser_bytes:
         return False, (
             f"lua53_parser_memory_limit: input={input_size} bytes "
-            f"limit={max_parser_bytes} bytes; container scanning/inflation is "
-            "streaming, but this Lua 5.3 parser still requires an in-memory buffer"
+            f"limit={max_parser_bytes} bytes; streaming container analysis remains available"
         )
+    default_budget = "75" if os.environ.get("ALVSIA_SEALED_RUNTIME") == "1" else "120"
     try:
-        # Keep exactly one byte representation alive at a time. The previous
-        # path retained the original buffer + normalized candidates + decoded
-        # source simultaneously, which could push Android's Chaquopy process
-        # over its memory limit during a real Lua run.
+        budget_seconds = float(os.environ.get("ALVSIA_LUA53_TIMEOUT_SECONDS", default_budget))
+    except (TypeError, ValueError):
+        budget_seconds = float(default_budget)
+    budget_seconds = max(10.0, min(budget_seconds, 180.0))
+    deadline = __import__("time").monotonic() + budget_seconds
+    try:
         data = Path(input_path).read_bytes()
     except Exception as exc:
         return False, f"read_failed: {exc}"
 
     failures = []
     seen = set()
-    base_digest = __import__("hashlib").sha256(data).digest()
 
     def _try_candidate(variant: str, candidate: bytes):
+        if __import__("time").monotonic() >= deadline:
+            return False, f"lua53_total_budget_exceeded_after_{budget_seconds:g}s"
         digest = __import__("hashlib").sha256(candidate).digest()
         if digest in seen:
             return False, "duplicate candidate"
         seen.add(digest)
         try:
-            load_chunk(memoryview(candidate))
-            source_text = decompile_bytes(memoryview(candidate))
+            # decompile_bytes already performs strict chunk parsing; the old
+            # extra load_chunk call parsed the complete bytecode twice.
+            source_text = decompile_bytes(memoryview(candidate), deadline=deadline)
             if not source_text or not source_text.strip():
                 raise ValueError("decompiler returned empty source")
-            # Validate the already-decoded text before writing it. This avoids
-            # immediately reading the same large source file back into memory.
             ok, msg = validate_lua_source(source_text, expected_version="Lua 5.3")
             if not ok:
                 raise ValueError(f"source validation failed: {msg}")
@@ -318,6 +311,8 @@ def stream_decompile_lua53(input_path: Path, out_path: Path) -> Tuple[bool, str]
             final.parent.mkdir(parents=True, exist_ok=True)
             final.write_text(source_text, encoding="utf-8")
             return True, f"decompiled_lua53 variant={variant} size={len(source_text)}"
+        except TimeoutError as exc:
+            return False, f"lua53_total_budget_exceeded_after_{budget_seconds:g}s: {exc}"
         except Exception as exc:
             return False, f"{variant}: {str(exc)[:320]}"
 
@@ -326,20 +321,29 @@ def stream_decompile_lua53(input_path: Path, out_path: Path) -> Tuple[bool, str]
         return True, note
     failures.append(note)
     del data
+    if __import__("time").monotonic() >= deadline:
+        return False, "all Lua 5.3 candidates stopped: total parser time budget exceeded"
 
-    # The private source-tool collection contains a BGMI/HePing Lua 5.3
-    # converter (XOR constant-pool transform + opcode remap). Try each
-    # normalizer only after the standard candidate has been released. Engines
-    # remain available; this is strictly a memory-lifetime fix.
+    # Existing BGMI/HePing normalizers remain enabled, but share the same
+    # total deadline so a failed standard candidate cannot trigger an
+    # unbounded chain of additional parser attempts.
     try:
         import gc
         from alvsia_private import LuaOpcodeConverter
         for variant in ("bgmi", "heping"):
+            if __import__("time").monotonic() >= deadline:
+                failures.append("remaining normalization candidates skipped: total time budget exhausted")
+                break
             try:
                 original = Path(input_path).read_bytes()
                 converted = LuaOpcodeConverter(variant=variant).convert_bytes(original)
                 del original
-                if converted == b"" or not converted.startswith(b"\x1bLua\x53"):
+                if __import__("time").monotonic() >= deadline:
+                    del converted
+                    gc.collect()
+                    failures.append(f"{variant}: total parser time budget exceeded during normalization")
+                    break
+                if converted == b"" or not converted.startswith(bytes((0x1B,)) + b"Lua\\x53"):
                     failures.append(f"{variant}: normalizer produced no Lua 5.3 candidate")
                     del converted
                     gc.collect()
@@ -350,13 +354,14 @@ def stream_decompile_lua53(input_path: Path, out_path: Path) -> Tuple[bool, str]
                 failures.append(note)
                 del converted
                 gc.collect()
+                if __import__("time").monotonic() >= deadline:
+                    break
             except Exception as exc:
                 failures.append(f"{variant}_normalize_failed: {str(exc)[:240]}")
     except Exception as exc:
         failures.append(f"private_lua_converter_unavailable: {str(exc)[:240]}")
 
     return False, "all Lua 5.3 normalization/decompile candidates failed: " + " | ".join(failures[-4:])
-
 
 def stream_decompile_luajit(input_path: Path, out_path: Path) -> Tuple[bool, str]:
     """Try the LuaJIT disassembler path (proto-level ASM, not full source)."""
