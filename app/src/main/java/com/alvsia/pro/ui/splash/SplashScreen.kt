@@ -229,7 +229,7 @@ fun SplashScreen(onFinished: () -> Unit) {
             )
             Spacer(Modifier.height(6.dp))
             Text(
-                "SMART CORE  ·  7-LAYER SECURITY",
+                "HELLO RAJA COLAY MUKA BOKEP",
                 color = AlvisiaBlue.copy(alpha = 0.85f),
                 fontSize = 11.sp,
                 fontFamily = FontFamily.Monospace,
