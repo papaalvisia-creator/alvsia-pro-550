@@ -49,7 +49,7 @@ object RuntimeExitDiagnostics {
 
     fun recordPreviousExit(context: Context): String? {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) return null
-        try {
+        return try {
             val am = context.getSystemService(Context.ACTIVITY_SERVICE) as? ActivityManager ?: return null
             val latest = am.getHistoricalProcessExitReasons(context.packageName, 0, 8).firstOrNull() ?: return null
             val prefs = context.getSharedPreferences("runtime_exit", Context.MODE_PRIVATE)
