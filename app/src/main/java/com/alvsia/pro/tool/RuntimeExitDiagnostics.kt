@@ -122,8 +122,33 @@ object RuntimeExitDiagnostics {
     }
 
     private fun persist(context: Context, text: String) {
-        File(context.filesDir, FILE_NAME).writeText(text.take(16000), Charsets.UTF_8)
+        val safeText = text.take(16000)
+        File(context.filesDir, FILE_NAME).writeText(safeText, Charsets.UTF_8)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            try {
+                val values = ContentValues().apply {
+                    put(MediaStore.Downloads.DISPLAY_NAME, "crash_" + timestamp() + ".log")
+                    put(MediaStore.Downloads.MIME_TYPE, "text/plain")
+                    put(MediaStore.Downloads.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS + "/ALVSIA/crash_logs")
+                    put(MediaStore.Downloads.IS_PENDING, 1)
+                }
+                val uri = context.contentResolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values)
+                if (uri != null) {
+                    try {
+                        context.contentResolver.openOutputStream(uri)?.use { it.write(safeText.toByteArray(Charsets.UTF_8)) }
+                        values.clear()
+                        values.put(MediaStore.Downloads.IS_PENDING, 0)
+                        context.contentResolver.update(uri, values, null, null)
+                    } catch (_: Throwable) {
+                        context.contentResolver.delete(uri, null, null)
+                    }
+                }
+            } catch (_: Throwable) {}
+        }
     }
+
+    private fun timestamp(): String =
+        SimpleDateFormat("yyyyMMdd_HHmmss_SSS", Locale.US).format(Date())
 
     private fun diagnosisFor(reason: Int): String = when (reason) {
         2 -> "PROCESS_WAS_SIGNALED; inspect native/OS evidence"
