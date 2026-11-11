@@ -144,7 +144,7 @@ class TestLuaCandidateDeduplication(unittest.TestCase):
             def convert_bytes(self, _data):
                 return bgmi if self.variant == "bgmi" else heping
 
-        def accept_only_heping(candidate):
+        def accept_only_heping(candidate, *, deadline=None):
             if bytes(candidate)[-1:] != b"C":
                 raise ValueError("fixture rejects this candidate")
             return "return 7"
