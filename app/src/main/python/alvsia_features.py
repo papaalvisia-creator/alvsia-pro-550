@@ -682,26 +682,37 @@ def run_lua_smart(input_path, out_dir, jars_dir=None):
             ),
         }
 
-    intelligence = analyze_file(
-        input_path, out_dir / "intelligence",
-        IntelligenceConfig(
-            max_depth=int(os.environ.get("ALVSIA_LUA_MAX_DEPTH", "12")),
-            max_artifacts=int(os.environ.get("ALVSIA_LUA_MAX_ARTIFACTS", "128")),
-            max_file_bytes=int(os.environ.get("ALVSIA_LUA_MAX_BYTES", str(256 * 1024 * 1024))),
-            max_elapsed_seconds=float(os.environ.get("ALVSIA_LUA_MAX_SECONDS", "45")),
-        ),
-    )
+    # Run the real decompiler first. Intelligence/layer analysis is auxiliary:
+    # it must never hold the user's requested output hostage or prevent a
+    # completed decompile from being returned to the Android caller.
     try:
         legacy = _run_lua_smart_legacy(input_path, out_dir, jars_dir=jars_dir)
     except Exception as exc:
         legacy = {"ok": False, "final_status": "FAILED",
                   "error": f"{type(exc).__name__}: {exc}"}
     result = dict(legacy)
-    result["intelligence"] = intelligence.to_dict()
-    result["intelligence_report"] = intelligence.report_path
-    result["layer_count"] = len(intelligence.artifacts)
-    result["layer_graph_root"] = intelligence.root_id
-    result["analysis_status"] = intelligence.status
+
+    # Run optional intelligence analysis only after the decompiler has had
+    # its chance to publish a validated artifact. Treat analysis failure as a
+    # diagnostic warning, not as a reason to discard the decompiler result.
+    try:
+        intelligence = analyze_file(
+            input_path, out_dir / "intelligence",
+            IntelligenceConfig(
+                max_depth=int(os.environ.get("ALVSIA_LUA_MAX_DEPTH", "12")),
+                max_artifacts=int(os.environ.get("ALVSIA_LUA_MAX_ARTIFACTS", "128")),
+                max_file_bytes=int(os.environ.get("ALVSIA_LUA_MAX_BYTES", str(256 * 1024 * 1024))),
+                max_elapsed_seconds=float(os.environ.get("ALVSIA_LUA_MAX_SECONDS", "45")),
+            ),
+        )
+        result["intelligence"] = intelligence.to_dict()
+        result["intelligence_report"] = intelligence.report_path
+        result["layer_count"] = len(intelligence.artifacts)
+        result["layer_graph_root"] = intelligence.root_id
+        result["analysis_status"] = intelligence.status
+    except Exception as exc:
+        result["intelligence_error"] = f"{type(exc).__name__}: {exc}"
+        result.setdefault("analysis_status", "SKIPPED")
 
     # Candidate fusion is an explicit validation layer: engine output is only
     # considered a recovery candidate until structural evidence is measured.
