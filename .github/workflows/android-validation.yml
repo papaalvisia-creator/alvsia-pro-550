@@ -99,6 +99,7 @@ jobs:
             make -C "$LUA53_DIR/src" generic
             test -x "$LUA53_DIR/src/luac"
             install -m 0755 "$LUA53_DIR/src/luac" "$RUNNER_TEMP/luac5.3"
+            echo "$RUNNER_TEMP" >> "$GITHUB_PATH"
             export PATH="$RUNNER_TEMP:$PATH"
           fi
           command -v luac5.3 || command -v "$RUNNER_TEMP/luac5.3"
