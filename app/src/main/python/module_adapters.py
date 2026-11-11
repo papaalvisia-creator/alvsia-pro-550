@@ -19,30 +19,50 @@ class AdapterSpec:
     runner: Callable[..., dict]
 
 
-def _lua_decompile(input_path: str | Path, output_path: str | Path) -> dict:
-    from lua_engine.detector import detect_lua
-    from lua_engine.orchestrator import run_decompiler_pipeline
+def _lua_decompile(
+    input_path: str | Path,
+    output_path: str | Path,
+    jars_dir: str | Path | None = None,
+) -> dict:
+    """Use the complete Smart Lua recovery path for the production adapter.
+
+    The old adapter called run_decompiler_pipeline directly, bypassing the
+    protected-pattern preflight, recursive layer analysis, and Smart Lua
+    recovery stages exposed by alvsia_features.run_lua_smart.
+    """
+    import shutil
+
     src = Path(input_path)
     dst = Path(output_path)
     if not src.is_file():
         return {"ok": False, "module": "lua", "operation": "decompile",
                 "error": "input file not found"}
-    info = detect_lua(src)
-    if info.kind == "unknown":
-        return {"ok": False, "module": "lua", "operation": "decompile",
-                "error": "unsupported or unrecognized Lua/Luau input",
-                "format": info.format}
     dst.parent.mkdir(parents=True, exist_ok=True)
     try:
-        result = run_decompiler_pipeline(src, dst, info)
+        from alvsia_features import run_lua_smart
+        result = run_lua_smart(src, dst.parent, jars_dir=str(jars_dir) if jars_dir else None)
     except Exception as exc:
         return {"ok": False, "module": "lua", "operation": "decompile",
                 "error": f"{type(exc).__name__}: {exc}"}
-    if isinstance(result, dict):
-        result = dict(result)
-        result.setdefault("ok", False)
-    else:
+    if not isinstance(result, dict):
         result = {"ok": bool(result)}
+    else:
+        result = dict(result)
+
+    # Smart Lua may choose a descriptive artifact filename. Promote only an
+    # existing, non-empty Lua source artifact; never fabricate output from a
+    # diagnostic/partial report.
+    reported = result.get("out")
+    if result.get("ok") and reported:
+        candidate = Path(str(reported))
+        if candidate.is_file() and candidate.stat().st_size > 0 and candidate.suffix.lower() == ".lua":
+            if candidate.resolve() != dst.resolve():
+                shutil.copy2(candidate, dst)
+            result["out"] = str(dst)
+            result["output_bytes"] = dst.stat().st_size
+    if result.get("ok") and (not dst.is_file() or dst.stat().st_size == 0):
+        result["ok"] = False
+        result["error"] = "Smart Lua reported success without a non-empty Lua source artifact"
     result.update({"module": "lua", "operation": "decompile"})
     return result
 
