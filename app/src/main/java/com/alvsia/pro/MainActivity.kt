@@ -390,6 +390,7 @@ class MainActivity : ComponentActivity() {
                                     // native/Python work from low-memory/background reclaim.
                                     ToolExecutionService.begin(this@MainActivity)
                                     RuntimeExitDiagnostics.markToolStart(this@MainActivity, moduleId, sub.id)
+                                    RuntimeExitDiagnostics.checkpoint(this@MainActivity, moduleId, sub.id, taskId, "STAGING INPUT", null)
                                     TaskCenter.update(taskId, stage = "STAGING INPUT", logs = listOf("> preparing ${sub.id}..."))
                                     lifecycleScope.launch {
                                         try {
@@ -400,6 +401,14 @@ class MainActivity : ComponentActivity() {
                                                         stage = stage,
                                                         progress = progress,
                                                         clearProgress = progress == null
+                                                    )
+                                                    RuntimeExitDiagnostics.checkpoint(
+                                                        this@MainActivity,
+                                                        moduleId,
+                                                        sub.id,
+                                                        taskId,
+                                                        stage,
+                                                        progress
                                                     )
                                                 }, taskId = taskId) }
                                                 catch (t: Throwable) {
