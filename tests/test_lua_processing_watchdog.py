@@ -14,7 +14,7 @@ from lua_engine.vm_deobfuscator import _walk_lua53_protos
 from module_adapters import dispatch
 
 
-def test_local_scope_lookup_uses_active_last_declaration():
+def test_local_scope_lookup_uses_register_and_active_interval():
     proto = Proto()
     proto.numparams = 0
     proto.code = [0] * 10
@@ -28,9 +28,9 @@ def test_local_scope_lookup_uses_active_last_declaration():
 
     decompiler = Decompiler(proto)
     assert decompiler._local_at(2, 0) == "outer"
-    assert decompiler._local_at(3, 0) == "inner"
-    assert decompiler._local_at(4, 0) == "inner"
-    assert decompiler._local_at(5, 0) == "outer"
+    assert decompiler._local_at(3, 1) == "inner"
+    assert decompiler._local_at(4, 1) == "inner"
+    assert decompiler._local_at(5, 1) is None
     assert decompiler._local_at(10, 0) is None
 
 
