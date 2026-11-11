@@ -93,14 +93,14 @@ jobs:
             (
               cd "$LUA53_DIR"
               rm -f luac
-              cc -O2 -DLUA_USE_LINUX -I src -o luac \
-                src/luac.c src/lundump.c src/lopcodes.c src/lobject.c src/lstate.c \
-                src/lstring.c src/lgc.c src/lmem.c src/lzio.c src/lapi.c src/ltable.c \
-                src/ltm.c src/ldebug.c src/ldo.c src/lcode.c src/lparser.c src/llex.c \
-                src/lfunc.c src/lvm.c src/lzio.c src/ldump.c src/lctype.c src/ltablib.c \
-                src/lauxlib.c src/linit.c src/lbaselib.c src/ldblib.c src/loadlib.c \
-                src/lmathlib.c src/lcorolib.c src/loslib.c src/lstrlib.c src/lutf8lib.c \
-                src/ldump.c -lm -ldl
+              cc -O2 -DLUA_USE_LINUX -I . -o luac \
+                luac.c lundump.c lopcodes.c lobject.c lstate.c \
+                lstring.c lgc.c lmem.c lzio.c lapi.c ltable.c \
+                ltm.c ldebug.c ldo.c lcode.c lparser.c llex.c \
+                lfunc.c lvm.c lzio.c ldump.c lctype.c ltablib.c \
+                lauxlib.c linit.c lbaselib.c ldblib.c loadlib.c \
+                lmathlib.c lcorolib.c loslib.c lstrlib.c lutf8lib.c \
+                ldump.c -lm -ldl
             )
             test -x "$LUA53_DIR/luac"
             install -m 0755 "$LUA53_DIR/luac" "$RUNNER_TEMP/luac5.3"
