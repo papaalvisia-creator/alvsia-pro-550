@@ -321,6 +321,8 @@ def stream_decompile_lua53(input_path: Path, out_path: Path) -> Tuple[bool, str]
         return True, note
     failures.append(note)
     del data
+    if note.startswith("lua53_total_budget_exceeded"):
+        return False, note
     if __import__("time").monotonic() >= deadline:
         return False, "all Lua 5.3 candidates stopped: total parser time budget exceeded"
 
