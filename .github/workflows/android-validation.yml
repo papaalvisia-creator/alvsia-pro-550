@@ -3,7 +3,7 @@ on:
   push:
     branches: [ main, feat/lua-intelligence-orchestrator-20261107, fix/chaquopy-python312-ci, fix/lua-normalization-fallback-20261103, release/5.5.2-19-module-redesign ]
   pull_request:
-    branches: [ main ]
+    branches: [ main, feat/full-reference-source-registry-20261106 ]
   workflow_dispatch:
 concurrency:
   group: android-validation-${{ github.ref }}
