@@ -343,7 +343,7 @@ def stream_decompile_lua53(input_path: Path, out_path: Path) -> Tuple[bool, str]
                     gc.collect()
                     failures.append(f"{variant}: total parser time budget exceeded during normalization")
                     break
-                if converted == b"" or not converted.startswith(bytes((0x1B,)) + b"Lua\\x53"):
+                if converted == b"" or not converted.startswith(bytes((0x1B,)) + b"Lua" + bytes((0x53,))):
                     failures.append(f"{variant}: normalizer produced no Lua 5.3 candidate")
                     del converted
                     gc.collect()
