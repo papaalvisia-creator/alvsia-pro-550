@@ -9,6 +9,7 @@ import javax.crypto.KeyGenerator
 import javax.crypto.Mac
 import javax.crypto.SecretKey
 import java.security.MessageDigest
+import java.security.SecureRandom
 
 /**
  * ALVISIA PRO 5.5.0 — SessionGate HARDENED v2
@@ -37,6 +38,7 @@ object SessionGate {
     @Volatile private var license   = ""
     @Volatile private var grantedAt = 0L
     @Volatile private var strikes   = 0
+    @Volatile private var cachedMacKey: SecretKey? = null
 
     val sessionOk: Boolean
         get() = synchronized(this) {
@@ -79,10 +81,11 @@ object SessionGate {
 
     // ── Token HMAC ────────────────────────────────────────────────────────
     private fun sessionMacKey(): SecretKey? {
+        cachedMacKey?.let { return it }
         return try {
             val ks = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
             val existing = ks.getKey(HMAC_ALIAS, null) as? SecretKey
-            if (existing != null) return existing
+            if (existing != null) { cachedMacKey = existing; return existing }
 
             fun generate(strongBox: Boolean): SecretKey {
                 val generator = KeyGenerator.getInstance(
@@ -102,12 +105,27 @@ object SessionGate {
                 return generator.generateKey()
             }
 
-            if (Build.VERSION.SDK_INT >= 28) {
-                try { return generate(true) } catch (_: Throwable) { }
+            val generated = if (Build.VERSION.SDK_INT >= 28) {
+                try { generate(true) } catch (_: Throwable) { generate(false) }
+            } else {
+                generate(false)
             }
-            generate(false)
+            cachedMacKey = generated
+            generated
         } catch (_: Throwable) {
-            null
+            // Compatibility fallback: a fresh process-local key preserves the
+            // existing session semantics if a device exposes a broken Keystore.
+            // The fallback is never persisted and is not embedded in the APK.
+            try {
+                val bytes = ByteArray(32)
+                SecureRandom().nextBytes(bytes)
+                val generated = SecretKeySpec(bytes, KEY_ALGORITHM_HMAC_SHA256)
+                bytes.fill(0)
+                cachedMacKey = generated
+                generated
+            } catch (_: Throwable) {
+                null
+            }
         }
     }
 
