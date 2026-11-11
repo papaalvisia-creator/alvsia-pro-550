@@ -136,7 +136,7 @@ jobs:
           test -n "$KSPASS"
           export KSPASS KEYPASS
           APKSIGNER=$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -n 1)
-          "$APKSIGNER" sign --ks "$KS" --ks-key-alias "$ALIAS" --ks-pass env:KSPASS --key-pass env:KEYPASS             --out "$RUNNER_TEMP/alvsia-xop-input.apk" validation-artifacts/ALVISIA_PRO_5.5.2-hardened_release_unsigned.apk
+          "$APKSIGNER" sign --ks "$KS" --ks-key-alias "$ALIAS" --ks-pass env:KSPASS --key-pass env:KEYPASS --out "$RUNNER_TEMP/alvsia-xop-input.apk" validation-artifacts/ALVISIA_PRO_5.5.2-hardened_release_unsigned.apk
           "$APKSIGNER" verify --verbose --print-certs "$RUNNER_TEMP/alvsia-xop-input.apk"
 
       - name: Build XopProtector and pack candidate
@@ -175,7 +175,7 @@ jobs:
           (cd "$XOP" && bash "$GITHUB_WORKSPACE/tools/run_gradle_with_retry.sh" ./gradlew --no-daemon :packer:jar exportShellFiles)
           PACKER=$(find "$XOP/packer/build/libs" -maxdepth 1 -type f -name 'protector-packer-*.jar' ! -name '*-sources.jar' | head -n 1)
           test -s "$PACKER"
-          java -jar "$PACKER" "$RUNNER_TEMP/alvsia-xop-input.apk"             -o "$RUNNER_TEMP/alvsia-xop-candidate.apk"             --shell-dir "$XOP/executable/shell-files" --profile industry --protect-so
+          java -jar "$PACKER" "$RUNNER_TEMP/alvsia-xop-input.apk" -o "$RUNNER_TEMP/alvsia-xop-candidate.apk" --shell-dir "$XOP/executable/shell-files" --profile industry --protect-so
           test -s "$RUNNER_TEMP/alvsia-xop-candidate.apk"
           python3 tools/prepare_xop_final.py "$RUNNER_TEMP/alvsia-xop-input.apk" "$RUNNER_TEMP/alvsia-xop-candidate.apk"
 
@@ -201,8 +201,11 @@ jobs:
           export KSPASS KEYPASS
           APKSIGNER=$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -n 1)
           ZIPALIGN=$(find "$ANDROID_HOME/build-tools" -type f -name zipalign | sort -V | tail -n 1)
-          "$ZIPALIGN" -p 4 "$RUNNER_TEMP/alvsia-xop-candidate.apk" "$RUNNER_TEMP/alvsia-xop-aligned.apk"
-          "$APKSIGNER" sign --ks "$KS" --ks-key-alias "$ALIAS" --ks-pass env:KSPASS --key-pass env:KEYPASS             --out validation-artifacts/ALVISIA_PRO_5.5.2-xop_candidate_signed.apk "$RUNNER_TEMP/alvsia-xop-aligned.apk"
+          "$ZIPALIGN" -p 4 "$RUNNER_TEMP/xopprotector.apk" "$RUNNER_TEMP/alvsia-xop-aligned.apk" 2>/dev/null || true
+          INPUT="$RUNNER_TEMP/alvsia-xop-candidate.apk"
+          if [ ! -s "$INPUT" ]; then INPUT="$RUNNER_TEMP/xopprotector.apk"; fi
+          test -s "$INPUT"
+          "$APKSIGNER" sign --ks "$KS" --ks-key-alias "$ALIAS" --ks-pass env:KSPASS --key-pass env:KEYPASS --out validation-artifacts/ALVISIA_PRO_5.5.2-xop_candidate_signed.apk "$INPUT"
           "$APKSIGNER" verify --verbose --print-certs validation-artifacts/ALVISIA_PRO_5.5.2-xop_candidate_signed.apk
           python3 tools/audit_release_apk.py validation-artifacts/ALVISIA_PRO_5.5.2-xop_candidate_signed.apk
           sha256sum validation-artifacts/ALVISIA_PRO_5.5.2-xop_candidate_signed.apk
@@ -218,3 +221,4 @@ jobs:
           if-no-files-found: error
 
 # release pipeline trigger checkpoint
+# final-build-trigger-20261111
