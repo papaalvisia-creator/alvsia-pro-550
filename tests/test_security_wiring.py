@@ -115,6 +115,7 @@ class SecurityWiringTests(unittest.TestCase):
         gate = read("app/src/main/java/com/alvsia/pro/sec/SessionGate.kt")
         self.assertIn("fun allowTools(ctx: Context)", gate)
         self.assertIn("runtimeHostile(ctx)", gate)
+        self.assertIn("RuntimeMappingGuard.signals(ctx)", gate)
         self.assertIn("DualVmGuard.inspect(ctx)", gate)
         self.assertIn("IntegrityBomb.isCompromised(ctx)", gate)
         self.assertIn("if (!sessionOk)", gate)
