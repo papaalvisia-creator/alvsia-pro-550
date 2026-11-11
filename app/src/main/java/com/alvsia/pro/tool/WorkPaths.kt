@@ -110,10 +110,11 @@ object WorkPaths {
     }
 
     fun ensureTree() {
+        // Create only the three stable roots. Module folders are created lazily
+        // by moduleIn/moduleWork/moduleOut when a tool actually needs them.
+        // Eagerly creating 57 empty folders on every app/tool start made the
+        // user's output workspace noisy and obscured real artifacts.
         dirIn(); dirWork(); dirOut()
-        for (id in 1..19) {
-            moduleIn(id); moduleWork(id); moduleOut(id)
-        }
     }
 
     fun readme(ctx: Context) {
@@ -127,9 +128,15 @@ object WorkPaths {
                 ====================================
                 Root: Download/ALVSIA/
 
-                  IN/<MODULE>/    optional drop zone for inputs
-                  WORK/<MODULE>/  temp / intermediate
-                  OUT/<MODULE>/   final results (always check here)
+                  IN/<MODULE>/    created only when needed
+                  WORK/<MODULE>/  created only when needed
+                  OUT/<MODULE>/   legacy results, created on demand
+
+                  TASKS/<TASK_ID>/IN/<MODULE>/    verified task input
+                  TASKS/<TASK_ID>/WORK/<MODULE>/  isolated task workspace
+                  TASKS/<TASK_ID>/OUT/<MODULE>/   final task output
+
+                Output Browser indexes both OUT/ and TASKS/*/OUT/.
 
                 Modules: PAK OBB LUA SCAN ASSET REPORT REBRAND SO FRIDA XOR DEC PAKD STR LINJ AUDIT LPROTECT ALVSIA_PRIVATE
 

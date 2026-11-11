@@ -1,7 +1,7 @@
 name: Android Security Validation
 on:
   push:
-    branches: [ main, feat/combined-smart-lua-xop-release-20261110, feat/lua-intelligence-orchestrator-20261107, fix/chaquopy-python312-ci, fix/lua-normalization-fallback-20261103, release/5.5.2-19-module-redesign ]
+    branches: [ main, fix/task-output-routing-20261111, feat/combined-smart-lua-xop-release-20261110, feat/lua-intelligence-orchestrator-20261107, fix/chaquopy-python312-ci, fix/lua-normalization-fallback-20261103, release/5.5.2-19-module-redesign ]
   pull_request:
     branches: [ main, feat/full-reference-source-registry-20261106 ]
   workflow_dispatch:
@@ -68,6 +68,7 @@ jobs:
           python3 tests/test_studio_catalog.py
           python3 tests/test_process_page.py
           python3 tests/test_workspace_handoff.py
+          python3 -m unittest tests.test_live_workspace_and_file_limits
           python3 -m unittest tests.test_private_tool_engine
           python3 -m unittest discover -s tests -p 'test_metadata_v39.py'
           python3 -m unittest discover -s tests -p 'test_foreign_branding.py'
