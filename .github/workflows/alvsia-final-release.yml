@@ -220,16 +220,16 @@ jobs:
           test -s "$INPUT"
           "$APKSIGNER" sign --ks "$KS" --ks-key-alias "$ALIAS" --ks-pass env:KSPASS --key-pass env:KEYPASS --out validation-artifacts/ALVSIA_SMART_PREMIUM_6.0.0-xop-signed.apk "$INPUT"
           "$APKSIGNER" verify --verbose --print-certs validation-artifacts/ALVSIA_SMART_PREMIUM_6.0.0-xop-signed.apk
-          python3 tools/audit_release_apk.py validation-artifacts/ALVISIA_PRO_5.5.2-xop_candidate_signed.apk
-          sha256sum validation-artifacts/ALVISIA_PRO_5.5.2-xop_candidate_signed.apk
+          python3 tools/audit_release_apk.py validation-artifacts/ALVSIA_SMART_PREMIUM_6.0.0-xop-signed.apk
+          sha256sum validation-artifacts/ALVSIA_SMART_PREMIUM_6.0.0-xop-signed.apk
 
       - name: Upload final APK and audit
         uses: actions/upload-artifact@v4
         with:
           name: ALVSIA_SMART_PREMIUM_6.0.0-final-xop-signed
           path: |
-            validation-artifacts/ALVISIA_PRO_5.5.2-hardened_release_unsigned.apk
-            validation-artifacts/ALVISIA_PRO_5.5.2-xop_candidate_signed.apk
+            validation-artifacts/ALVSIA_SMART_PREMIUM_6.0.0_unsigned.apk
+            validation-artifacts/ALVSIA_SMART_PREMIUM_6.0.0-xop-signed.apk
             release_security_audit.txt
           if-no-files-found: error
 
