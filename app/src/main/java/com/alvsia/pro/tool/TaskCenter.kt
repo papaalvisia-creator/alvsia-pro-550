@@ -63,8 +63,16 @@ object TaskCenter {
             // multi-GB staging stream producing thousands of main-thread posts.
             if (progress != null && logs == null && !clearProgress) {
                 val now = System.currentTimeMillis()
-                val previous = lastPostedProgressAt.put(id, now)
-                if (previous != null && now - previous < 120L) return
+                var shouldPost = false
+                lastPostedProgressAt.compute(id) { _, previous ->
+                    if (previous == null || now - previous >= 120L) {
+                        shouldPost = true
+                        now
+                    } else {
+                        previous
+                    }
+                }
+                if (!shouldPost) return
             }
             mainHandler.post {
                 update(id, stage, progress, logs, clearProgress)
