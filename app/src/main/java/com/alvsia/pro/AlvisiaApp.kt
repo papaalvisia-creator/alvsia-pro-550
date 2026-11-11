@@ -92,6 +92,20 @@ class AlvisiaApp : Application() {
                 } catch (_: Throwable) { /* must never throw */ }
             }
 
+            // Seven-layer fabric snapshot is an independent startup audit.
+            // It never blocks startup or login; hard evidence is reported to the
+            // existing threat channel while SessionGate remains the enforcement point.
+            try {
+                val snapshot = com.alvsia.pro.sec.SecurityFabric.evaluate(this)
+                if (snapshot.hardReasons.isNotEmpty()) {
+                    ThreatReport.emit(
+                        this,
+                        "THREAT",
+                        ("security_fabric:" + snapshot.hardReasons.joinToString("|")).take(1200)
+                    )
+                }
+            } catch (_: Throwable) { /* fabric audit must never block startup */ }
+
             // 3) Chaquopy / Python platform start — must be off-thread and
             //    timeout-bounded so a stuck extraction cannot freeze the app.
             try {
