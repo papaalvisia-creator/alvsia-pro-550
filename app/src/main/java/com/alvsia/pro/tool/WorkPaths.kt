@@ -127,9 +127,15 @@ object WorkPaths {
                 ====================================
                 Root: Download/ALVSIA/
 
-                  IN/<MODULE>/    optional drop zone for inputs
-                  WORK/<MODULE>/  temp / intermediate
-                  OUT/<MODULE>/   final results (always check here)
+                  IN/<MODULE>/    legacy input drop zone
+                  WORK/<MODULE>/  compatibility config/work area
+                  OUT/<MODULE>/   legacy output results
+
+                  TASKS/<TASK_ID>/IN/<MODULE>/    verified task input
+                  TASKS/<TASK_ID>/WORK/<MODULE>/  isolated task workspace
+                  TASKS/<TASK_ID>/OUT/<MODULE>/   final task output
+
+                Output Browser indexes both OUT/ and TASKS/*/OUT/.
 
                 Modules: PAK OBB LUA SCAN ASSET REPORT REBRAND SO FRIDA XOR DEC PAKD STR LINJ AUDIT LPROTECT ALVSIA_PRIVATE
 
