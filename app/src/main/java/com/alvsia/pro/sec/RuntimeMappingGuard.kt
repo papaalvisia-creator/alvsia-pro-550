@@ -23,8 +23,7 @@ object RuntimeMappingGuard {
     )
 
     fun executableForeignMappings(ctx: Context): List<String> {
-        val app = ctx.applicationContext
-        val appData = runCatching { app.applicationInfo.dataDir.canonicalPath }.getOrNull().orEmpty()
+        ctx.applicationContext
         return try {
             File("/proc/self/maps").useLines { lines ->
                 lines.mapNotNull { line ->
@@ -34,10 +33,7 @@ object RuntimeMappingGuard {
                     if (name.isBlank() || name.startsWith("[") || name == "anon_inode:[vdso]") return@mapNotNull null
                     val normalized = name.lowercase()
                     val suspicious = suspiciousPrefixes.any { normalized.startsWith(it) }
-                    val appWritable = appData.isNotBlank() &&
-                        normalized.startsWith(appData.lowercase()) &&
-                        !normalized.contains("/lib/")
-                    if (suspicious || appWritable) name else null
+                    if (suspicious) name else null
                 }.distinct().take(16).toList()
             }
         } catch (_: Throwable) {
