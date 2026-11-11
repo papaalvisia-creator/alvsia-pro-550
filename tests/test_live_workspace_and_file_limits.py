@@ -24,6 +24,11 @@ class LiveWorkspaceTests(unittest.TestCase):
         self.assertIn('LiveTaskDock(', main)
         self.assertIn('onOpenTask = { live ->', main)
 
+    def test_file_provider_can_open_task_isolated_outputs(self):
+        paths = (ROOT / 'app/src/main/res/xml/file_paths.xml').read_text(encoding='utf-8')
+        self.assertIn('path="Download/ALVSIA/TASKS/"', paths)
+        self.assertIn('path="ALVSIA/TASKS/"', paths)
+
     def test_workspace_roots_do_not_precreate_57_empty_module_folders(self):
         paths = (ROOT / 'app/src/main/java/com/alvsia/pro/tool/WorkPaths.kt').read_text(encoding='utf-8')
         ensure = paths.split('fun ensureTree()', 1)[1].split('fun readme(', 1)[0]
