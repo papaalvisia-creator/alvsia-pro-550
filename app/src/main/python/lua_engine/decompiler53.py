@@ -11,6 +11,7 @@ import io
 import re
 import math
 import time
+import heapq
 from bisect import bisect_right
 from pathlib import Path
 from typing import List, Optional, Any, Dict, Tuple
@@ -399,6 +400,7 @@ class Decompiler:
         self._local_segments = {}
         for reg_id, events in events_by_reg.items():
             active = {}
+            priority_heap = []
             positions = sorted(events)
             starts, ends, names = [], [], []
             for index, position in enumerate(positions[:-1]):
@@ -409,11 +411,14 @@ class Decompiler:
                     active.pop(order, None)
                 for order, name in beginning:
                     active[order] = name
+                    heapq.heappush(priority_heap, -order)
+                while priority_heap and (-priority_heap[0]) not in active:
+                    heapq.heappop(priority_heap)
                 next_position = positions[index + 1]
-                if not active or next_position <= position:
+                if not priority_heap or next_position <= position:
                     continue
                 # Preserve the old list-scan rule: the last active local wins.
-                name = active[max(active)]
+                name = active[-priority_heap[0]]
                 if names and names[-1] == name and ends[-1] == position:
                     ends[-1] = next_position
                 else:
