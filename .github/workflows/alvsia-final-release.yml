@@ -68,10 +68,11 @@ jobs:
           LUA53_DIR="$RUNNER_TEMP/lua-5.3"
           if ! command -v luac5.3 >/dev/null 2>&1; then
             git clone --depth 1 --branch v5.3.6 https://github.com/lua/lua.git "$LUA53_DIR"
-            make -C "$LUA53_DIR" -f Makefile install INSTALL_TOP="$RUNNER_TEMP/lua-5.3-install" >/dev/null 2>&1 || make -C "$LUA53_DIR" -f Makefile generic
-            install -m 0755 "$LUA53_DIR/src/luac" "$RUNNER_TEMP/luac5.3"
+            test -f "$LUA53_DIR/makefile"
+            make -C "$LUA53_DIR" -f makefile generic
+            test -x "$LUA53_DIR/luac"
+            install -m 0755 "$LUA53_DIR/luac" "$RUNNER_TEMP/luac5.3"
             export PATH="$RUNNER_TEMP:$PATH"
-            ln -sf "$RUNNER_TEMP/luac5.3" "$RUNNER_TEMP/luac5.3"
           fi
           command -v luac5.3 || command -v "$RUNNER_TEMP/luac5.3"
           python3 tools/security_release_check.py
