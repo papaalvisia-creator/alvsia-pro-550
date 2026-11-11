@@ -149,7 +149,7 @@ jobs:
           test -n "$KSPASS"
           export KSPASS KEYPASS
           APKSIGNER=$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -n 1)
-          "$APKSIGNER" sign --ks "$KS" --ks-key-alias "$ALIAS" --ks-pass env:KSPASS --key-pass env:KEYPASS --out "$RUNNER_TEMP/alvsia-xop-input.apk" validation-artifacts/ALVISIA_PRO_5.5.2-hardened_release_unsigned.apk
+          "$APKSIGNER" sign --ks "$KS" --ks-key-alias "$ALIAS" --ks-pass env:KSPASS --key-pass env:KEYPASS --out "$RUNNER_TEMP/alvsia-xop-input.apk" validation-artifacts/ALVSIA_SMART_PREMIUM_6.0.0_unsigned.apk
           "$APKSIGNER" verify --verbose --print-certs "$RUNNER_TEMP/alvsia-xop-input.apk"
 
       - name: Build XopProtector and pack candidate
@@ -219,7 +219,7 @@ jobs:
           if [ ! -s "$INPUT" ]; then INPUT="$RUNNER_TEMP/xopprotector.apk"; fi
           test -s "$INPUT"
           "$APKSIGNER" sign --ks "$KS" --ks-key-alias "$ALIAS" --ks-pass env:KSPASS --key-pass env:KEYPASS --out validation-artifacts/ALVSIA_SMART_PREMIUM_6.0.0-xop-signed.apk "$INPUT"
-          "$APKSIGNER" verify --verbose --print-certs validation-artifacts/ALVISIA_PRO_5.5.2-xop_candidate_signed.apk
+          "$APKSIGNER" verify --verbose --print-certs validation-artifacts/ALVSIA_SMART_PREMIUM_6.0.0-xop-signed.apk
           python3 tools/audit_release_apk.py validation-artifacts/ALVISIA_PRO_5.5.2-xop_candidate_signed.apk
           sha256sum validation-artifacts/ALVISIA_PRO_5.5.2-xop_candidate_signed.apk
 
