@@ -150,3 +150,38 @@ def test_large_debug_local_table_build_and_lookup_is_bounded():
         assert decompiler._local_at(15000, 4999) == "local_4999"
     elapsed = time.perf_counter() - started
     assert elapsed < 3.0, f"large local table took {elapsed:.2f}s"
+
+def test_smart_decompile_runs_before_optional_intelligence_and_survives_analysis_error(tmp_path, monkeypatch):
+    import alvsia_features
+
+    source = tmp_path / "input.luac"
+    source.write_bytes(b"fixture")
+    marker = tmp_path / "decompiler_finished"
+    calls = []
+
+    def fake_legacy(input_path, out_dir, jars_dir=None):
+        marker.write_text("validated output was produced")
+        return {
+            "ok": True,
+            "final_status": "SUCCESS",
+            "selected_engine": "fixture_engine",
+            "out": None,
+        }
+
+    def failing_intelligence(*args, **kwargs):
+        assert marker.is_file(), "intelligence scan started before decompile completed"
+        calls.append("intelligence")
+        raise RuntimeError("optional analysis failure")
+
+    monkeypatch.setattr(alvsia_features, "_run_lua_smart_legacy", fake_legacy)
+    monkeypatch.setattr(alvsia_features, "analyze_file", failing_intelligence)
+
+    result = alvsia_features.run_lua_smart(source, tmp_path / "out")
+
+    assert marker.is_file()
+    assert calls == ["intelligence"]
+    assert result["ok"] is True
+    assert result["final_status"] == "SUCCESS"
+    assert result["selected_engine"] == "fixture_engine"
+    assert "intelligence_error" in result
+    assert result["analysis_status"] == "SKIPPED"
