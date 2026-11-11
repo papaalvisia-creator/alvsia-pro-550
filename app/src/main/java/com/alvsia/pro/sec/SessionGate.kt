@@ -1,8 +1,13 @@
 package com.alvsia.pro.sec
 
 import android.content.Context
+import android.os.Build
+import android.security.keystore.KeyGenParameterSpec
+import android.security.keystore.KeyProperties
+import java.security.KeyStore
+import javax.crypto.KeyGenerator
 import javax.crypto.Mac
-import javax.crypto.spec.SecretKeySpec
+import javax.crypto.SecretKey
 import java.security.MessageDigest
 
 /**
@@ -21,8 +26,9 @@ object SessionGate {
     private const val SESSION_TTL = 8L * 60L * 60L * 1000L       // 8 hours — UX Sprint 1: was 30 min, caused auth rejection mid-operation
     private const val MAX_STRIKES = 3
     private const val KEY_ALGORITHM_HMAC_SHA256 = "HmacSHA256"
-    // Pepper: hardcoded — not a secret key, just prevents trivial token replay
-    private const val HMAC_PEPPER = "ALVSIA_SESSION_PEPPER_V2"
+    // Per-install HMAC key. The key material stays inside Android Keystore and is
+    // never represented as plaintext in the APK or Python runtime.
+    private const val HMAC_ALIAS = "alvsia.session.hmac.v3"
 
     @Volatile private var _appCtx: Context? = null
     @Volatile private var granted   = false
@@ -72,11 +78,45 @@ object SessionGate {
     }
 
     // ── Token HMAC ────────────────────────────────────────────────────────
+    private fun sessionMacKey(): SecretKey? {
+        return try {
+            val ks = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
+            val existing = ks.getKey(HMAC_ALIAS, null) as? SecretKey
+            if (existing != null) return existing
+
+            fun generate(strongBox: Boolean): SecretKey {
+                val generator = KeyGenerator.getInstance(
+                    KeyProperties.KEY_ALGORITHM_HMAC_SHA256,
+                    "AndroidKeyStore"
+                )
+                val builder = KeyGenParameterSpec.Builder(
+                    HMAC_ALIAS,
+                    KeyProperties.PURPOSE_SIGN or KeyProperties.PURPOSE_VERIFY
+                )
+                    .setKeySize(256)
+                    .setDigests(KeyProperties.DIGEST_SHA256)
+                if (Build.VERSION.SDK_INT >= 28 && strongBox) {
+                    builder.setIsStrongBoxBacked(true)
+                }
+                generator.init(builder.build())
+                return generator.generateKey()
+            }
+
+            if (Build.VERSION.SDK_INT >= 28) {
+                try { return generate(true) } catch (_: Throwable) { }
+            }
+            generate(false)
+        } catch (_: Throwable) {
+            null
+        }
+    }
+
     private fun computeMac(tok: String): String {
         return try {
+            val key = sessionMacKey() ?: return ""
             val mac = Mac.getInstance(KEY_ALGORITHM_HMAC_SHA256)
-            mac.init(SecretKeySpec(HMAC_PEPPER.toByteArray(), KEY_ALGORITHM_HMAC_SHA256))
-            mac.doFinal(tok.toByteArray()).joinToString("") { "%02x".format(it) }
+            mac.init(key)
+            mac.doFinal(tok.toByteArray(Charsets.UTF_8)).joinToString("") { "%02x".format(it) }
         } catch (_: Exception) { "" }
     }
 
