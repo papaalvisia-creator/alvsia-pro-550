@@ -6,6 +6,7 @@ import android.content.Context
 import java.io.File
 import java.io.FileOutputStream
 import java.security.MessageDigest
+import java.util.concurrent.locks.ReentrantLock
 
 /**
  * Safe reflection-based runner for Chaquopy Python bridge.
@@ -16,6 +17,10 @@ import java.security.MessageDigest
 object PythonBridgeRunner {
     @Volatile private var startupError: String = "startup not attempted"
     @Volatile private var appContext: Context? = null
+    // Chaquopy hosts one process-wide Python runtime. Keep bridge calls single-flight
+    // so concurrent tool jobs remain independent at the task layer without racing the
+    // same interpreter/native engines and multiplying peak memory usage.
+    private val bridgeLock = ReentrantLock()
 
     fun startupDiagnostic(): String = startupError
 
@@ -79,6 +84,12 @@ object PythonBridgeRunner {
         }
     }
 
+    /** Explicitly release Chaquopy native Python references before GC/finalization. */
+    private fun closePyObjectQuietly(value: Any?) {
+        if (value == null) return
+        try { value.javaClass.getMethod("close").invoke(value) }
+        catch (_: Throwable) { /* cleanup must never fail the tool */ }
+    }
     private fun sha256Hex(value: String): String =
         MessageDigest.getInstance("SHA-256")
             .digest(value.toByteArray(Charsets.UTF_8))
@@ -102,14 +113,19 @@ object PythonBridgeRunner {
                 coreResult is Boolean -> coreResult
                 else -> coreResult?.toString()?.trim()?.equals("True", ignoreCase = true) ?: false
             }
+            closePyObjectQuietly(coreResult)
+            closePyObjectQuietly(core)
             if (!coreOk) return false
             val ultimate = getModule.invoke(py, "alvsia_ultimate") ?: return false
             val decoded = callAttr.invoke(ultimate, "_alv_install_operation_grant_token",
                 arrayOf<Any?>(grantToken, expectedOperation))
-            when {
+            val decodedOk = when {
                 decoded is Boolean -> decoded
                 else -> decoded?.toString()?.trim()?.equals("True", ignoreCase = true) ?: false
             }
+            closePyObjectQuietly(decoded)
+            closePyObjectQuietly(ultimate)
+            decodedOk
         } catch (_: Throwable) { false }
     }
 
@@ -121,11 +137,31 @@ object PythonBridgeRunner {
             val core = pyClass.getMethod("getModule", String::class.java).invoke(py, "alvsia_core") ?: return ""
             val pyObjectCls = Class.forName("com.chaquo.python.PyObject")
             val callAttr = pyObjectCls.getMethod("callAttr", String::class.java, Array<Any?>::class.java)
-            callAttr.invoke(core, "_alvsia_core_active_proof_status", emptyArray<Any?>())?.toString() ?: ""
+            val result = callAttr.invoke(core, "_alvsia_core_active_proof_status", emptyArray<Any?>())
+            val status = result?.toString() ?: ""
+            closePyObjectQuietly(result)
+            closePyObjectQuietly(core)
+            status
         } catch (_: Throwable) { "" }
     }
 
     fun runBridge(
+        moduleId: Int,
+        subId: String,
+        inputPath: String,
+        extraName: String?,
+        workDirPath: String,
+        jarsDirPath: String
+    ): Pair<Boolean, List<String>> {
+        bridgeLock.lock()
+        return try {
+            runBridgeInternal(moduleId, subId, inputPath, extraName, workDirPath, jarsDirPath)
+        } finally {
+            bridgeLock.unlock()
+        }
+    }
+
+    private fun runBridgeInternal(
         moduleId: Int,
         subId: String,
         inputPath: String,
@@ -187,7 +223,9 @@ object PythonBridgeRunner {
                 val returnedValue = configure?.toString()?.take(80) ?: "null"
                 val pythonDiagnostic = try {
                     val diag = callAttr.invoke(bridge, "configure_diagnostic", emptyArray<Any?>())
-                    diag?.toString()?.take(180) ?: "diagnostic_unavailable"
+                    val text = diag?.toString()?.take(180) ?: "diagnostic_unavailable"
+                    closePyObjectQuietly(diag)
+                    text
                 } catch (diagError: Throwable) {
                     "diagnostic_call_failed:" + ((diagError.cause ?: diagError).javaClass.simpleName)
                 }
@@ -196,6 +234,36 @@ object PythonBridgeRunner {
                     "diagnostic: return_type=$returnedType; return_value=$returnedValue; chaquopy_started=$isStarted; token_shape=64_hex",
                     "Python configure stage: $pythonDiagnostic"
                 )
+            }
+            closePyObjectQuietly(configure)
+
+            // Register the bundled Android ARM64 CLI from nativeLibraryDir.
+            // Missing/incompatible binaries are non-fatal: Smart Lua retains its
+            // existing engines and reports their diagnostics normally.
+            try {
+                val nativeLibDir = appContext?.applicationInfo?.nativeLibraryDir
+                if (!nativeLibDir.isNullOrBlank()) {
+                    val nativeCli = File(nativeLibDir, "libunluac-cli.so")
+                    if (nativeCli.isFile && nativeCli.canExecute()) {
+                        val configured = callAttr.invoke(
+                            bridge,
+                            "configure_unluac_rs",
+                            arrayOf<Any?>(nativeCli.absolutePath)
+                        )
+                        closePyObjectQuietly(configured)
+                    }
+                    val luauCli = File(nativeLibDir, "libluau-decompiler-cli.so")
+                    if (luauCli.isFile && luauCli.canExecute()) {
+                        val configured = callAttr.invoke(
+                            bridge,
+                            "configure_luau_decompiler",
+                            arrayOf<Any?>(luauCli.absolutePath)
+                        )
+                        closePyObjectQuietly(configured)
+                    }
+                }
+            } catch (_: Throwable) {
+                // Optional engine only; do not block unrelated tools.
             }
             val coreModule = getModule.invoke(py, "alvsia_core")
                 ?: return false to listOf("X AUTH: core session-binding helper unavailable")
@@ -209,9 +277,13 @@ object PythonBridgeRunner {
                 identityResult is Boolean -> identityResult
                 else -> identityResult.toString().trim().equals("True", ignoreCase = true)
             }
+            closePyObjectQuietly(identityResult)
             if (!identityOk) {
+                closePyObjectQuietly(coreModule)
+                closePyObjectQuietly(bridge)
                 return false to listOf("X AUTH: trusted device/session identity could not be installed")
             }
+            closePyObjectQuietly(coreModule)
 
             // Protected operations require a panel-signed, short-lived RSA grant.
             // Fail closed if the endpoint is missing, the session is invalid, or the
@@ -233,6 +305,7 @@ object PythonBridgeRunner {
                 arrayOf<Any?>(moduleId, subId, inputPath, extraName ?: "", workDirPath, resolvedJarsDir)
             )
             val log = rawResult?.toString().orEmpty()
+            closePyObjectQuietly(rawResult)
             val lines = log.split("\n").filter { it.isNotBlank() }.toMutableList()
             if (stagedUnluacJar != null) lines.add(0, "OK bundled Unluac available: $stagedUnluacJar")
             // Many Python handlers return a structured dict rendered as text rather
@@ -251,6 +324,7 @@ object PythonBridgeRunner {
                 it.startsWith("OK ") || it.startsWith("OUT ") || it.startsWith("> ")
             }
             val bridgeFailed = (explicitFalse && !explicitTrue) || hasErrorLine || (!explicitTrue && !hasSuccessLine)
+            closePyObjectQuietly(bridge)
             return !bridgeFailed to lines
         } catch (e: Throwable) {
             return false to listOf("... bridge error: ${e.message ?: e.javaClass.simpleName}")
@@ -269,7 +343,10 @@ object PythonBridgeRunner {
             val callAttr = pyObjectCls.getMethod("callAttr", String::class.java, Array<Any?>::class.java)
             val getObj = pyObjectCls.getMethod("get", Any::class.java)
             val environ = getObj.invoke(osMod, "environ") ?: return
-            callAttr.invoke(environ, "__setitem__", arrayOf<Any?>(key, value))
+            val result = callAttr.invoke(environ, "__setitem__", arrayOf<Any?>(key, value))
+            closePyObjectQuietly(result)
+            closePyObjectQuietly(environ)
+            closePyObjectQuietly(osMod)
         } catch (_: Throwable) { }
     }
 
@@ -285,7 +362,10 @@ object PythonBridgeRunner {
             val callAttr = pyObjectCls.getMethod("callAttr", String::class.java, Array<Any?>::class.java)
             val getObj = pyObjectCls.getMethod("get", Any::class.java)
             val environ = getObj.invoke(osMod, "environ") ?: return
-            callAttr.invoke(environ, "pop", arrayOf<Any?>(key, null))
+            val result = callAttr.invoke(environ, "pop", arrayOf<Any?>(key, null))
+            closePyObjectQuietly(result)
+            closePyObjectQuietly(environ)
+            closePyObjectQuietly(osMod)
         } catch (_: Throwable) { }
     }
 

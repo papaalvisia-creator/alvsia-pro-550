@@ -49,6 +49,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.alvsia.pro.media.PulseAudio
@@ -60,6 +61,24 @@ import com.alvsia.pro.ui.theme.AlvisiaSilver
 import com.alvsia.pro.panel.LiveMessage
 
 data class ToolItem(val id: Int, val title: String, val desc: String)
+
+@Composable
+private fun DigitalLiveClock() {
+    var nowText by remember { mutableStateOf("") }
+    LaunchedEffect(Unit) {
+        val fmt = SimpleDateFormat("HH:mm:ss", Locale.US)
+        while (true) {
+            nowText = fmt.format(java.util.Date())
+            delay(1000L)
+        }
+    }
+    Column(horizontalAlignment = Alignment.End) {
+        Text(nowText, color = Color.White, fontFamily = FontFamily.Monospace,
+            fontWeight = FontWeight.Black, fontSize = 18.sp, letterSpacing = 1.5.sp)
+        Text("● LIVE", color = Color(0xFF63E6A6), fontSize = 8.sp,
+            fontWeight = FontWeight.Black, letterSpacing = 1.2.sp)
+    }
+}
 
 private val chipColors = listOf(
     listOf(Color(0xFF18212A), Color(0xFF26352F)),
@@ -79,6 +98,8 @@ fun HomeScreen(
     messages: List<LiveMessage> = emptyList(),
     onMessageRead: (LiveMessage) -> Unit = {},
     onProfile: () -> Unit,
+    onWorkspace: () -> Unit,
+    onStudio: (StudioItem) -> Unit,
     onTool: (ToolItem) -> Unit
 ) {
     val ctx = LocalContext.current
@@ -161,6 +182,8 @@ fun HomeScreen(
                     Text("PRO // SECURITY WORKSPACE", color = Color.White, fontWeight = FontWeight.Black, fontSize = 18.sp)
                     Text("19 integrated modules  ·  ARM64", color = AlvisiaSilver.copy(alpha = 0.62f), fontSize = 10.sp)
                 }
+                DigitalLiveClock()
+                Spacer(Modifier.width(12.dp))
                 Box(
                     Modifier.clip(CircleShape).background(Brush.linearGradient(listOf(AlvisiaBlue, AlvisiaCyan)))
                         .border(1.dp, Color.White.copy(alpha = 0.25f), CircleShape)
@@ -179,7 +202,7 @@ fun HomeScreen(
                 Column(Modifier.weight(1f)) {
                     Text("LICENSE STATUS", color = AlvisiaCyan, fontWeight = FontWeight.Bold, fontSize = 9.sp, letterSpacing = 1.5.sp)
                     Text(product.ifBlank { "PREMIUM ACCESS" }, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 15.sp)
-                    Text("EXP  $countdownText", color = if (countdownText == "EXPIRED") AlvisiaRed else AlvisiaSilver.copy(alpha = 0.72f), fontSize = 10.sp)
+                    Text("EXP  $countdownText", color = if (countdownText == "EXPIRED") AlvisiaRed else AlvisiaSilver.copy(alpha = 0.72f), fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold, fontSize = 10.sp, letterSpacing = 0.5.sp)
                     if (!status.isNullOrBlank()) Text(status, color = Color(0xFF63E6A6), fontSize = 10.sp, fontWeight = FontWeight.SemiBold)
                 }
                 Column(horizontalAlignment = Alignment.End) {
@@ -247,7 +270,7 @@ fun HomeScreen(
                 QuickAction("VM Deobf", AlvisiaBlue) { onTool(ToolItem(5, "LUA Tools", "VM Deobfuscate")) }
                 QuickAction("Strings", AlvisiaBlue) { onTool(ToolItem(6, "File Scan", "String scan")) }
                 QuickAction("Rebrand", AlvisiaBlue) { onTool(ToolItem(9, "Rebrand", "Auto")) }
-                QuickAction("Workspace", AlvisiaBlue) { onTool(ToolItem(7, "Workspace", "Clear")) }
+                QuickAction("Outputs", AlvisiaBlue, onWorkspace)
                 QuickAction("Protect", AlvisiaBlue) { onTool(ToolItem(18, "Lua Protector", "VM Protect")) }
             }
             Spacer(Modifier.height(6.dp))
@@ -275,25 +298,72 @@ fun HomeScreen(
                 textStyle = androidx.compose.ui.text.TextStyle(fontSize = 13.sp)
             )
 
-            Text("TOOL ARSENAL  /  ${filteredTools.size} MODULES", color = AlvisiaCyan.copy(alpha = 0.9f), fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.2.sp)
+            Text(
+                if (searchQuery.isBlank()) "SEVEN STUDIOS  /  19 MODULES"
+                else "SEARCH RESULTS  /  ${filteredTools.size} MODULES",
+                color = AlvisiaCyan.copy(alpha = 0.9f),
+                fontSize = 10.sp,
+                fontWeight = FontWeight.Bold,
+                letterSpacing = 1.2.sp
+            )
             Spacer(Modifier.height(8.dp))
-            LazyVerticalGrid(
-                columns = GridCells.Fixed(3),
-                contentPadding = PaddingValues(2.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp),
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
-                modifier = Modifier.fillMaxSize()
-            ) {
-                items(filteredTools, key = { it.id }) { tool ->
-                    val colors = chipColors[(tool.id - 1) % chipColors.size]
-                    NeonModuleChip(
-                        id = tool.id,
-                        title = tool.title,
-                        colors = colors,
-                        onClick = { onTool(tool) }
-                    )
+            if (searchQuery.isBlank()) {
+                LazyVerticalGrid(
+                    columns = GridCells.Fixed(2),
+                    contentPadding = PaddingValues(2.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    modifier = Modifier.fillMaxSize()
+                ) {
+                    items(StudioCatalog.all, key = { it.id }) { studio ->
+                        StudioChip(studio = studio, onClick = { onStudio(studio) })
+                    }
+                }
+            } else {
+                LazyVerticalGrid(
+                    columns = GridCells.Fixed(2),
+                    contentPadding = PaddingValues(2.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    modifier = Modifier.fillMaxSize()
+                ) {
+                    items(filteredTools, key = { it.id }) { tool ->
+                        val colors = chipColors[(tool.id - 1) % chipColors.size]
+                        NeonModuleChip(
+                            id = tool.id,
+                            title = tool.title,
+                            colors = colors,
+                            onClick = { onTool(tool) }
+                        )
+                    }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun StudioChip(
+    studio: StudioItem,
+    onClick: () -> Unit
+) {
+    Box(
+        Modifier
+            .height(118.dp)
+            .fillMaxWidth()
+            .shadow(10.dp, RoundedCornerShape(16.dp), ambientColor = AlvisiaBlue.copy(alpha = 0.35f), spotColor = AlvisiaCyan)
+            .clip(RoundedCornerShape(16.dp))
+            .background(Brush.linearGradient(listOf(Color(0xFF14283B), Color(0xFF1B2B31))))
+            .border(1.dp, AlvisiaCyan.copy(alpha = 0.24f), RoundedCornerShape(16.dp))
+            .clickable(onClick = onClick)
+            .padding(11.dp)
+    ) {
+        Column {
+            Text(studio.icon, fontSize = 22.sp)
+            Spacer(Modifier.height(4.dp))
+            Text(studio.title, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+            Text("${studio.moduleIds.size} MODULES", color = AlvisiaCyan, fontWeight = FontWeight.Bold, fontSize = 9.sp)
+            Text(studio.description, color = AlvisiaSilver.copy(alpha = 0.62f), fontSize = 9.sp, maxLines = 2, lineHeight = 11.sp)
         }
     }
 }

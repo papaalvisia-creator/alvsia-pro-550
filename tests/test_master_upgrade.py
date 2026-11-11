@@ -115,19 +115,19 @@ class TestS2OtpRemoval(unittest.TestCase):
                          "PanelClient.toolTicket must be removed (no OTP tool ticket)")
 
     def test_fetchCore_has_no_ticket_param(self):
-        # fetchCore signature must not carry a ticket parameter
-        m = re.search(r"fun fetchCore\(([^)]*)\)", PANEL_CLIENT)
-        self.assertIsNotNone(m, "fetchCore must exist")
-        self.assertNotIn("ticket", m.group(1),
-                         "fetchCore must not have a 'ticket' parameter")
+        # The legacy CoreBundle fetchCore path is gone; the Unaux panel issues
+        # short-lived JWT grants instead of a ticketed core download.
+        self.assertNotIn("fun fetchCore(", PANEL_CLIENT)
+        self.assertIn("requestOperationGrant(", PANEL_CLIENT)
 
     def test_main_activity_no_otp_branch(self):
         self.assertNotIn("\"otp\"", MAIN_ACTIVITY,
                          "MainActivity must not have an 'otp' screen branch")
         self.assertNotIn("OtpScreen", MAIN_ACTIVITY,
                          "MainActivity must not reference OtpScreen")
-        self.assertIn("panel.fetchCore(license, hwid)", MAIN_ACTIVITY,
-                       "MainActivity must call fetchCore without a third ticket arg")
+        self.assertNotIn("fetchCore(", MAIN_ACTIVITY,
+                         "MainActivity must not fetch a legacy CoreBundle")
+        self.assertIn("panel.login(key, hwid)", MAIN_ACTIVITY)
 
     def test_python_no_otp_references(self):
         for fname in ("alvsia_bridge.py", "alvsia_bridge_impl.py", "alvsia_core.py"):
@@ -202,8 +202,10 @@ class TestS4LuaLargeFile(unittest.TestCase):
         self.assertIn("validate_lua_source", STREAMING_DEC)
 
     def test_bridge_impl_routes_large_lua_to_streaming(self):
+        # After an ART failure every Lua input is routed to the streaming
+        # decompiler (not only files above a fixed size threshold).
         self.assertIn("decompile_large", BRIDGE_IMPL)
-        self.assertIn("8 * 1024 * 1024", BRIDGE_IMPL)
+        self.assertIn("streaming_fallback", BRIDGE_IMPL)
 
     def test_tool_engine_falls_through_to_python_for_large_lua(self):
         # ToolEngine must attempt Python fallback after ART failure
@@ -312,7 +314,7 @@ class TestS7SecurityPreserved(unittest.TestCase):
 
     def test_tls_pinning_in_vault(self):
         self.assertIn("CertificatePinner", VAULT)
-        self.assertIn("alvsiapro.cc.cd", VAULT)
+        self.assertIn("alvsiapanel.unaux.com", VAULT)
         self.assertIn("sha256/", VAULT)
 
     def test_integrity_bomb_uses_cert(self):
@@ -326,15 +328,11 @@ class TestS7SecurityPreserved(unittest.TestCase):
 
     def test_network_security_config_keeps_pin(self):
         nsc = read(APP / "src" / "main" / "res" / "xml" / "network_security_config.xml")
-        self.assertIn("alvsiapro.cc.cd", nsc)
-        # Pin SPKI aktif (leaf) + backup intermediate/root. Update bersamaan
-        # dengan Vault.kt & pinned_http.py saat Cloudflare memperbarui leaf
-        # (cek ulang sebelum 16 Jan 2027). Pin lama 5xvRl/... sudah
-        # kedaluwarsa (sertifikat pra-renewal 18 Okt 2026) dan dihapus.
-        self.assertIn("9SAlPOYX5EuzgKf+w3vxjzS0qgl1WJOPVEQeGO5Knjo=", nsc)
-        self.assertIn("kIdp6NNEd8wsugYyyIYFsi1ylMCED3hZbSR8ZFsa/A4=", nsc)
-        self.assertIn("mEflZT5enoR1FuXLgYYGqnVEoZvmf9c2bVBpiOjYQ0c=", nsc)
-        self.assertIn('expiration="2027-01-16"', nsc)
+        # Active panel only: alvsiapanel.unaux.com (legacy alvsiapro.cc.cd retired).
+        self.assertIn("alvsiapanel.unaux.com", nsc)
+        self.assertIn("84+S6cn1vo+IjlQMR5mvqIe5XKMPh28WV9xYVtFKTkk=", nsc)
+        self.assertIn('cleartextTrafficPermitted="false"', nsc)
+        self.assertNotIn("alvsiapro.cc.cd", nsc)
 
 
 class TestS8Coverage(unittest.TestCase):

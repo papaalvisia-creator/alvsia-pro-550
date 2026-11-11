@@ -15,6 +15,7 @@ import java.util.zip.ZipFile
 import java.util.zip.ZipInputStream
 
 class ToolEngine(private val context: Context) {
+    companion object { const val MAX_DIRECT_FILE_BYTES = 5L * 1024L * 1024L * 1024L }
     private val workDir = File(context.filesDir, "work").also { it.mkdirs() }
     private val engineDir = File(context.filesDir, "orchard").also { it.mkdirs() }
     private val jarsDir = File(context.filesDir, "citrus").also { it.mkdirs() }
@@ -84,40 +85,123 @@ class ToolEngine(private val context: Context) {
         }
     }
 
-    private fun copyUri(uri: Uri, dest: File): Boolean {
-        return try {
-            context.contentResolver.openInputStream(uri)?.use { ins ->
-                FileOutputStream(dest).use { outs -> ins.copyTo(outs) }
+    private fun sha256(file: File): String {
+        val digest = MessageDigest.getInstance("SHA-256")
+        FileInputStream(file).use { input ->
+            val buffer = ByteArray(1024 * 1024)
+            while (true) {
+                val count = input.read(buffer)
+                if (count < 0) break
+                digest.update(buffer, 0, count)
             }
-            dest.exists() && dest.length() > 0
+        }
+        return digest.digest().joinToString("") { byte -> "%02x".format(byte.toInt() and 0xff) }
+    }
+
+    private fun copyUri(uri: Uri, dest: File, onProgress: ((String, Int?) -> Unit)? = null): String? {
+        return try {
+            val declaredSize = context.contentResolver.query(
+                uri, arrayOf(android.provider.OpenableColumns.SIZE), null, null, null
+            )?.use { cursor ->
+                if (cursor.moveToFirst() && !cursor.isNull(0)) cursor.getLong(0) else null
+            }
+            if (declaredSize != null && declaredSize > MAX_DIRECT_FILE_BYTES) return null
+
+            val digest = MessageDigest.getInstance("SHA-256")
+            val source = context.contentResolver.openInputStream(uri) ?: return null
+            var total = 0L
+            var lastProgressAt = 0L
+            var lastProgress = -1
+            source.use { ins ->
+                val buffer = ByteArray(1024 * 1024)
+                FileOutputStream(dest).use { outs ->
+                    while (true) {
+                        val count = ins.read(buffer)
+                        if (count < 0) break
+                        total += count
+                        if (declaredSize != null && declaredSize > 0L) {
+                            val pct = ((total * 100L) / declaredSize).toInt().coerceIn(0, 100)
+                            val now = System.currentTimeMillis()
+                            // The bytes continue streaming at full speed; only the
+                            // visual callback is throttled. This prevents a 1 MiB
+                            // callback cadence from flooding Compose for multi-GB files.
+                            if (pct != lastProgress || now - lastProgressAt >= 120L) {
+                                onProgress?.invoke("STAGING INPUT", pct)
+                                lastProgress = pct
+                                lastProgressAt = now
+                            }
+                        }
+                        if (total > MAX_DIRECT_FILE_BYTES) {
+                            throw IllegalArgumentException("direct file import exceeds 5 GB")
+                        }
+                        digest.update(buffer, 0, count)
+                        outs.write(buffer, 0, count)
+                    }
+                    if (declaredSize != null && declaredSize > 0L) {
+                        onProgress?.invoke("STAGING INPUT", 100)
+                    }
+                    outs.flush()
+                    outs.fd.sync()
+                }
+            }
+            if (dest.isFile && dest.length() > 0) {
+                digest.digest().joinToString("") { byte -> "%02x".format(byte.toInt() and 0xff) }
+            } else null
         } catch (_: Exception) {
-            false
+            try { dest.delete() } catch (_: Exception) { }
+            null
         }
     }
 
-    private fun stageInput(uri: Uri?, moduleId: Int): Pair<String, List<String>> {
+    private fun stageInput(uri: Uri?, moduleId: Int, taskId: String, onProgress: ((String, Int?) -> Unit)? = null): Pair<String, List<String>> {
         val notes = mutableListOf<String>()
         if (uri == null) return "" to notes
         val nameHint = uri.lastPathSegment?.substringAfterLast('/') ?: "input.bin"
         val safe = nameHint.replace(Regex("[^A-Za-z0-9._-]"), "_").ifBlank { "input.bin" }
-        val staged = File(WorkPaths.moduleWork(moduleId), "in_${System.currentTimeMillis()}_$safe")
-        if (!copyUri(uri, staged)) {
-            notes.add("X Failed to read selected file")
+        val declaredSize = context.contentResolver.query(
+            uri, arrayOf(android.provider.OpenableColumns.SIZE), null, null, null
+        )?.use { cursor ->
+            if (cursor.moveToFirst() && !cursor.isNull(0)) cursor.getLong(0) else null
+        }
+        if (declaredSize != null && declaredSize > MAX_DIRECT_FILE_BYTES) {
+            notes.add("X Selected file exceeds the 5 GB per-file import limit")
             return "" to notes
         }
-        // also copy snapshot under IN/
+        val staged = File(WorkPaths.taskModuleWork(taskId, moduleId), "in_${System.currentTimeMillis()}_$safe")
+        onProgress?.invoke("STAGING INPUT", 0)
+        val sourceHash = copyUri(uri, staged, onProgress)
+        if (sourceHash == null) {
+            notes.add("X Failed to read selected file or per-file 5 GB limit was exceeded")
+            return "" to notes
+        }
+        val stagedHash = try { sha256(staged) } catch (_: Exception) { "" }
+        if (stagedHash.isBlank() || stagedHash != sourceHash) {
+            try { staged.delete() } catch (_: Exception) { }
+            notes.add("X INPUT integrity check failed; staged bytes do not match source stream")
+            return "" to notes
+        }
+        // Also copy a snapshot under IN/ and verify it byte-for-byte.
         try {
-            val snap = File(WorkPaths.moduleIn(moduleId), safe)
+            val snap = File(WorkPaths.taskModuleIn(taskId, moduleId), safe)
             staged.copyTo(snap, overwrite = true)
+            val snapshotHash = sha256(snap)
+            if (snapshotHash != sourceHash) {
+                try { snap.delete() } catch (_: Exception) { }
+                notes.add("X INPUT snapshot integrity check failed")
+                return "" to notes
+            }
             notes.add("OK INPUT staged -> ${snap.absolutePath}")
         } catch (_: Exception) {
             notes.add("OK INPUT staged (work only) -> ${staged.absolutePath}")
         }
         notes.add("size ${staged.length()} bytes")
+        notes.add("SHA-256 ${sourceHash}")
+        notes.add("OK INPUT source/staged bytes verified identical")
+        onProgress?.invoke("INPUT VERIFIED", null)
         return staged.absolutePath to notes
     }
 
-    fun run(toolId: Int, inputUri: Uri?, extraName: String?): List<String> {
+    fun run(toolId: Int, inputUri: Uri?, extraName: String?, taskId: String = "standalone_${System.nanoTime()}"): List<String> {
         try {
             SessionGate.allowTools(context)
         } catch (e: SecurityException) {
@@ -133,10 +217,10 @@ class ToolEngine(private val context: Context) {
                 "Grant the missing permission(s) via system Settings and retry."
             )
         }
-        return runSub(toolId, "mod_$toolId", inputUri, extraName)
+        return runSub(toolId, "mod_$toolId", inputUri, extraName, taskId = taskId)
     }
 
-    fun runSub(moduleId: Int, subId: String, inputUri: Uri?, extraName: String?): List<String> {
+    fun runSub(moduleId: Int, subId: String, inputUri: Uri?, extraName: String?, onProgress: ((String, Int?) -> Unit)? = null, taskId: String = "standalone_${System.nanoTime()}"): List<String> {
         try {
             SessionGate.allowTools(context)
         } catch (e: SecurityException) {
@@ -158,22 +242,24 @@ class ToolEngine(private val context: Context) {
         installJarsFromAssets()
 
         val lines = mutableListOf<String>()
+        onProgress?.invoke("PREPARING", null)
         lines.add("> ${SubMenus.title(moduleId)} | $subId")
         lines.add("PIPELINE IN -> WORK -> OUT")
 
-        val (inputPath, stageNotes) = stageInput(inputUri, moduleId)
+        val (inputPath, stageNotes) = stageInput(inputUri, moduleId, taskId, onProgress)
         lines.addAll(stageNotes)
 
         // Bridge first for all modules; native fallback below
+        onProgress?.invoke("ENGINE PROCESSING", null)
 
         if (inputPath.isEmpty() && needsInput(moduleId, subId)) {
             lines.add("X No input file ? use SELECT FILE")
-            lines.add("hint: output folder ${WorkPaths.moduleOut(moduleId).absolutePath}")
+            lines.add("hint: output folder ${WorkPaths.taskModuleOut(taskId, moduleId).absolutePath}")
             return lines
         }
 
         try {
-            File(context.filesDir, "sub_cmd.txt").writeText(subId)
+            File(WorkPaths.taskRoot(taskId), "sub_cmd.txt").writeText(subId)
         } catch (_: Exception) {
         }
 
@@ -181,10 +267,10 @@ class ToolEngine(private val context: Context) {
         if (subId == "lua_decompile" || subId.contains("unluac")) {
             if (inputPath.isNotEmpty()) {
                 val inFile = File(inputPath)
-                val outFile = File(WorkPaths.moduleOut(moduleId), inFile.nameWithoutExtension + "_decompiled.lua")
+                val outFile = File(WorkPaths.taskModuleOut(taskId, moduleId), inFile.nameWithoutExtension + "_decompiled.lua")
                 lines.addAll(UnluacRunner.decompile(inFile, outFile))
                 if (outFile.isFile && outFile.length() > 0) {
-                    lines.add("OK OUT -> ${WorkPaths.moduleOut(moduleId).absolutePath}")
+                    lines.add("OK OUT -> ${WorkPaths.taskModuleOut(taskId, moduleId).absolutePath}")
                     return lines
                 }
                 // Large-file path: hand off to Python streaming decompiler.
@@ -208,7 +294,7 @@ class ToolEngine(private val context: Context) {
                             subId = subId,
                             inputPath = inputPath,
                             extraName = null,
-                            workDirPath = WorkPaths.alvsiaRoot().absolutePath,
+                            workDirPath = WorkPaths.taskRoot(taskId).absolutePath,
                             jarsDirPath = jarsDir.absolutePath
                         )
                         lines.addAll(bridgeLines)
@@ -230,7 +316,7 @@ class ToolEngine(private val context: Context) {
                             }
                         }
 
-                        mirrorMsvToOut(moduleId, lines)
+                        mirrorMsvToOut(moduleId, taskId, lines)
                         if (bridgeOk && outFile.isFile && outFile.length() > 0) {
                             lines.add("OK Python streaming decompiler -> ${outFile.absolutePath}")
                             lines.add("bytes ${outFile.length()}")
@@ -239,11 +325,12 @@ class ToolEngine(private val context: Context) {
                         if (!bridgeOk) {
                             lines.add("X DECOMPILE FAILED: ART unluac + Python streaming both produced no validated Lua source")
                             lines.add("Input preserved under IN/; no fake .lua output was created")
-                            lines.add("Check unluac class/JAR compatibility and Chaquopy startup diagnostics")
+                            lines.add("Inspect the input-format/header diagnostic above; no source bytes were guessed or patched.")
                             return lines
                         }
-                    } catch (e: Exception) {
-                        lines.add("... Python bridge error during large Lua decompile: ${e.message ?: e.javaClass.simpleName}")
+                    } catch (t: Throwable) {
+                        val cause = t.cause ?: t
+                        lines.add("... Python bridge survived parser failure: ${cause.javaClass.simpleName}: ${cause.message ?: "no detail"}")
                     }
                 } else {
                     lines.add("... Python runtime not ready — Chaquopy diagnostic: ${PythonBridgeRunner.startupDiagnostic()}")
@@ -267,15 +354,15 @@ class ToolEngine(private val context: Context) {
                     subId = subId,
                     inputPath = inputPath,
                     extraName = null,
-                    workDirPath = WorkPaths.alvsiaRoot().absolutePath,
+                    workDirPath = WorkPaths.taskRoot(taskId).absolutePath,
                     jarsDirPath = jarsDir.absolutePath
                 )
                 lines.addAll(bridgeLines)
-                mirrorMsvToOut(moduleId, lines)
+                mirrorMsvToOut(moduleId, taskId, lines)
                 if (!bridgeOk) {
                     lines.add("X OUT -> operation failed; see engine diagnostics above")
                 } else {
-                    lines.add("OK OUT -> ${WorkPaths.moduleOut(moduleId).absolutePath}")
+                    lines.add("OK OUT -> ${WorkPaths.taskModuleOut(taskId, moduleId).absolutePath}")
                 }
                 return lines
             } else {
@@ -293,19 +380,19 @@ class ToolEngine(private val context: Context) {
         if (subId == "lua_decompile" || subId.contains("unluac")) {
             lines.add("X DECOMPILE FAILED: no decompiler produced validated Lua source")
             lines.add("Input preserved under IN/; no fake .lua output was created")
-            lines.add("Check unluac class/JAR compatibility and Chaquopy startup diagnostics")
+            lines.add("Inspect the input-format/header diagnostic above; no source bytes were guessed or patched.")
             return lines
         }
 
         // Only route to native implementations that actually match the selected module.
+        onProgress?.invoke("NATIVE PROCESSING", null)
         // Older routing sent PAK Compact to OBB extraction, Frida to hashing, and
         // Export Report to string scanning whenever Chaquopy was unavailable.
         when {
             moduleId == 7 && subId == "clear_work" -> {
                 try {
-                    WorkPaths.dirWork().deleteRecursively()
-                    WorkPaths.dirOut().deleteRecursively()
-                    WorkPaths.ensureTree()
+                    WorkPaths.taskRoot(taskId).deleteRecursively()
+                    WorkPaths.taskRoot(taskId).mkdirs()
                     lines.add("OK workspace cleared (native)")
                 } catch (e: Exception) {
                     lines.add("X workspace clear failed: ${e.message ?: e.javaClass.simpleName}")
@@ -313,18 +400,18 @@ class ToolEngine(private val context: Context) {
                 return lines
             }
             moduleId == 4 -> return when (subId) {
-                "obb_info", "obb_unzip" -> lines + runObb(subId, inputPath)
-                "obb_rezip" -> lines + runObbRepack(subId, inputPath)
+                "obb_info", "obb_unzip" -> lines + runObb(subId, inputPath, taskId)
+                "obb_rezip" -> lines + runObbRepack(subId, inputPath, taskId)
                 else -> lines + listOf("X Unsupported OBB subtool in native fallback: $subId")
             }
             moduleId == 6 -> return when (subId) {
-                "string_scan" -> lines + runStrings(subId, inputPath)
-                "hash_scan" -> lines + runHash(subId, inputPath)
+                "string_scan" -> lines + runStrings(subId, inputPath, taskId)
+                "hash_scan" -> lines + runHash(subId, inputPath, taskId)
                 else -> lines + listOf("X Unsupported scan subtool in native fallback: $subId")
             }
             moduleId == 8 && inputPath.isNotEmpty() -> {
                 val input = File(inputPath)
-                val report = File(WorkPaths.moduleOut(8), "report_${input.name}_${System.currentTimeMillis()}.txt")
+                val report = File(WorkPaths.taskModuleOut(taskId, 8), "report_${input.name}_${System.currentTimeMillis()}.txt")
                 return try {
                     val sha256 = digest(input, "SHA-256")
                     report.writeText(
@@ -340,7 +427,7 @@ class ToolEngine(private val context: Context) {
             }
         }
 
-        return lines + nativeFallback(moduleId, subId, inputPath, extraName)
+        return lines + nativeFallback(moduleId, subId, inputPath, extraName, taskId)
     }
 
     private fun needsInput(moduleId: Int, subId: String): Boolean {
@@ -350,11 +437,11 @@ class ToolEngine(private val context: Context) {
         return subId !in setOf("frida_js_dump", "frida_spawn", "xor_batch")
     }
 
-    private fun mirrorMsvToOut(moduleId: Int, lines: MutableList<String>) {
+    private fun mirrorMsvToOut(moduleId: Int, taskId: String, lines: MutableList<String>) {
         try {
             val msv = File(context.filesDir, "MSV_WORK")
             if (!msv.exists()) return
-            val dest = WorkPaths.moduleOut(moduleId)
+            val dest = WorkPaths.taskModuleOut(taskId, moduleId)
             msv.walkTopDown().maxDepth(4).forEach { f ->
                 if (f.isFile && f.length() > 0 && f.length() < 80_000_000) {
                     val rel = f.relativeTo(msv).path
@@ -373,14 +460,14 @@ class ToolEngine(private val context: Context) {
     }
 
     // ?? Phase 2 proof: HASH ??
-    private fun runHash(subId: String, inputPath: String): List<String> {
+    private fun runHash(subId: String, inputPath: String, taskId: String): List<String> {
         val lines = mutableListOf<String>()
         if (inputPath.isEmpty()) {
             lines.add("X Select a file first")
             return lines
         }
         val f = File(inputPath)
-        val outDir = WorkPaths.moduleOut(6)
+        val outDir = WorkPaths.taskModuleOut(taskId, 6)
         try {
             val md5 = digest(f, "MD5")
             val sha1 = digest(f, "SHA-1")
@@ -439,14 +526,14 @@ class ToolEngine(private val context: Context) {
     }
 
     // ?? Phase 2 proof: OBB / ZIP ??
-    private fun runObb(subId: String, inputPath: String): List<String> {
+    private fun runObb(subId: String, inputPath: String, taskId: String): List<String> {
         val lines = mutableListOf<String>()
         if (inputPath.isEmpty()) {
             lines.add("X Select an .obb / .zip file first")
             return lines
         }
         val f = File(inputPath)
-        val outDir = WorkPaths.moduleOut(4)
+        val outDir = WorkPaths.taskModuleOut(taskId, 4)
         when (subId) {
             "obb_info" -> {
                 lines.addAll(zipInfo(f, outDir))
@@ -463,14 +550,14 @@ class ToolEngine(private val context: Context) {
         return lines
     }
 
-    private fun runObbRepack(subId: String, inputPath: String): List<String> {
+    private fun runObbRepack(subId: String, inputPath: String, taskId: String): List<String> {
         val lines = mutableListOf<String>()
         if (inputPath.isEmpty()) {
             lines.add("X Select source file / folder marker")
             return lines
         }
         val f = File(inputPath)
-        val outDir = WorkPaths.moduleOut(4)
+        val outDir = WorkPaths.taskModuleOut(taskId, 4)
         try {
             // If input is zip/obb, re-copy as staged repack baseline
             val dest = File(outDir, "repack_${f.name}")
@@ -585,14 +672,14 @@ class ToolEngine(private val context: Context) {
     }
 
     // ?? Phase 2 proof: STRINGS ??
-    private fun runStrings(subId: String, inputPath: String): List<String> {
+    private fun runStrings(subId: String, inputPath: String, taskId: String): List<String> {
         val lines = mutableListOf<String>()
         if (inputPath.isEmpty()) {
             lines.add("X Select a binary / package file first")
             return lines
         }
         val f = File(inputPath)
-        val outDir = WorkPaths.moduleOut(6)
+        val outDir = WorkPaths.taskModuleOut(taskId, 6)
         val minLen = if (subId == "str_filter") 4 else 4
         try {
             val found = extractAsciiStrings(f, minLen)
@@ -640,28 +727,28 @@ class ToolEngine(private val context: Context) {
         moduleId: Int,
         subId: String,
         inputPath: String,
-        extraName: String?
+        extraName: String?,
+        taskId: String
     ): List<String> {
         val lines = mutableListOf<String>()
         when (moduleId) {
             7 -> {
                 try {
-                    WorkPaths.dirWork().deleteRecursively()
-                    WorkPaths.dirOut().deleteRecursively()
-                    WorkPaths.ensureTree()
+                    WorkPaths.taskRoot(taskId).deleteRecursively()
+                    WorkPaths.taskRoot(taskId).mkdirs()
                     lines.add("OK workspace cleared (native)")
                 } catch (e: Exception) {
                     lines.add("X workspace clear failed: ${e.message ?: e.javaClass.simpleName}")
                 }
             }
             4 -> return when (subId) {
-                "obb_info", "obb_unzip" -> runObb(subId, inputPath)
-                "obb_rezip" -> runObbRepack(subId, inputPath)
+                "obb_info", "obb_unzip" -> runObb(subId, inputPath, taskId)
+                "obb_rezip" -> runObbRepack(subId, inputPath, taskId)
                 else -> listOf("X Unsupported OBB subtool in native fallback: $subId")
             }
             6 -> return when (subId) {
-                "string_scan" -> runStrings(subId, inputPath)
-                "hash_scan" -> runHash(subId, inputPath)
+                "string_scan" -> runStrings(subId, inputPath, taskId)
+                "hash_scan" -> runHash(subId, inputPath, taskId)
                 else -> listOf("X Unsupported scan subtool in native fallback: $subId")
             }
             else -> {

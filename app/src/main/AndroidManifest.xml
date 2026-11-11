@@ -60,6 +60,7 @@
     <application
         android:name=".AlvisiaApp"
         android:allowBackup="false"
+        android:extractNativeLibs="true"
         android:fullBackupContent="@xml/backup_rules"
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:icon="@mipmap/ic_launcher"
@@ -83,6 +84,11 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <service
+            android:name=".tool.ToolExecutionService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
 
         <!-- File provider for output file sharing -->
         <provider

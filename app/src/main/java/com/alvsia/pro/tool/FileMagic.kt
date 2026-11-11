@@ -43,17 +43,23 @@ object FileMagic {
     )
 
     /**
-     * Detect file type from first 8 bytes.
-     * Does not load the whole file into memory — reads only the header.
+     * Detect file type from magic bytes and a bounded 64 KiB prefix scan.
+     * Never loads the whole selected file into memory.
      */
     fun detect(ctx: Context, uri: Uri): DetectionResult {
         val header = ByteArray(16)
         var fileSize = 0L
         try {
             ctx.contentResolver.openInputStream(uri)?.use { ins ->
-                val read = ins.read(header)
-                if (read < 4) return unknown(fileSize)
-            }
+                var offset = 0
+                while (offset < header.size) {
+                    val count = ins.read(header, offset, header.size - offset)
+                    if (count < 0) break
+                    if (count == 0) continue
+                    offset += count
+                }
+                if (offset < 4) return unknown(fileSize)
+            } ?: return unknown(fileSize)
             // Try to get file size from cursor
             ctx.contentResolver.query(uri, null, null, null, null)?.use { cursor ->
                 val sizeIdx = cursor.getColumnIndex(android.provider.OpenableColumns.SIZE)
@@ -67,6 +73,18 @@ object FileMagic {
 
         val isLarge = fileSize > 8L * 1024 * 1024
 
+        // Some exporters prepend a Lua comment/shebang banner before bytecode.
+        // Mirror the Python preflight conservatively: accept only text-comment lines.
+        val embeddedLua = detectCommentPrefixedLua(ctx, uri)
+        if (embeddedLua != null) {
+            val label = if (embeddedLua == "luajit") "LuaJIT" else "Lua 5.3"
+            return DetectionResult(
+                if (embeddedLua == "luajit") FileType.LUAJIT_BYTECODE else FileType.LUA_53_BYTECODE,
+                "$label bytecode (comment-prefixed)",
+                "lua_decompile", 5, fileSize, isLarge
+            )
+        }
+
         // Check magic bytes
         val result = when {
             // Lua 5.3 bytecode: 1b 4c 75 61 53
@@ -74,8 +92,8 @@ object FileMagic {
                 header[2] == 0x75.toByte() && header[3] == 0x61.toByte() &&
                 header[4] == 0x53.toByte() -> {
                 if (isLarge) {
-                    DetectionResult(FileType.LUA_53_BYTECODE, "Lua 5.3 bytecode (${fileSize} bytes — large)",
-                        "lua_vm_deobfuscate", 5, fileSize, true)
+                    DetectionResult(FileType.LUA_53_BYTECODE, "Lua 5.3 bytecode (${fileSize} bytes — streaming)",
+                        "lua_decompile", 5, fileSize, true)
                 } else {
                     DetectionResult(FileType.LUA_53_BYTECODE, "Lua 5.3 bytecode",
                         "lua_decompile", 5, fileSize, false)
@@ -142,6 +160,64 @@ object FileMagic {
         }
 
         return result
+    }
+
+    private fun detectCommentPrefixedLua(ctx: Context, uri: Uri): String? {
+        return try {
+            val head = ByteArray(64 * 1024)
+            var length = 0
+            ctx.contentResolver.openInputStream(uri)?.use { ins ->
+                while (length < head.size) {
+                    val count = ins.read(head, length, head.size - length)
+                    if (count < 0) break
+                    if (count == 0) continue
+                    length += count
+                }
+            } ?: return null
+
+            val bytes = head.copyOf(length)
+            val candidates = listOf(
+                Triple(byteArrayOf(0x1B, 0x4C, 0x75, 0x61), "luac", 4),
+                Triple(byteArrayOf(0x1B, 0x4C, 0x4A), "luajit", 3)
+            )
+            for ((magic, kind, markerLength) in candidates) {
+                val offset = bytes.indexOfSequence(magic)
+                if (offset <= 0 || offset + markerLength >= bytes.size) continue
+                if (kind == "luac" && bytes[offset + markerLength] != 0x53.toByte()) continue
+                val prefix = try {
+                    Charsets.UTF_8.newDecoder()
+                        .onMalformedInput(java.nio.charset.CodingErrorAction.REPORT)
+                        .onUnmappableCharacter(java.nio.charset.CodingErrorAction.REPORT)
+                        .decode(java.nio.ByteBuffer.wrap(bytes, 0, offset)).toString()
+                } catch (_: Exception) {
+                    continue
+                }
+                val lines = prefix.split(Regex("\\r?\\n"))
+                if (lines.isNotEmpty() && lines.all {
+                    it.isBlank() || it.trimStart().startsWith("--") || it.trimStart().startsWith("#!")
+                } && prefix.none { it.code < 32 && it !in "\t\r\n" }) {
+                    return kind
+                }
+            }
+            null
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    private fun ByteArray.indexOfSequence(sequence: ByteArray): Int {
+        if (sequence.isEmpty() || size < sequence.size) return -1
+        for (start in 0..(size - sequence.size)) {
+            var matched = true
+            for (i in sequence.indices) {
+                if (this[start + i] != sequence[i]) {
+                    matched = false
+                    break
+                }
+            }
+            if (matched) return start
+        }
+        return -1
     }
 
     private fun detectTextHeader(ctx: Context, uri: Uri, marker: String): Boolean {

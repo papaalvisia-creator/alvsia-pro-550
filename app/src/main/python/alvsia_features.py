@@ -2,8 +2,10 @@
 """ALVSIA PRO 5.5 — features: LUA (unluac jar), helpers."""
 from __future__ import annotations
 import os
+import hashlib
 import shutil
 import subprocess
+import tempfile
 import zipfile
 from pathlib import Path
 
@@ -159,38 +161,47 @@ def run_unzip(src, dest_dir):
 def run_hash_file(path, out_txt=None):
     import hashlib
     path = Path(path)
-    data = path.read_bytes()
+    if not path.is_file():
+        return {"ok": False, "error": "input file not found"}
+    size = path.stat().st_size
+    md5 = hashlib.md5()
+    sha1 = hashlib.sha1()
+    sha256 = hashlib.sha256()
+    with path.open("rb") as source:
+        while True:
+            block = source.read(4 * 1024 * 1024)
+            if not block:
+                break
+            md5.update(block)
+            sha1.update(block)
+            sha256.update(block)
     lines = [
         f"file={path}",
-        f"size={len(data)}",
-        f"md5={hashlib.md5(data).hexdigest()}",
-        f"sha1={hashlib.sha1(data).hexdigest()}",
-        f"sha256={hashlib.sha256(data).hexdigest()}",
+        f"size={size}",
+        f"md5={md5.hexdigest()}",
+        f"sha1={sha1.hexdigest()}",
+        f"sha256={sha256.hexdigest()}",
     ]
-    text = "\n".join(lines)
+    report = "\n".join(lines)
     if out_txt:
-        Path(out_txt).write_text(text, encoding="utf-8")
-    return {"ok": True, "report": text, "out": str(out_txt) if out_txt else None}
+        Path(out_txt).write_text(report, encoding="utf-8")
+    return {"ok": True, "report": report, "out": str(out_txt) if out_txt else None}
 
 
 def run_string_scan(path, out_txt=None, min_len=4):
+    from lua_string_recover import _iter_ascii_file
     path = Path(path)
-    data = path.read_bytes()
-    cur = bytearray()
-    found = []
-    for b in data:
-        if 32 <= b < 127:
-            cur.append(b)
-        else:
-            if len(cur) >= min_len:
-                found.append(cur.decode("ascii", errors="ignore"))
-            cur = bytearray()
-    if len(cur) >= min_len:
-        found.append(cur.decode("ascii", errors="ignore"))
-    text = "\n".join(found[:5000])
+    if not path.is_file():
+        return {"ok": False, "error": "input file not found"}
+    found_count = 0
+    retained = []
+    for value in _iter_ascii_file(path, min_len=min_len):
+        found_count += 1
+        if len(retained) < 5000:
+            retained.append(value)
     if out_txt:
-        Path(out_txt).write_text(text, encoding="utf-8")
-    return {"ok": True, "count": len(found), "out": str(out_txt) if out_txt else None}
+        Path(out_txt).write_text("\n".join(retained), encoding="utf-8")
+    return {"ok": True, "count": found_count, "out": str(out_txt) if out_txt else None}
 
 
 def run_lua_bytecode_strings(input_path, out_dir):
@@ -209,9 +220,10 @@ def run_lua_bytecode_strings(input_path, out_dir):
     for value in strings:
         if value not in seen: seen.add(value); uniq.append(value)
     dest=out_dir/(input_path.stem+"_strings.txt")
-    dest.write_text("\n".join(uniq[:8000]),encoding="utf-8")
+    payload, scrubbed = scrub_foreign_branding("\n".join(uniq[:8000]))
+    dest.write_text(payload,encoding="utf-8")
     return {"ok":True,"mode":"strings_fallback","lua_header":data[:4]==b"\x1bLua",
-            "count":len(uniq),"out":str(dest),
+            "count":len(uniq),"out":str(dest),"watermarks_scrubbed":scrubbed,
             "note":"Full decompile requires a compatible Lua decompiler; strings were extracted from normalized payload",
             **({"container":ci.format,"container_chunks":ci.chunks,"normalized":str(normalized)} if ci else {})}
 
@@ -254,8 +266,11 @@ def extract_lua_constants(input_path, out_dir, max_strings=5000):
     seen=set(); uniq=[]
     for value in strings:
         if value not in seen: seen.add(value); uniq.append(value)
-    dest=out_dir/(input_path.stem+"_constants.txt"); dest.write_text("\n".join(uniq[:max_strings]),encoding="utf-8")
+    dest=out_dir/(input_path.stem+"_constants.txt")
+    payload, scrubbed = scrub_foreign_branding("\n".join(uniq[:max_strings]))
+    dest.write_text(payload,encoding="utf-8")
     return {"ok":True,"mode":"lua_constants","count":len(uniq),"out":str(dest),"header":data[:16].hex(),
+            "watermarks_scrubbed":scrubbed,
             **({"container":ci.format,"container_chunks":ci.chunks,"normalized":str(normalized)} if ci else {})}
 
 
@@ -309,13 +324,16 @@ def run_lua_multi_xor(input_path, out_dir, keys=None):
     return {"ok": True, "mode": "multi_xor", "candidates": results[:8], "best": results[0] if results else None}
 
 
-def run_lua_smart(input_path, out_dir, jars_dir=None):
+from lua_intelligence import analyze_file, IntelligenceConfig
+
+def _run_lua_smart_legacy(input_path, out_dir, jars_dir=None):
     """
-    Unified LUA pipeline:
-    1) detect LuaS header / unwrap container
-    2) pure-Python Lua 5.3 decompiler (no Java needed — works on Android)
-    3) try unluac jar if Java available
-    4) on failure → constants + strings + multi-xor
+    Unified Smart Lua pipeline:
+    1) identify source, bytecode dialect, container and confidence
+    2) run protection-pattern detection only (no standard engine execution)
+    3) pass pattern recovery and compatible engines into one candidate selector
+    4) validate candidates, retain valid alternatives, and report partial recovery honestly
+    5) use constants/strings/XOR only as clearly labelled fallback diagnostics
     """
     input_path = Path(input_path)
     out_dir = Path(out_dir)
@@ -324,71 +342,207 @@ def run_lua_smart(input_path, out_dir, jars_dir=None):
     report = {"file": str(input_path), "size": len(data), "steps": []}
     info = detect_lua(input_path)
     if info.kind == "unknown":
-        report["steps"].append({"step": "detect", "ok": False, "note": "not recognized Lua/source/container"})
-        r = run_lua_bytecode_strings(input_path, out_dir)
-        report["steps"].append({"step": "strings", **r})
-        return {"ok": False, "mode": "smart_nonlua", **report}
-    report["steps"].append({"step": "detect", "ok": True, "format": info.format,
-                             "version": info.version, "wrapped": info.wrapped,
-                             "container": info.container, "chunks": info.container_chunks})
+        report["steps"].append({
+            "step": "detect", "ok": False,
+            "note": "standard Lua signature not recognized; checking known protection patterns before fallback",
+            "format": info.format, "confidence": info.confidence,
+        })
+    else:
+        report["steps"].append({"step": "detect", "ok": True, "format": info.format,
+                                 "version": info.version, "wrapped": info.wrapped,
+                                 "container": info.container, "chunks": info.container_chunks})
 
-    # ── Step 1: unwrap container if needed ──────────────────────────────────
+    # Normalize a comment-prefixed Lua/LuaJIT payload for every downstream
+    # engine. The original input remains untouched and is still used for
+    # independent strings/constants recovery.
     work_input = input_path
-    if info.wrapped:
+    prefix_note = next((n for n in info.notes if n.startswith("comment_prefix_offset=")), None)
+    if prefix_note:
         try:
-            payload, ci = unwrap_lua_container(data)
-            unwrapped_path = out_dir / (input_path.stem + "_unwrapped.luac")
-            unwrapped_path.write_bytes(payload)
-            work_input = unwrapped_path
-            report["steps"].append({"step": "unwrap", "ok": True, "container": ci.format,
-                                     "chunks": ci.chunks, "out": str(unwrapped_path)})
-        except Exception as e:
-            report["steps"].append({"step": "unwrap", "ok": False, "error": str(e)})
+            offset = int(prefix_note.split("=", 1)[1])
+            if offset <= 0 or offset >= len(data):
+                raise ValueError("invalid embedded Lua payload offset")
+            normalized_path = out_dir / (input_path.stem + "_embedded_payload.luac")
+            normalized_path.write_bytes(data[offset:])
+            work_input = normalized_path
+            report["steps"].append({
+                "step": "extract_comment_prefixed_payload",
+                "ok": True,
+                "offset": offset,
+                "payload_size": normalized_path.stat().st_size,
+                "out": str(normalized_path),
+            })
+        except Exception as exc:
+            report["steps"].append({"step": "extract_comment_prefixed_payload",
+                                    "ok": False, "error": str(exc)})
+            work_input = input_path
 
-    # ── Step 2: pure-Python Lua 5.3 decompiler (primary — no Java) ─────────
-    work_data = work_input.read_bytes()
-    is_lua53 = (len(work_data) > 4 and
-                work_data[:4] == b"\x1bLua" and
-                work_data[4] == 0x53)
-
-    if _decompile53_file is not None and is_lua53:
+    # ── Step 1: recursively unwrap recognized Lua containers ────────────────
+    # Each layer is materialized separately and re-detected. We stop on a
+    # stable payload, a repeated digest, or the configured depth budget.
+    max_layers = max(1, min(16, int(os.environ.get("ALVSIA_LUA_MAX_UNWRAP_LAYERS", "8"))))
+    seen_payloads = set()
+    current_path = work_input
+    for layer_index in range(max_layers):
         try:
-            out_lua = out_dir / (input_path.stem + "_decompiled.lua")
-            pr = _decompile53_file(work_input, out_lua)
-            report["steps"].append({"step": "py_decompile53", **pr})
-            if pr.get("ok") and out_lua.exists() and out_lua.stat().st_size > 0:
-                # Use the same source validator as the Unluac path. A keyword alone
-                # can appear in damaged or partially recovered text and is not proof.
-                valid, validation_note = validate_lua_source(out_lua)
+            current_data = current_path.read_bytes()
+            digest = hashlib.sha256(current_data).hexdigest()
+            if digest in seen_payloads:
                 report["steps"].append({
-                    "step": "validate_py53_source",
-                    "ok": bool(valid),
-                    "note": str(validation_note),
-                    "file": str(out_lua),
+                    "step": "unwrap_stop",
+                    "ok": False,
+                    "reason": "repeated-payload",
+                    "layer": layer_index,
                 })
-                if valid:
-                    report["ok"] = True
-                    report["final_status"] = "SUCCESS"
-                    return {"ok": True, "mode": "smart_py53",
-                            "out": str(out_lua), "lines": pr.get("lines", 0), **report}
-                out_lua.unlink(missing_ok=True)
-        except Exception as e:
-            report["steps"].append({"step": "py_decompile53", "ok": False, "error": str(e)})
+                break
+            seen_payloads.add(digest)
+            current_info = detect_lua(current_path)
+            if not current_info.wrapped:
+                break
+            payload, ci = unwrap_lua_container(current_data)
+            if not payload or payload == current_data:
+                report["steps"].append({
+                    "step": "unwrap_stop",
+                    "ok": False,
+                    "reason": "empty-or-unchanged-payload",
+                    "layer": layer_index,
+                })
+                break
+            unwrapped_path = out_dir / (
+                input_path.stem + f"_unwrapped_l{layer_index + 1}.luac"
+            )
+            unwrapped_path.write_bytes(payload)
+            current_path = unwrapped_path
+            work_input = unwrapped_path
+            report["steps"].append({
+                "step": "unwrap",
+                "ok": True,
+                "layer": layer_index + 1,
+                "container": ci.format,
+                "chunks": ci.chunks,
+                "bytes": len(payload),
+                "out": str(unwrapped_path),
+            })
+        except Exception as exc:
+            report["steps"].append({
+                "step": "unwrap",
+                "ok": False,
+                "layer": layer_index + 1,
+                "error": f"{type(exc).__name__}: {exc}",
+            })
+            break
 
-    # ── Step 3: unluac jar (fallback — needs Java, works in Termux) ─────────
-    ur = run_unluac(work_input, out_dir, jars_dir=jars_dir)
-    report["steps"].append({"step": "unluac", **ur})
-    if ur.get("ok"):
-        return {"ok": True, "mode": "smart_unluac", **report}
+    # ── Protected-format preflight (diagnostics only) ────────────────────
+    vm_partial_seen = False
+    protected_partial_seen = False
+    pattern_candidate = None
+    try:
+        from lua_engine.streaming_decompiler import decompile_large
+        pattern_result = decompile_large(
+            work_input, out_dir, jars_dir=jars_dir, preflight_only=True
+        )
+        report["steps"].append({
+            "step": "protected_pattern_preflight",
+            **pattern_result,
+        })
+        if pattern_result.get("ok") and pattern_result.get("recovered") is True:
+            candidate = Path(str(pattern_result.get("out") or ""))
+            if candidate.is_file() and candidate.suffix.lower() == ".lua":
+                pattern_candidate = candidate
+                report["steps"].append({
+                    "step": "pattern_candidate_staged",
+                    "ok": True,
+                    "pattern_id": pattern_result.get("pattern_id"),
+                    "file": str(candidate),
+                })
+        if pattern_result.get("recovered") is False:
+            protected_partial_seen = True
+            vm_partial_seen = pattern_result.get("mode") == "bgmi_vm_partial"
+            report["steps"].append({
+                "step": "vm_partial_not_final" if vm_partial_seen else "protected_partial_not_final",
+                "ok": False,
+                "note": "Protection analysis is diagnostic only; compatible decompiler engines will still be tried",
+                "pattern_id": pattern_result.get("pattern_id"),
+                "protos_parsed": pattern_result.get("protos_parsed", 0),
+                "main_instructions": pattern_result.get("main_code_count", 0),
+                "main_constants": pattern_result.get("main_const_count", 0),
+                "parse_errors": pattern_result.get("parse_errors", 0),
+            })
+    except Exception as exc:
+        report["steps"].append({
+            "step": "protected_pattern_preflight",
+            "ok": False,
+            "error": f"{type(exc).__name__}: {exc}",
+        })
+
+    # ── One engine registry and one candidate-selection pipeline ──────────
+    try:
+        from lua_engine.orchestrator import (
+            EngineSpec, build_engine_registry, run_decompiler_pipeline,
+        )
+        normalized_info = detect_lua(work_input)
+        registry = build_engine_registry(normalized_info, jars_dir=jars_dir)
+        if pattern_candidate is not None:
+            def _run_pattern_candidate(_src, dst, candidate=pattern_candidate):
+                shutil.copy2(candidate, dst)
+                return True, "protection-pattern recovery candidate"
+            registry.append(EngineSpec(
+                "protected_pattern_recovery",
+                (normalized_info.format,),
+                _run_pattern_candidate,
+                -10,
+            ))
+        out_lua = out_dir / (input_path.stem + "_decompiled.lua")
+        pipeline = run_decompiler_pipeline(
+            work_input, out_lua, normalized_info,
+            jars_dir=jars_dir, registry=registry,
+        )
+        if pattern_candidate is not None and pipeline.get("selected_engine") == "source_passthrough":
+            protected_partial_seen = True
+            report["steps"].append({
+                "step": "pattern_candidate_rejected",
+                "ok": False,
+                "note": "Recovered candidate did not validate; returning wrapper source only as partial output",
+            })
+        if pattern_candidate is not None:
+            pattern_candidate.unlink(missing_ok=True)
+        report["steps"].append({"step": "engine_orchestrator", **pipeline})
+        if pipeline.get("ok"):
+            report["ok"] = True
+            report["vm_obfuscated"] = bool(vm_partial_seen)
+            report["source_recovered"] = not protected_partial_seen
+            report["artifact_kind"] = (
+                "vm_wrapper_source" if vm_partial_seen
+                else "protected_wrapper_source" if protected_partial_seen
+                else "lua_source"
+            )
+            report["final_status"] = "PARTIAL" if protected_partial_seen else "SUCCESS"
+            return {
+                "ok": True,
+                "mode": (
+                    "smart_orchestrated_vm_wrapper" if vm_partial_seen
+                    else "smart_orchestrated_partial" if protected_partial_seen
+                    else "smart_orchestrated"
+                ),
+                "out": pipeline.get("out"),
+                "selected_engine": pipeline.get("selected_engine"),
+                **report,
+            }
+    except Exception as exc:
+        report["steps"].append({
+            "step": "engine_orchestrator",
+            "ok": False,
+            "error": f"{type(exc).__name__}: {exc}",
+        })
 
     # ── Step 4: partial recovery ─────────────────────────────────────────────
-    cr = extract_lua_constants(input_path, out_dir)
+    cr = extract_lua_constants(work_input, out_dir)
     report["steps"].append({"step": "constants", **cr})
 
-    sr = run_lua_bytecode_strings(input_path, out_dir)
+    sr = run_lua_bytecode_strings(work_input, out_dir)
     report["steps"].append({"step": "strings", **sr})
 
-    xr = run_lua_multi_xor(input_path, out_dir)
+    xr = run_lua_multi_xor(work_input, out_dir)
     report["steps"].append({"step": "multi_xor", **{k: xr[k] for k in ("ok", "mode", "best") if k in xr}})
 
     # Honest final status: never SUCCESS decompile without validated source
@@ -398,10 +552,9 @@ def run_lua_smart(input_path, out_dir, jars_dir=None):
         for cand in out_dir.glob("*_decompiled.lua"):
             v = validate_decompile_text(cand.read_text(encoding="utf-8", errors="replace"))
             report["steps"].append({"step": "validate_source", "file": str(cand), **v})
-            if v.get("is_lua_source"):
-                final_status = "SUCCESS"
-                report["ok"] = True
-                break
+            # This legacy text classifier is diagnostic only. It cannot
+            # upgrade PARTIAL to SUCCESS: only a concrete engine candidate
+            # accepted by the Smart Lua validator may do that.
         else:
             # strings file is recovery only
             for cand in out_dir.glob("*_strings.txt"):
@@ -416,7 +569,7 @@ def run_lua_smart(input_path, out_dir, jars_dir=None):
         "size=%s" % report.get("size"),
         "final_status=%s" % final_status,
         "mode=smart_fallback",
-        "note=py_decompile53 + unluac both failed — recovery artifacts only",
+        "note=all compatible decompiler engines failed validation — recovery artifacts only",
         "",
     ]
     for st in report.get("steps") or []:
@@ -434,6 +587,150 @@ def run_lua_smart(input_path, out_dir, jars_dir=None):
     }
 
 
+
+
+
+def run_lua_smart(input_path, out_dir, jars_dir=None):
+    """Program-intelligence front door with legacy engine orchestration as a validated adapter."""
+    input_path = Path(input_path)
+    out_dir = Path(out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    # Multi-GB inputs must not fall through to the legacy whole-file pipeline.
+    # Containers are inflated to disk in bounded chunks; only a resulting Lua
+    # payload within the parser budget is passed to the in-memory legacy engines.
+    max_in_memory = int(os.environ.get(
+        "ALVSIA_LUA_MAX_IN_MEMORY_BYTES", str(256 * 1024 * 1024)
+    ))
+    max_in_memory = max(16 * 1024 * 1024, min(max_in_memory, 512 * 1024 * 1024))
+    input_size = input_path.stat().st_size if input_path.is_file() else 0
+    if input_size > max_in_memory:
+        from lua_engine.streaming_decompiler import (
+            preflight_magic, stream_inflate_zlib, stream_inflate_deflate_container,
+        )
+        from lua_string_recover import recover_strings_file
+
+        fmt = preflight_magic(input_path)
+        work_input = input_path
+        unwrap_report = None
+        streamed_path = out_dir / (input_path.stem + "_stream_unwrapped.luac")
+        try:
+            if fmt == "zlib":
+                ok, message = stream_inflate_zlib(input_path, streamed_path)
+                unwrap_report = {"ok": ok, "format": fmt, "message": message}
+                if ok:
+                    work_input = streamed_path
+            elif fmt == "chunked_deflate":
+                ok, message = stream_inflate_deflate_container(input_path, streamed_path)
+                unwrap_report = {"ok": ok, "format": fmt, "message": message}
+                if ok:
+                    work_input = streamed_path
+            elif fmt == "gzip":
+                import gzip
+                total = 0
+                with gzip.open(input_path, "rb") as source, streamed_path.open("wb") as target:
+                    while True:
+                        block = source.read(4 * 1024 * 1024)
+                        if not block:
+                            break
+                        total += len(block)
+                        if total > 4 * 1024 * 1024 * 1024:
+                            raise ValueError("gzip output exceeds 4 GiB streaming cap")
+                        target.write(block)
+                work_input = streamed_path
+                unwrap_report = {"ok": True, "format": fmt, "bytes_out": total}
+        except Exception as exc:
+            unwrap_report = {"ok": False, "format": fmt,
+                             "error": f"{type(exc).__name__}: {exc}"}
+
+        if work_input != input_path and work_input.stat().st_size <= max_in_memory:
+            try:
+                legacy = _run_lua_smart_legacy(work_input, out_dir, jars_dir=jars_dir)
+                legacy["input_bytes"] = input_size
+                legacy["stream_unwrap"] = unwrap_report
+                legacy["mode"] = "smart_streaming_large_input"
+                return legacy
+            except Exception as exc:
+                decompile_report = {"ok": False, "error": f"{type(exc).__name__}: {exc}"}
+        else:
+            decompile_report = {
+                "ok": False,
+                "error": (
+                    f"input/payload exceeds in-memory Lua parser budget ({max_in_memory} bytes); "
+                    "large-file scanning and container inflation remain streaming, "
+                    "but full Lua 5.3 source reconstruction is not yet streaming"
+                ),
+            }
+        try:
+            recovery = recover_strings_file(
+                work_input if work_input.is_file() else input_path,
+                out_dir / "large_file_recovery", input_path.stem,
+            )
+        except Exception as exc:
+            recovery = {"ok": False, "error": f"{type(exc).__name__}: {exc}"}
+        return {
+            "ok": False,
+            "mode": "smart_streaming_large_input",
+            "final_status": "PARTIAL",
+            "input_bytes": input_size,
+            "stream_unwrap": unwrap_report,
+            "decompile": decompile_report,
+            "streaming_recovery": recovery,
+            "note": (
+                "Large input was processed without whole-file RAM loading. "
+                "Recovery artifacts are diagnostic; no full decompile SUCCESS is claimed."
+            ),
+        }
+
+    intelligence = analyze_file(
+        input_path, out_dir / "intelligence",
+        IntelligenceConfig(
+            max_depth=int(os.environ.get("ALVSIA_LUA_MAX_DEPTH", "12")),
+            max_artifacts=int(os.environ.get("ALVSIA_LUA_MAX_ARTIFACTS", "128")),
+            max_file_bytes=int(os.environ.get("ALVSIA_LUA_MAX_BYTES", str(256 * 1024 * 1024))),
+            max_elapsed_seconds=float(os.environ.get("ALVSIA_LUA_MAX_SECONDS", "45")),
+        ),
+    )
+    try:
+        legacy = _run_lua_smart_legacy(input_path, out_dir, jars_dir=jars_dir)
+    except Exception as exc:
+        legacy = {"ok": False, "final_status": "FAILED",
+                  "error": f"{type(exc).__name__}: {exc}"}
+    result = dict(legacy)
+    result["intelligence"] = intelligence.to_dict()
+    result["intelligence_report"] = intelligence.report_path
+    result["layer_count"] = len(intelligence.artifacts)
+    result["layer_graph_root"] = intelligence.root_id
+    result["analysis_status"] = intelligence.status
+
+    # Candidate fusion is an explicit validation layer: engine output is only
+    # considered a recovery candidate until structural evidence is measured.
+    try:
+        from lua_intelligence.candidates import score_source_candidate, candidates_json
+        candidates = []
+        out_value = result.get("out")
+        if out_value and Path(str(out_value)).is_file():
+            candidates.append(score_source_candidate(
+                Path(str(out_value)),
+                dialect=str(result.get("format") or result.get("version") or "unknown"),
+                engine=str(result.get("selected_engine") or "legacy-smart"),
+            ))
+        if candidates:
+            result["candidate_manifest"] = candidates_json(candidates)
+            best = max(candidates, key=lambda c: c.rank())
+            result["candidate_score"] = best.score
+            result["candidate_status"] = best.status
+            manifest = out_dir / (input_path.stem + "_candidates.json")
+            import json
+            manifest.write_text(
+                json.dumps(result["candidate_manifest"], ensure_ascii=False, indent=2),
+                encoding="utf-8",
+            )
+            result["candidate_manifest_path"] = str(manifest)
+    except Exception as exc:
+        # Candidate scoring must never turn a valid legacy result into a crash.
+        result["candidate_fusion_error"] = f"{type(exc).__name__}: {exc}"
+    return result
 
 # ---------------------------------------------------------------------------
 # LUA ENGINE v5.5 — unified detection / analysis / fallback
@@ -549,9 +846,105 @@ KNOWN_BRANDS = [
     "t.me/ALVSIA",
 ]
 
-DEFAULT_BRAND = "ALVSIA PRO"
+DEFAULT_BRAND = "@ALVSIA_PRO"
 DEFAULT_CHANNEL = "t.me/ALVSIA_PRO"
-DEFAULT_WATERMARK = "ALVSIA PRO | t.me/ALVSIA_PRO"
+DEFAULT_WATERMARK = "@ALVSIA_PRO | t.me/ALVSIA_PRO"
+
+# Third-party credit lines that ship inside imported scripts. ALVSIA never
+# re-publishes another channel's branding, so recovered report text is
+# rewritten to the owner's brand before it is written to OUT/.
+FOREIGN_BRAND_TOKENS = (
+    "SRC_HUB",
+    "SRC HUB",
+    "SRCHUB",
+    "XTHrlen",
+    "XThrlen",
+    "XTHRLEN",
+    "ALECTO",
+    "Alecto",
+    "Original" + "OnwerALV",
+    "Kapten" + " Jack",
+)
+FOREIGN_CHANNEL_TOKENS = (
+    "t.me/SRC_HUB",
+    "t.me/XTHrlen",
+    "t.me/XThrlen",
+    "t.me/ALECTO",
+    "https://t.me/SRC_HUB",
+    "https://t.me/XTHrlen",
+    "https://t.me/XThrlen",
+    "https://t.me/ALECTO",
+    "t.me/" + "Original" + "OnwerALV",
+    "https://t.me/" + "Original" + "OnwerALV",
+)
+
+
+def scrub_foreign_branding(text, brand=DEFAULT_BRAND, channel=DEFAULT_CHANNEL):
+    """Replace third-party channel/credit tokens with the owner's branding.
+
+    Only report text (strings/constants dumps) is rewritten; the staged input
+    is never modified. Returns ``(cleaned_text, replacements)``.
+    """
+    if not text:
+        return text, 0
+    channel_at = "@" + channel.split("/")[-1].lstrip("@")
+    replacements = 0
+    # Longest / most specific forms first so "@SRC_HUB" never degrades into
+    # "@ALVSIA PRO" via the bare-token pass below.
+    for token in sorted(FOREIGN_CHANNEL_TOKENS, key=len, reverse=True):
+        if token in text:
+            replacements += text.count(token)
+            text = text.replace(token, "https://" + channel)
+    for token in ("@SRC_HUB", "@XTHrlen", "@XThrlen", "@ALECTO", "@" + "Original" + "OnwerALV"):
+        if token in text:
+            replacements += text.count(token)
+            text = text.replace(token, channel_at)
+    for token in FOREIGN_BRAND_TOKENS:
+        if token in text:
+            replacements += text.count(token)
+            text = text.replace(token, brand)
+    return text, replacements
+
+
+def scrub_output_text_files(out_root, max_file_bytes=8 * 1024 * 1024):
+    """Normalize known legacy credits in generated OUT text artifacts only.
+
+    Inputs under IN/WORK and binary assets are never touched.
+    """
+    root = Path(out_root) / "OUT"
+    allowed = {".txt", ".json", ".csv", ".md", ".log", ".lua", ".xml", ".ini", ".cfg"}
+    stats = {"files": 0, "replacements": 0}
+    if not root.is_dir():
+        return stats
+    for path in root.rglob("*"):
+        if path.is_symlink() or not path.is_file() or path.suffix.lower() not in allowed:
+            continue
+        try:
+            if path.stat().st_size > max_file_bytes:
+                continue
+            original = path.read_bytes()
+            decoded = original.decode("utf-8")
+        except (OSError, UnicodeDecodeError):
+            continue
+        cleaned, count = scrub_foreign_branding(decoded)
+        if not count:
+            continue
+        fd, temp_name = tempfile.mkstemp(prefix=".alvsia-brand-", suffix=".tmp", dir=str(path.parent))
+        try:
+            with os.fdopen(fd, "wb") as handle:
+                handle.write(cleaned.encode("utf-8"))
+                handle.flush()
+                os.fsync(handle.fileno())
+            os.replace(temp_name, str(path))
+        except Exception:
+            try:
+                os.unlink(temp_name)
+            except OSError:
+                pass
+            raise
+        stats["files"] += 1
+        stats["replacements"] += count
+    return stats
 
 
 def _load_rebrand_config(out_root):
@@ -1305,7 +1698,7 @@ class BinaryURLScanner:
     """
 
     _RE_URL     = _re.compile(
-        rb'(https?|wss?|ftp|sftp|rtsp|rtmp)://[^\s<>"\'{}|\\^`\[\]]{4,200}',
+        rb'(https?|wss?|ftp|sftp|rtsp|rtmp)://[^\x00-\x20\x7f\s<>"\'{}|\\^`\[\]]{4,200}',
         _re.IGNORECASE,
     )
     _RE_HOST    = _re.compile(

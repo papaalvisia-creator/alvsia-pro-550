@@ -75,7 +75,8 @@ def deobfuscate_alvseal3_source(input_path: Path, out_dir: Path) -> Dict[str, An
 
     out_dir.mkdir(parents=True, exist_ok=True)
     try:
-        text = input_path.read_text(encoding="utf-8", errors="replace")
+        from .detector import read_lua_text_strict
+        text = read_lua_text_strict(input_path)
     except Exception as exc:
         return {"ok": False, "error": f"read failed: {exc}"}
 

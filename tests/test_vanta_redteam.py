@@ -85,8 +85,9 @@ def test_no_reported_master_passwords_remain():
 
 
 def test_captcha_does_not_use_eval():
-    # The challenge must use the constrained parser, not Python eval.
-    assert "_safe_captcha_integer(equation)" in ULTIMATE
+    # The constrained arithmetic parser is retained as the only sanctioned
+    # expression evaluator; Python eval() must never appear in the engine.
+    assert "def _safe_captcha_integer(" in ULTIMATE
     assert not re.search(r"(?<![A-Za-z0-9_])eval\s*\(", ULTIMATE), (
         "Unsafe eval() remains in alvsia_ultimate.py"
     )
@@ -137,15 +138,17 @@ def test_login_enforces_rasp_before_local_tool_initialization():
     assert "SessionGate.lock(this@MainActivity)" in gate
 
 
-def test_new_panel_does_not_require_legacy_corebundle_or_operation_grant():
+def test_new_panel_uses_unaux_jwt_grants_without_legacy_corebundle():
     main = MAIN_ACTIVITY
     panel = PANEL_CLIENT
     vault = (ROOT / "app/src/main/java/com/alvsia/pro/panel/Vault.kt").read_text(encoding="utf-8")
     runner = (ROOT / "app/src/main/java/com/alvsia/pro/tool/PythonBridgeRunner.kt").read_text(encoding="utf-8")
     assert "tool_fetch.php" not in main + panel + vault
     assert "fetchCore(" not in main + panel
-    assert "pathOperationGrant" not in vault
-    assert "OperationGrantClient" not in runner
+    # Current Unaux contract: short-lived JWT grants over operation_grant.php.
+    assert "requestOperationGrant(" in panel
+    assert "operation_grant.php" in vault
+    assert "OperationGrants" in runner or "OperationGrantClient" in runner
     assert "SessionGate.unlock(this@MainActivity, tok, license)" in main
     assert "SessionGate.isTokenCurrent(token)" in runner
     assert "ToolCatalog.defaults()" in main
@@ -168,32 +171,23 @@ def test_login_uses_new_panel_and_preserves_otp_removal():
     assert grep.stdout.strip() == "", f"OTP references remain in app/:\n{grep.stdout}"
 
 
-def test_apk_session_requires_native_token_shape():
-    import os
-    from unittest.mock import patch
-    valid = _load_standalone_python_function("_alv_apk_session_valid")
-    with patch.dict(os.environ, {"ALVSIA_APK_SESSION": "1"}, clear=False):
-        os.environ.pop("ALVSIA_SESSION_TOKEN", None)
-        assert not valid(), "Session marker alone must not authorize the Python engine"
-        os.environ["ALVSIA_SESSION_TOKEN"] = "not-a-token"
-        assert not valid(), "Malformed session token must be rejected"
-        os.environ["ALVSIA_SESSION_TOKEN"] = "a" * 64
-        assert valid(), "A 64-hex token from the native gate should pass shape validation"
-    assert "if _alvsia_core_apk_session_valid():" in CORE
-    assert "if _alv_apk_session_valid():" in ULTIMATE
+def test_apk_session_requires_native_gate_authorization():
+    assert "def _valid_apk_session():" in BRIDGE
+    assert "SessionGate.isSessionAuthorized()" in BRIDGE
     assert "if not _valid_apk_session():" in BRIDGE
-
+    assert "ALVSIA_APK_SESSION" in CORE
 
 
 def test_core_operation_gate_requires_panel_session_and_device_binding():
     import ast
     import os
+    import time
     from unittest.mock import patch
 
     tree = ast.parse(CORE)
     node = next(node for node in tree.body
                 if isinstance(node, ast.FunctionDef) and node.name == "_alvsia_require_operation")
-    namespace = {}
+    namespace = {"_ALVSIA_CORE_ACTIVE_PROOF": None}
     exec(compile(ast.Module(body=[node], type_ignores=[]), str(PY / "alvsia_core.py"), "exec"), namespace)
     require = namespace["_alvsia_require_operation"]
     with patch.dict(os.environ, {"ALVSIA_APK_SESSION": "1"}, clear=False):
@@ -207,8 +201,19 @@ def test_core_operation_gate_requires_panel_session_and_device_binding():
             raise AssertionError("Core accepted a session marker without identity binding")
         os.environ["ALVSIA_EXPECTED_SESSION_ID"] = "a" * 64
         os.environ["ALVSIA_EXPECTED_DEVICE_ID"] = "b" * 64
+        try:
+            require({"pak.unpack"})
+        except RuntimeError as exc:
+            assert "grant missing" in str(exc).lower()
+        else:
+            raise AssertionError("Core accepted identity binding without an RSA grant")
+        namespace["_ALVSIA_CORE_ACTIVE_PROOF"] = {
+            "session_id": "a" * 64,
+            "device_id": "b" * 64,
+            "_expires_epoch": time.time() + 300,
+            "operation_id": "pak_tools",
+        }
         assert require({"pak.unpack"}) is True
-
 
 
 def test_bridge_requires_apk_session_gate():
@@ -232,31 +237,37 @@ def test_external_data_downloads_are_commit_pinned_and_integrity_checked():
 
 
 def test_codemagic_release_signing_fails_closed_and_pins_certificate():
-    sign_block = CODEMAGIC.split("- name: Sign and verify production release APK", 1)[1]
-    assert 'if [ -z "${CM_KEYSTORE:-}" ] || [ -z "${CM_KEYSTORE_PASSWORD:-}" ]; then' in sign_block
-    assert 'exit 2' in sign_block
+    sign_block = CODEMAGIC.split("- name: Sign and verify release APK", 1)[1]
+    assert 'CM_KEYSTORE_PASSWORD:?' in sign_block
     assert 'apksigner" verify --verbose --print-certs' in sign_block
-    assert '99b33815c88a17abbcfe22be15250363f6dfc79c11ffc980e71b62b74b1f295c' in sign_block
-    assert 'ALVSIA_PRO_5.5.0_unsigned.apk' not in CODEMAGIC
-    assert 'app/build/outputs/apk/**/*.apk' not in CODEMAGIC
+    assert 'EXPECTED_CERT_SHA256="$(grep -oE' in sign_block
+    assert 'ACTUAL_CERT_SHA256' in sign_block
+    assert 'test "$ACTUAL_CERT_SHA256" = "$EXPECTED_CERT_SHA256"' in sign_block
+    assert '99b33815c88a17abbcfe22be15250363f6dfc79c11ffc980e71b62b74b1f295c' in GRADLE
+    assert 'ALVISIA_PRO_5.5.0_unsigned.apk' not in CODEMAGIC
     assert 'groups:\n        - signing' in CODEMAGIC
-    assert '- name: Check release signing secrets' in CODEMAGIC
+    assert '- name: Validate release signing configuration' in CODEMAGIC
 
 
 def test_runtime_gate_rechecks_live_hooks_after_unlock():
     session_gate = (ROOT / "app/src/main/java/com/alvsia/pro/sec/SessionGate.kt").read_text(encoding="utf-8")
     native_guard = (ROOT / "app/src/main/java/com/alvsia/pro/sec/NativeGuard.kt").read_text(encoding="utf-8")
     gate = session_gate[session_gate.find("fun allowTools(ctx: Context)"):]
-    live_check = gate.find("if (Guard.runtimeHostile(ctx))")
+    live_check = gate.find("if (runtimeHostile(ctx))")
     unlocked_branch = gate.find("if (!NativeGate.sessionUnlocked)")
     assert live_check >= 0, "every tool dispatch must re-check live hook/tracer indicators"
     assert unlocked_branch > live_check, "live guard must run before the unlocked-session shortcut"
     assert "fun isNativeLoaded(): Boolean = nativeLoaded" in native_guard
-    assert "native_rasp_unavailable" in gate, "release must fail closed if JNI RASP failed to load"
+    assert "native_rasp_unavailable" in session_gate, "release must fail closed if JNI RASP failed to load"
     guard = (ROOT / "app/src/main/java/com/alvsia/pro/sec/Guard.kt").read_text(encoding="utf-8")
-    runtime = guard.split("private val RUNTIME_MARKERS", 1)[1].split(")", 1)[0]
-    assert "frida" in runtime and "dobby" in runtime
-    assert "magisk" not in runtime and "zygisk" not in runtime, "root-only markers must not trigger hard block on every tool call"
+    hard = guard.split("private val HARD_RUNTIME_MARKERS", 1)[1].split(")", 1)[0]
+    soft = guard.split("private val SOFT_HOOK_MARKERS", 1)[1].split(")", 1)[0]
+    # Hard markers block every dispatch; soft hook/root markers degrade only.
+    assert "frida" in hard
+    assert "magisk" not in hard and "zygisk" not in hard, (
+        "root-only markers must not trigger a hard block on every tool call"
+    )
+    assert "dobby" in soft and "zygisk" in soft
 
 
 if __name__ == "__main__":

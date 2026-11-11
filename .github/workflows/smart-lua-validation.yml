@@ -1,0 +1,46 @@
+name: Smart Lua Python Validation
+on:
+  push:
+    branches: [ feat/alvsia-program-intelligence-core-20261109, feat/smart-lua-recovery-fusion-20261109 ]
+  pull_request:
+    branches: [ feat/full-reference-source-registry-20261106 ]
+permissions:
+  contents: read
+jobs:
+  smart-lua-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install Lua parser and test dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y lua5.3
+          luac5.3 -v
+          python -m pip install --disable-pip-version-check pycryptodome cryptography pytest
+      - name: Compile Lua engine modules
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          root = Path("app/src/main/python")
+          files = sorted(root.rglob("*.py"))
+          for path in files:
+              compile(path.read_text(encoding="utf-8"), str(path), "exec")
+          print(f"PYTHON SYNTAX: PASS ({len(files)} modules)")
+          PY
+      - name: Run Lua engine regression tests
+        run: timeout 120s python tests/test_lua_engine.py
+      - name: Run Smart Lua orchestrator regression tests
+        run: timeout 120s python -m pytest -vv -ra tests/test_lua_orchestrator.py
+      - name: Run Lua module unittest suite
+        run: timeout 120s python -m unittest discover -s tests -p 'test_lua*.py' -v
+      - name: Run streaming decompiler unittest suite
+        run: timeout 120s python -m unittest discover -s tests -p 'test_streaming_decompiler.py' -v
+      - name: Run large-file bounded-memory regression tests
+        run: timeout 120s python -m unittest discover -s tests -p 'test_large_file_streaming.py' -v
+      - name: Run Program Intelligence regression suite
+        run: timeout 120s python -m unittest discover -s tests -p 'test_lua_intelligence_core.py' -v

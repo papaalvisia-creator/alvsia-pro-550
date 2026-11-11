@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
-ALVSIA PRO 5.5.0 — bridge for 18-module catalog.
-Modules 1-9: original. Modules 10-18: new in v5.5.0.
+ALVSIA PRO 5.5.2 — bridge for the 19-module catalog.
+Modules 1-19 retain stable menu IDs and authenticated operation grants.
 """
 from __future__ import annotations
 import os
@@ -64,6 +64,53 @@ def run_tool(module_id, sub_id, input_path, out_root, engine_dir, jars_dir):
         if not grant_operation:
             return "X AUTH: module/subtool has no Unaux grant mapping"
         core._alvsia_require_operation((grant_operation,))
+
+        # Unified adapter facade: route the production Smart Lua/protection,
+        # string-recovery, and bounded OBB operations through one fail-closed
+        # dispatcher after the existing authentication/grant gates pass.
+        if sid in ("lua_decompile", "lua_smart_protect", "lua_smart_protect_strong", "str_recover", "obb_info", "obb_unzip"):
+            try:
+                from module_adapters import dispatch as _adapter_dispatch
+                if sid == "lua_decompile":
+                    _adapter = _adapter_dispatch(
+                        "lua", "decompile", input_path=ip,
+                        output_path=out / "OUT" / "LUA" / (Path(ip).stem + "_smart.lua"),
+                    )
+                elif sid in ("lua_smart_protect", "lua_smart_protect_strong"):
+                    _adapter = _adapter_dispatch(
+                        "lua", "protect", input_path=ip,
+                        output_path=out / "OUT" / "LPROTECT" / (Path(ip).stem + "_protected.lua"),
+                        profile="strong" if sid.endswith("_strong") else "balanced",
+                    )
+                elif sid == "str_recover":
+                    _adapter = _adapter_dispatch(
+                        "string-recovery", "recover", input_path=ip,
+                        output_dir=out / "OUT" / "STR",
+                    )
+                elif sid == "obb_info":
+                    _adapter = _adapter_dispatch(
+                        "archive", "inspect", input_path=ip,
+                        output_file=out / "OUT" / "OBB" / "info.json",
+                    )
+                else:
+                    _adapter = _adapter_dispatch(
+                        "archive", "extract", input_path=ip,
+                        output_dir=out / "OUT" / "OBB" / Path(ip).stem,
+                    )
+                if not isinstance(_adapter, dict) or not _adapter.get("ok"):
+                    return "\\n".join(lines + ["X UNIFIED ADAPTER: " + str((_adapter or {}).get("error", "operation failed"))[:700]])
+                lines.append("OK UNIFIED ADAPTER module=%s operation=%s" % (
+                    _adapter.get("module", "?"), _adapter.get("operation", "?")))
+                if _adapter.get("out"):
+                    lines.append("OUT -> %s" % _adapter.get("out"))
+                elif _adapter.get("report"):
+                    lines.append("REPORT -> %s" % _adapter.get("report"))
+                elif _adapter.get("candidate_count") is not None:
+                    lines.append("candidates=%s" % _adapter.get("candidate_count"))
+                lines.append("ADAPTER RESULT -> %s" % str(_adapter)[:1600])
+                return "\\n".join(lines)
+            except Exception as _adapter_exc:
+                return "\\n".join(lines + ["X UNIFIED ADAPTER exception: %s" % (str(_adapter_exc)[:700] or type(_adapter_exc).__name__)])
 
         def need_file():
             if not ip or not Path(ip).exists():
@@ -136,12 +183,15 @@ def run_tool(module_id, sub_id, input_path, out_root, engine_dir, jars_dir):
         if mid == 1 or sid.startswith("pak_full") or sid in ("pak_list", "pak_info", "pak_csv"):
             if not need_file(): return "\n".join(lines)
             try:
-                raw = Path(ip).read_bytes()
-                lines.append("preflight size=%s head=%s" % (len(raw), raw[:8].hex()))
-                if len(raw) < 64:
+                source_path = Path(ip)
+                source_size = source_path.stat().st_size
+                with source_path.open("rb") as source_file:
+                    header = source_file.read(8)
+                lines.append("preflight size=%s head=%s" % (source_size, header.hex()))
+                if source_size < 64:
                     lines.append("X File too small for PAK/LuaS")
                     return "\n".join(lines)
-                if raw[:4] == b"\x1bLua":
+                if header[:4] == b"\x1bLua":
                     lines.append("NOTE: magic LuaS bytecode (NOT a PAK) -> LUA smart")
                     dest = out_dir("LUA")
                     r = feat.run_lua_smart(ip, dest, jars_dir=jars)
@@ -157,7 +207,7 @@ def run_tool(module_id, sub_id, input_path, out_root, engine_dir, jars_dir):
                     else:
                         lines.append("X OUT -> operation failed")
                     return "\n".join(lines)
-                if raw[:2] == b"PK":
+                if header[:2] == b"PK":
                     lines.append("NOTE: ZIP magic — use OBB Tools")
                     return "\n".join(lines)
             except Exception as _e:
@@ -291,6 +341,26 @@ def run_tool(module_id, sub_id, input_path, out_root, engine_dir, jars_dir):
             lines.append(str(core.run_pak_delete_entries(ip, dest, targets)))
             return "\n".join(lines)
 
+        if sid == "obb_integrity_audit":
+            if not need_file():
+                return "\n".join(lines)
+            source = Path(ip)
+            target = out_dir("OBB") / (source.name + ".integrity_audit.json")
+            try:
+                from alvsia_reference_tools import audit_archive_file
+                import json as _json
+                report = audit_archive_file(source)
+                target.write_text(_json.dumps(report, indent=2, sort_keys=True), encoding="utf-8")
+                lines.append("OK archive integrity audit" if report.get("ok") else "WARN archive issues or incomplete CRC coverage")
+                lines.append("entries=%s CRC_checked=%s unsafe_paths=%s bad_crc=%s" % (
+                    report.get("entries"), report.get("crc_checked_bytes"),
+                    len(report.get("unsafe_paths", [])), len(report.get("bad_crc", []))))
+                lines.append("OUT -> %s" % target)
+                lines.append("Archive was not extracted or modified")
+            except Exception as exc:
+                lines.append("X OBB integrity audit failed: %s" % str(exc)[:300])
+            return "\n".join(lines)
+
         # ── 4  OBB Tools — unified bounded archive engine ────────────────
         if mid == 4 or sid.startswith("obb_"):
             if not need_file(): return "\n".join(lines)
@@ -322,72 +392,68 @@ def run_tool(module_id, sub_id, input_path, out_root, engine_dir, jars_dir):
                 return "\n".join(lines)
             dest_lua = out_dir("LUA")
             if sid == "lua_decompile":
-                if not need_file(): return "\n".join(lines)
-                # Use the streaming decompiler for large files (>8 MiB) so we
-                # never OOM on inputs that the in-process ART unluac rejects.
-                try:
-                    in_size = Path(ip).stat().st_size
-                except Exception:
-                    in_size = 0
-                if in_size > 1 * 1024 * 1024:
-                    try:
-                        from lua_engine.streaming_decompiler import decompile_large
-                        r = decompile_large(Path(ip), dest_lua, jars_dir=jars)
-                        r.setdefault("lines", 0)
-                        r.setdefault("mode", "streaming_fallback")
-                        # BGMI-VM structural recovery writes useful diagnostics but does
-                        # not recover original Lua source. Do not report it as a successful
-                        # decompile just because the analyzer produced recovery artifacts.
-                        if r.get("mode") == "bgmi_vm_partial" or r.get("recovered") is False:
-                            lines.append("PARTIAL mode=%s lines=0" % (r.get("mode", "partial")))
-                            lines.append(
-                                "DIAGNOSTIC: protos=%s main_instructions=%s main_constants=%s parse_errors=%s"
-                                % (r.get("protos_parsed", 0), r.get("main_code_count", 0),
-                                   r.get("main_const_count", 0), r.get("parse_errors", 0))
-                            )
-                            for key, label in (
-                                ("structure_out", "STRUCTURE MAP"),
-                                ("constants_out", "CONSTANT DUMP"),
-                                ("report_out", "RECOVERY REPORT"),
-                            ):
-                                artifact = r.get(key)
-                                if artifact and Path(artifact).is_file():
-                                    lines.append("OUT %s -> %s" % (label, artifact))
-                            if r.get("note"):
-                                lines.append("NOTE: %s" % r.get("note"))
-                            lines.append(
-                                "NOTE: no validated Lua source was produced. Full recovery needs the matching VM opcode/dispatcher map; "
-                                "raising the ART size limit cannot decode a custom VM by itself."
-                            )
-                            return "\n".join(lines)
-                        if r.get("ok"):
-                            lines.append("OK mode=%s lines=%s" % (r.get("mode","?"), r.get("lines",0)))
-                            lines.append("OUT -> %s" % r.get("out","(see OUT/LUA/)"))
-                            if r.get("note"):
-                                lines.append("NOTE: %s" % r.get("note"))
-                            if r.get("container"):
-                                lines.append("OK container=%s" % r.get("container"))
-                            return "\n".join(lines)
-                        # fall through to run_lua_smart as second attempt
-                        lines.append("... streaming decompiler produced no output, trying run_lua_smart")
-                    except Exception as exc:
-                        lines.append("... streaming decompiler exception: %s" % exc)
-                r = feat.run_lua_smart(ip, dest_lua, jars_dir=jars)
-                if r.get("ok"):
-                    lines.append("OK mode=%s lines=%s" % (r.get("mode","?"), r.get("lines",0)))
-                    lines.append("OUT -> %s" % r.get("out","(see OUT/LUA/)"))
-                    vm_notes = r.get("vm_notes") or []
-                    if r.get("vm_obfuscated"):
-                        lines.append("NOTE: VM obfuscation detected (confidence=%.2f)" % (r.get("vm_confidence",0)))
-                        lines.append("NOTE: File uses runtime VM — decompiled VM interpreter (not original source)")
-                        for n in (vm_notes[:3] if isinstance(vm_notes, list) else []):
-                            lines.append("  · %s" % n)
-                    else:
-                        lines.append("OK decompile complete")
+                if not need_file():
+                    return "\n".join(lines)
+                # One user-facing entry point: Smart Lua owns detection,
+                # container normalization, protected-format diagnostics,
+                # compatible engine selection and partial recovery.
+                result = feat.run_lua_smart(ip, dest_lua, jars_dir=jars)
+                if result.get("ok") and result.get("out"):
+                    lines.append("OK mode=%s engine=%s" % (
+                        result.get("mode", "smart"),
+                        result.get("selected_engine", result.get("pattern_id", "auto")),
+                    ))
+                    lines.append("OUT -> %s" % result.get("out"))
+                    if result.get("final_status"):
+                        lines.append("FINAL STATUS: %s" % result.get("final_status"))
+                    if result.get("source_recovered") is not None:
+                        lines.append("ORIGINAL SOURCE RECOVERED: %s" % (
+                            "YES" if result.get("source_recovered") else "NO / NOT CONFIRMED",
+                        ))
+                    for step in (result.get("steps") or []):
+                        if step.get("step") == "engine_orchestrator":
+                            engine_results = step.get("results") or []
+                            if engine_results and engine_results[0].get("note"):
+                                lines.append("VALIDATION: %s" % str(engine_results[0].get("note"))[:420])
+                            break
+                    if result.get("source_recovered") is False and not result.get("vm_obfuscated"):
+                        lines.append("NOTE: Output is a protected wrapper or partial reconstruction, not confirmed original source")
+                    if result.get("vm_obfuscated"):
+                        lines.append("NOTE: VM protection detected; output type=%s" % (
+                            result.get("artifact_kind", "analysis"),
+                        ))
+                        lines.append("NOTE: VM wrapper/interpreter source is not the original protected script")
                 else:
-                    lines.append("X OUT -> operation failed")
-                    for s in (r.get("steps") or [])[-3:]:
-                        lines.append("  step=%s ok=%s" % (s.get("step"), s.get("ok")))
+                    lines.append("X No validated Lua source was produced")
+                    lines.append("FINAL STATUS: %s" % result.get("final_status", "PARTIAL"))
+                    for step in (result.get("steps") or [])[-8:]:
+                        detail = step.get("error") or step.get("note") or step.get("format") or ""
+                        lines.append("  step=%s ok=%s%s" % (
+                            step.get("step"), step.get("ok"),
+                            (" detail=" + str(detail)[:220]) if detail else "",
+                        ))
+                    for key, label in (
+                        ("stage_report", "RECOVERY REPORT"),
+                        ("structure_out", "STRUCTURE MAP"),
+                        ("constants_out", "CONSTANT DUMP"),
+                        ("report_out", "RECOVERY REPORT"),
+                    ):
+                        artifact = result.get(key)
+                        if artifact and Path(str(artifact)).is_file():
+                            lines.append("OUT %s -> %s" % (label, artifact))
+                return "\n".join(lines)
+            if sid == "lua_format_probe":
+                try:
+                    from alvsia_reference_tools import probe_lua_file
+                    source = Path(ip)
+                    report = probe_lua_file(source)
+                    target = dest_lua / (source.stem + "_format_probe.json")
+                    target.write_text(json.dumps(report, indent=2, sort_keys=True), encoding="utf-8")
+                    lines.append("OK read-only Lua format probe: %s (%s confidence)" % (
+                        report.get("format", "unknown"), report.get("confidence", "low")))
+                    lines.append("OUT -> %s" % target)
+                except Exception as exc:
+                    lines.append("X Lua format probe failed: %s" % (str(exc)[:300] or type(exc).__name__))
                 return "\n".join(lines)
             if sid == "lua_analyze":
                 r = feat.run_lua_analyze(ip, dest_lua)
@@ -449,9 +515,26 @@ def run_tool(module_id, sub_id, input_path, out_root, engine_dir, jars_dir):
                     return "\n".join(lines)
 
         # ── 6  File Scan ─────────────────────────────────────────────────
-        if mid == 6 or sid in ("string_scan", "hash_scan"):
+        if mid == 6 or sid in ("string_scan", "hash_scan", "metadata_v39_decode"):
             if not need_file(): return "\n".join(lines)
             dest_sc = out_dir("SCAN")
+            if sid == "metadata_v39_decode":
+                try:
+                    from alvsia_metadata import decode_metadata_v39_file
+                    source = Path(ip)
+                    digest = hashlib.sha256(source.read_bytes()).hexdigest()[:12]
+                    target = dest_sc / (source.stem + "_metadata_decoded_" + digest + ".dat")
+                    report = decode_metadata_v39_file(source, target)
+                    report_path = target.with_suffix(target.suffix + ".json")
+                    report_path.write_text(json.dumps(report, indent=2, sort_keys=True), encoding="utf-8")
+                    lines.append("OK IL2CPP metadata v39 decoded and all section ranges validated")
+                    lines.append("sections=%s overlaps=%s" % (report.get("section_count"), len(report.get("overlaps", []))))
+                    lines.append("OUT -> %s" % target)
+                    lines.append("REPORT -> %s" % report_path)
+                    lines.append("Original input preserved; output written atomically")
+                except Exception as exc:
+                    lines.append("X metadata v39 decode failed: %s" % str(exc)[:500])
+                return "\n".join(lines)
             if sid == "string_scan":
                 r = feat.run_strings_scan(ip, dest_sc)
                 lines.append(str(r))
@@ -499,6 +582,19 @@ def run_tool(module_id, sub_id, input_path, out_root, engine_dir, jars_dir):
             import alvsia_ultimate as ult
             if not need_file(): return "\n".join(lines)
             dest_so = out_dir("SO")
+            if sid == "so_dump_audit":
+                try:
+                    from alvsia_reference_tools import inspect_dump_file
+                    source = Path(ip)
+                    report = inspect_dump_file(source)
+                    target = dest_so / (source.stem + "_offline_dump.json")
+                    target.write_text(json.dumps(report, indent=2, sort_keys=True), encoding="utf-8")
+                    lines.append("OK offline dump inspection; no live process access or secret extraction")
+                    lines.append("size=%s sha256=%s" % (report.get("size"), report.get("sha256")))
+                    lines.append("OUT -> %s" % target)
+                except Exception as exc:
+                    lines.append("X offline dump inspection failed: %s" % (str(exc)[:300] or type(exc).__name__))
+                return "\n".join(lines)
             if sid == "so_xor_scan":
                 r = ult.so_xor_brute(ip, dest_so)
                 lines.append(str(r))
@@ -570,9 +666,38 @@ def run_tool(module_id, sub_id, input_path, out_root, engine_dir, jars_dir):
         # ── 12  XOR Suite ────────────────────────────────────────────────
         if mid == 12 or sid.startswith("xor_"):
             import alvsia_ultimate as ult
-            if sid != "xor_batch" and not need_file():
+            if sid not in ("xor_batch", "xor_selftest") and not need_file():
                 return "\n".join(lines)
             dest_xor = out_dir("XOR")
+            if sid == "xor_selftest":
+                test_dir = dest_xor / ".selftest_tmp"
+                test_dir.mkdir(parents=True, exist_ok=True)
+                plain = b"ALVSIA XOR engine self-test v1"
+                key_hex = "DEADBEEF"
+                expected_cipher_hex = "9fe1e8bc97ec9eb791ff9e8ab0cad781bb8dcd8ab2cb939bbbdecacfa89c"
+                report = {"test": "repeating-key XOR known vector", "key_hex": key_hex}
+                try:
+                    source = test_dir / "known_plain.bin"
+                    source.write_bytes(plain)
+                    enc = ult.xor_apply_key(str(source), test_dir, key_hex)
+                    enc_path = Path(enc.get("out", "")) if isinstance(enc, dict) else Path("")
+                    cipher_ok = bool(enc.get("ok")) and enc_path.is_file() and enc_path.read_bytes().hex() == expected_cipher_hex
+                    dec = ult.xor_apply_key(str(enc_path), test_dir, key_hex) if cipher_ok else {"ok": False}
+                    dec_path = Path(dec.get("out", "")) if isinstance(dec, dict) else Path("")
+                    roundtrip_ok = bool(dec.get("ok")) and dec_path.is_file() and dec_path.read_bytes() == plain
+                    report.update({"cipher_vector_match": cipher_ok, "roundtrip_match": roundtrip_ok,
+                                   "ok": cipher_ok and roundtrip_ok})
+                except Exception as exc:
+                    report.update({"ok": False, "error": str(exc)[:240]})
+                finally:
+                    shutil.rmtree(test_dir, ignore_errors=True)
+                target = dest_xor / "xor_selftest.json"
+                target.write_text(json.dumps(report, indent=2, sort_keys=True), encoding="utf-8")
+                lines.append("OK XOR known-vector self-test" if report.get("ok") else "X XOR self-test failed")
+                lines.append("cipher_vector=%s roundtrip=%s" % (
+                    report.get("cipher_vector_match"), report.get("roundtrip_match")))
+                lines.append("OUT -> %s" % target)
+                return "\n".join(lines)
             if sid == "xor_single_byte":
                 r = ult.xor_single_byte_scan(ip, dest_xor)
                 lines.append(str(r))
@@ -604,8 +729,34 @@ def run_tool(module_id, sub_id, input_path, out_root, engine_dir, jars_dir):
         # ── 13  Decrypt Engine ───────────────────────────────────────────
         if mid == 13 or sid.startswith("dec_"):
             import alvsia_ultimate as ult
-            if not need_file(): return "\n".join(lines)
             dest_dec = out_dir("DEC")
+            if sid == "dec_selftest":
+                test_dir = dest_dec / ".selftest_tmp"
+                test_dir.mkdir(parents=True, exist_ok=True)
+                report = {"test": "NIST AES known-answer tests", "ok": False}
+                try:
+                    ecb_in = test_dir / "aes_ecb_known.bin"
+                    ecb_in.write_bytes(bytes.fromhex("69c4e0d86a7b0430d8cdb78070b4c55a"))
+                    ecb = ult.decrypt_aes(str(ecb_in), test_dir / "ecb", "000102030405060708090a0b0c0d0e0f", "")
+                    ecb_path = Path(ecb.get("out", "")) if isinstance(ecb, dict) else Path("")
+                    ecb_ok = bool(ecb.get("ok")) and ecb_path.is_file() and ecb_path.read_bytes().hex() == "00112233445566778899aabbccddeeff"
+                    cbc_in = test_dir / "aes_cbc_known.bin"
+                    cbc_in.write_bytes(bytes.fromhex("7649abac8119b246cee98e9b12e9197d"))
+                    cbc = ult.decrypt_aes(str(cbc_in), test_dir / "cbc", "2b7e151628aed2a6abf7158809cf4f3c", "000102030405060708090a0b0c0d0e0f")
+                    cbc_path = Path(cbc.get("out", "")) if isinstance(cbc, dict) else Path("")
+                    cbc_ok = bool(cbc.get("ok")) and cbc_path.is_file() and cbc_path.read_bytes().hex() == "6bc1bee22e409f96e93d7e117393172a"
+                    report.update({"aes_ecb_match": ecb_ok, "aes_cbc_match": cbc_ok, "ok": ecb_ok and cbc_ok})
+                except Exception as exc:
+                    report.update({"error": str(exc)[:240]})
+                finally:
+                    shutil.rmtree(test_dir, ignore_errors=True)
+                target = dest_dec / "decrypt_selftest.json"
+                target.write_text(json.dumps(report, indent=2, sort_keys=True), encoding="utf-8")
+                lines.append("OK AES known-answer self-test" if report.get("ok") else "X AES self-test failed")
+                lines.append("AES_ECB=%s AES_CBC=%s" % (report.get("aes_ecb_match"), report.get("aes_cbc_match")))
+                lines.append("OUT -> %s" % target)
+                return "\n".join(lines)
+            if not need_file(): return "\n".join(lines)
             if sid == "dec_auto":
                 r = ult.decrypt_auto(ip, dest_dec, str(work_dir()))
                 lines.append(str(r))
@@ -649,6 +800,25 @@ def run_tool(module_id, sub_id, input_path, out_root, engine_dir, jars_dir):
                 return "\n".join(lines)
 
         # ── 14  PAK Deep ─────────────────────────────────────────────────
+        if sid == "pak_deep_integrity_audit":
+            if not need_file():
+                return "\n".join(lines)
+            dest_pakd = out_dir("PAKD")
+            target = dest_pakd / (Path(ip).name + ".integrity_audit.json")
+            try:
+                result = core.run_pak_integrity_audit(ip, target)
+                lines.append("OK range validation complete" if result.get("ok") else "WARN invalid payload/index ranges detected")
+                lines.append("entries=%s invalid_ranges=%s overlaps=%s" % (
+                    result.get("entry_count"), len(result.get("invalid_ranges", [])),
+                    len(result.get("overlaps", []))))
+                if result.get("warnings"):
+                    lines.append("WARN: %s" % "; ".join(result.get("warnings", [])))
+                lines.append("OUT -> %s" % result.get("out", target))
+                lines.append("Original PAK was not modified")
+            except Exception as exc:
+                lines.append("X PAK integrity audit failed: %s" % str(exc)[:300])
+            return "\n".join(lines)
+
         if mid == 14 or sid.startswith("pak_deep_"):
             import alvsia_ultimate as ult
             if not need_file(): return "\n".join(lines)
@@ -782,10 +952,24 @@ def run_tool(module_id, sub_id, input_path, out_root, engine_dir, jars_dir):
                 return "\n".join(lines)
 
         # ── 17  Anti-RE Audit ────────────────────────────────────────────
-        if mid == 17 or sid.startswith("audit_"):
+        if mid == 17 or sid.startswith("audit_") or sid == "anti_re_source_triage":
             import alvsia_ultimate as ult
             if not need_file(): return "\n".join(lines)
             dest_audit = out_dir("AUDIT")
+            if sid == "anti_re_source_triage":
+                try:
+                    from alvsia_reference_tools import scan_source_file
+                    source = Path(ip)
+                    report = scan_source_file(source)
+                    target = dest_audit / (source.stem + "_source_triage.json")
+                    target.write_text(json.dumps(report, indent=2, sort_keys=True), encoding="utf-8")
+                    lines.append("OK static-only source triage; input was not executed or modified")
+                    lines.append("indicators=%s sha256=%s" % (
+                        len(report.get("findings", [])), report.get("sha256")))
+                    lines.append("OUT -> %s" % target)
+                except Exception as exc:
+                    lines.append("X source triage failed: %s" % (str(exc)[:300] or type(exc).__name__))
+                return "\n".join(lines)
             if sid == "audit_apk":
                 r = ult.audit_apk(ip, dest_audit)
                 lines.append(str(r))
@@ -805,6 +989,22 @@ def run_tool(module_id, sub_id, input_path, out_root, engine_dir, jars_dir):
             if not need_file():
                 return "\n".join(lines)
             dest_dir = out_dir("LPROTECT")
+
+            if sid in ("lua_smart_protect", "lua_smart_protect_strong"):
+                try:
+                    from lua_engine.protection_pipeline import protect_file
+                    profile = "strong" if sid == "lua_smart_protect_strong" else "balanced"
+                    dest = dest_dir / (Path(ip).stem + "_protected.lua")
+                    result = protect_file(ip, dest, profile)
+                    if not result.get("ok"):
+                        lines.append("X Smart Lua Protect failed: %s" % result.get("error", "validation failed"))
+                        return "\n".join(lines)
+                    lines.append("OK SMART LUA PROTECT profile=%s" % profile)
+                    lines.append("SHA-256 %s" % result.get("sha256", ""))
+                    lines.append("OUT -> %s" % result.get("out", dest))
+                except Exception as exc:
+                    lines.append("X Smart Lua Protect failed: %s" % (str(exc)[:300] or type(exc).__name__))
+                return "\n".join(lines)
 
             # ── 18 / VM-protect: BGMI-style self-executing Lua source ────
             if sid == "lua_vm_protect":
@@ -919,6 +1119,7 @@ def run_tool(module_id, sub_id, input_path, out_root, engine_dir, jars_dir):
             "priv_lua_parse",      "priv_lua_convert",   "priv_lua_heping",
             "priv_compress_fit",   "priv_apk_audit",     "priv_str_recover",
             "priv_entropy_map",    "priv_pak_manifest",  "priv_apk_manifest",
+            "priv_lua_probe",      "priv_source_triage", "priv_dump_audit",
         ):
             # Gate: sealed runtime must be active
             import os as _ose
@@ -926,6 +1127,40 @@ def run_tool(module_id, sub_id, input_path, out_root, engine_dir, jars_dir):
                 lines.append("X ALVSIA PRIVATE TOOL: sealed runtime not active")
                 lines.append("X Authenticate via ALVSIA panel first")
                 return "\n".join(lines)
+            # New read-only reference inspectors. Inputs are never executed and
+            # process memory is never acquired by these subtools.
+            if sid in ("priv_lua_probe", "priv_source_triage", "priv_dump_audit"):
+                if not need_file():
+                    return "\n".join(lines)
+                from alvsia_reference_tools import (
+                    probe_lua_file, scan_source_file, inspect_dump_file
+                )
+                import json as _json
+                source_path = Path(ip)
+                if not source_path.is_file():
+                    lines.append("X This inspector accepts one file at a time")
+                    return "\n".join(lines)
+                if sid == "priv_lua_probe":
+                    report = probe_lua_file(source_path)
+                    out_file = out_dir("REFERENCE") / (source_path.name + ".lua_probe.json")
+                elif sid == "priv_source_triage":
+                    report = scan_source_file(source_path)
+                    out_file = out_dir("REFERENCE") / (source_path.name + ".source_triage.json")
+                else:
+                    report = inspect_dump_file(source_path)
+                    out_file = out_dir("REFERENCE") / (source_path.name + ".dump_audit.json")
+                out_file.write_text(_json.dumps(report, indent=2, sort_keys=True), encoding="utf-8")
+                lines.append("OK read-only inspection complete")
+                lines.append("OUT -> %s" % out_file)
+                if sid == "priv_lua_probe":
+                    lines.append("format=%s confidence=%s" % (report.get("format"), report.get("confidence")))
+                elif sid == "priv_source_triage":
+                    lines.append("indicators=%s (static only; no execution)" % len(report.get("findings", [])))
+                else:
+                    lines.append("blocks=%s strings=%s (offline file only)" % (
+                        len(report.get("blocks", [])), len(report.get("strings", []))))
+                return "\n".join(lines)
+
             from alvsia_private import (
                 ZUCCipher, AESKeyScanner, XORKeyRecovery, LuaBytecodeParser,
                 LuaOpcodeConverter, CompressionBestFit, APKAuditor,
@@ -1232,6 +1467,34 @@ def run_tool(module_id, sub_id, input_path, out_root, engine_dir, jars_dir):
                     lines.append("OUT -> %s" % out_file)
             except Exception as exc:
                 lines.append("X PUBGLuaConverter error: %s" % str(exc)[:300])
+            return "\n".join(lines)
+
+        # ── T24 Lua v4 bytecode normalizer + validated ALVSIA decompiler ──
+        elif sid == "t24_lua_decompile":
+            from lua_engine.t24 import convert_t24_file
+            from pathlib import Path as _P
+            if not need_file():
+                return "\n".join(lines)
+            source_path = _P(ip)
+            if not source_path.is_file():
+                lines.append("X T24 decompiler accepts one bytecode file at a time")
+                return "\n".join(lines)
+            try:
+                dest_dir = out_dir("LUA_T24")
+                normalized_path = dest_dir / (source_path.stem + "_standard.luac")
+                # T24 v4 and the existing PUBG/BGMI normalizer share the
+                # project XOR key. Input is never executed or overwritten.
+                key = bytes(feat.PUBG_XOR_KEY)
+                report = convert_t24_file(source_path, normalized_path, key)
+                lines.append("OK T24 bytecode normalized")
+                lines.append("instructions=%s prototypes=%s strings=%s" % (
+                    report.get("instructions"), report.get("prototypes"), report.get("strings")))
+                lines.append("OUT -> %s" % normalized_path)
+                decompile_dir = dest_dir / "DECOMPILED"
+                result = feat.run_lua_smart(normalized_path, decompile_dir, jars)
+                lines.append("DECOMPILE -> %s" % json.dumps(result, ensure_ascii=False, sort_keys=True))
+            except Exception as exc:
+                lines.append("X T24 Lua error: %s" % str(exc)[:300])
             return "\n".join(lines)
 
         # ── fallback ─────────────────────────────────────────────────────

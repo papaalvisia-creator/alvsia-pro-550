@@ -27,8 +27,10 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
@@ -60,6 +62,14 @@ import com.alvsia.pro.ui.theme.AlvisiaRed
 import com.alvsia.pro.ui.theme.AlvisiaSilver
 import java.io.File
 
+private const val MAX_DIRECT_FILE_BYTES = 5L * 1024L * 1024L * 1024L
+
+private fun selectedSizeBytes(context: Context, uri: Uri): Long? = try {
+    context.contentResolver.query(uri, arrayOf(android.provider.OpenableColumns.SIZE), null, null, null)?.use { c ->
+        if (c.moveToFirst() && !c.isNull(0)) c.getLong(0) else null
+    }
+} catch (_: Exception) { null }
+
 /**
  * ALVSIA PRO 5.5.2 — ToolWorkspaceScreen (UX Sprint 1 rewrite)
  *
@@ -79,24 +89,59 @@ fun ToolWorkspaceScreen(
     running: Boolean,
     logs: List<String>,
     onBack: () -> Unit,
-    onRun: (Uri?, String?) -> Unit
+    onRun: (Uri?, String?) -> Unit,
+    initialUri: Uri? = null
 ) {
     val ctx = LocalContext.current
     var uri by remember { mutableStateOf<Uri?>(null) }
     var detectionResult by remember { mutableStateOf<FileMagic.DetectionResult?>(null) }
+    var selectedSize by remember { mutableStateOf<Long?>(null) }
+    var sizeRejected by remember { mutableStateOf(false) }
+    var logMode by remember(sub.id) { mutableStateOf("simple") }
+    var confirmClearWorkspace by remember(sub.id) { mutableStateOf(false) }
+    val errorLine = logs.firstOrNull { it.startsWith("X ") }
+    val successLine = logs.firstOrNull { it.startsWith("OK ") }
+    val simpleSummary = when {
+        running -> "ALVSIA sedang memproses pekerjaan ini. Tunggu sampai status selesai."
+        errorLine != null -> errorLine.removePrefix("X ").trim()
+        successLine != null -> "Proses selesai. ${successLine.removePrefix("OK ").trim()}"
+        logs.isNotEmpty() -> "Pekerjaan belum memiliki hasil final. Periksa log lanjutan jika diperlukan."
+        else -> "Pilih input dan tekan RUN untuk memulai pekerjaan."
+    }
+    val summaryColor = when {
+        running -> AlvisiaCyan
+        errorLine != null -> AlvisiaRed
+        successLine != null -> Color(0xFF00E676)
+        else -> AlvisiaSilver
+    }
 
     // Inline config form state: map of field name → user input value
     val configSchema = remember(sub.id) { subToolConfig(sub.id) }
     val configValues = remember(sub.id) {
         mutableStateOf(configSchema.associate { it.field to (it.default ?: "") })
     }
+    var recentFiles by remember { mutableStateOf(UXStore.getRecentDisplayNames(ctx)) }
+
+    LaunchedEffect(initialUri) {
+        if (initialUri != null) {
+            uri = initialUri
+            selectedSize = selectedSizeBytes(ctx, initialUri)
+            sizeRejected = selectedSize?.let { it > MAX_DIRECT_FILE_BYTES } == true
+            detectionResult = FileMagic.detect(ctx, initialUri)
+            UXStore.addRecent(ctx, initialUri)
+            recentFiles = UXStore.getRecentDisplayNames(ctx)
+        }
+    }
 
     val picker = rememberLauncherForActivityResult(
         ActivityResultContracts.GetContent()
     ) { u ->
         uri = u
+        selectedSize = u?.let { selectedSizeBytes(ctx, it) }
+        sizeRejected = selectedSize?.let { it > MAX_DIRECT_FILE_BYTES } == true
         if (u != null) {
             UXStore.addRecent(ctx, u)
+            recentFiles = UXStore.getRecentDisplayNames(ctx)
             detectionResult = FileMagic.detect(ctx, u)
         }
     }
@@ -118,13 +163,14 @@ fun ToolWorkspaceScreen(
                 Text("← BACK", color = AlvisiaCyan, fontWeight = FontWeight.Bold, fontSize = 12.sp)
             }
             // Favorites star
-            val isFav = remember(sub.id) { UXStore.isFavorite(ctx, sub.id) }
+            var isFav by remember(sub.id) { mutableStateOf(UXStore.isFavorite(ctx, sub.id)) }
             Text(
                 text = if (isFav) "★" else "☆",
                 color = if (isFav) Color(0xFFFFD700) else AlvisiaSilver.copy(alpha = 0.4f),
                 fontSize = 18.sp,
                 modifier = Modifier.clickable {
                     UXStore.toggleFavorite(ctx, sub.id)
+                    isFav = UXStore.isFavorite(ctx, sub.id)
                 }
             )
         }
@@ -134,7 +180,6 @@ fun ToolWorkspaceScreen(
         Spacer(Modifier.height(8.dp))
 
         // ── Recent Files carousel ───────────────────────────────────────
-        val recentFiles = remember { UXStore.getRecentDisplayNames(ctx) }
         if (recentFiles.isNotEmpty()) {
             Text("RECENT", color = AlvisiaSilver.copy(alpha = 0.4f), fontSize = 9.sp)
             Spacer(Modifier.height(4.dp))
@@ -156,6 +201,8 @@ fun ToolWorkspaceScreen(
                             .padding(horizontal = 8.dp, vertical = 4.dp)
                             .clickable {
                                 uri = Uri.parse(uriStr)
+                                selectedSize = selectedSizeBytes(ctx, Uri.parse(uriStr))
+                                sizeRejected = selectedSize?.let { it > MAX_DIRECT_FILE_BYTES } == true
                                 detectionResult = FileMagic.detect(ctx, Uri.parse(uriStr))
                             }
                     )
@@ -176,6 +223,22 @@ fun ToolWorkspaceScreen(
                     fontWeight = FontWeight.Bold, fontSize = 12.sp)
             }
             Spacer(Modifier.height(6.dp))
+
+            if (selectedSize != null) {
+                val gb = selectedSize!!.toDouble() / (1024.0 * 1024.0 * 1024.0)
+                Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp))
+                    .background(if (sizeRejected) Color(0x331F0808) else Color(0x3310C98A))
+                    .border(1.dp, if (sizeRejected) AlvisiaRed else Color(0xFF63E6A6), RoundedCornerShape(8.dp))
+                    .padding(8.dp)) {
+                    Text(
+                        if (sizeRejected) "✕ FILE OVER 5 GB — direct upload blocked"
+                        else "✓ FILE SIZE %.2f GB / 5.00 GB".format(java.util.Locale.US, gb),
+                        color = if (sizeRejected) AlvisiaRed else Color(0xFF63E6A6),
+                        fontSize = 10.sp, fontWeight = FontWeight.Bold
+                    )
+                }
+                Spacer(Modifier.height(6.dp))
+            }
 
             // Auto-detect banner
             detectionResult?.let { det ->
@@ -242,43 +305,63 @@ fun ToolWorkspaceScreen(
         Button(
             onClick = {
                 if (!running) {
-                    // Write inline config values to WORK/ files transparently
-                    if (configSchema.isNotEmpty()) {
-                        // Use the same root as ToolEngine/PythonBridgeRunner.
-                        // Writing under getExternalFilesDir() can silently split configs
-                        // from the public Download/ALVSIA/WORK directory consumed by Python.
-                        WorkPaths.bindApp(ctx)
-                        val workDir = WorkPaths.dirWork()
-                        configSchema.forEach { cfg ->
-                            val value = configValues.value[cfg.field] ?: ""
-                            val fileName = cfg.workFileName
-                            if (fileName != null) {
-                                val configFile = File(workDir, fileName)
-                                try {
-                                    if (value.isBlank()) {
-                                        // Never reuse a stale key/config from a previous run.
-                                        configFile.delete()
-                                    } else {
-                                        configFile.writeText(value)
-                                    }
-                                } catch (_: Exception) {}
+                    if (sub.id == "clear_work") {
+                        confirmClearWorkspace = true
+                    } else {
+                        // Write inline config values to WORK/ files transparently
+                        if (configSchema.isNotEmpty()) {
+                            // Use the same root as ToolEngine/PythonBridgeRunner.
+                            // Writing under getExternalFilesDir() can silently split configs
+                            // from the public Download/ALVSIA/WORK directory consumed by Python.
+                            WorkPaths.bindApp(ctx)
+                            val workDir = WorkPaths.dirWork()
+                            configSchema.forEach { cfg ->
+                                val value = configValues.value[cfg.field] ?: ""
+                                val fileName = cfg.workFileName
+                                if (fileName != null) {
+                                    val configFile = File(workDir, fileName)
+                                    try {
+                                        if (value.isBlank()) {
+                                            // Never reuse a stale key/config from a previous run.
+                                            configFile.delete()
+                                        } else {
+                                            configFile.writeText(value)
+                                        }
+                                    } catch (_: Exception) {}
+                                }
                             }
                         }
+                        onRun(uri, null)
                     }
-                    onRun(uri, null)
                 }
             },
-            enabled = !running && (!sub.needsFile || uri != null),
+            enabled = !running && (!sub.needsFile || (uri != null && !sizeRejected)),
             colors = ButtonDefaults.buttonColors(containerColor = AlvisiaBlue),
             shape = RoundedCornerShape(10.dp),
             modifier = Modifier.fillMaxWidth().height(44.dp)
         ) {
-            Text(if (running) "PROCESSING..." else "▶ RUN",
+            Text(if (running) "● LIVE PROCESS" else "▶ RUN",
                 fontWeight = FontWeight.Bold, fontSize = 13.sp)
         }
         Spacer(Modifier.height(6.dp))
 
-        // ── Log toolbar: COPY / SAVE ────────────────────────────────────
+        // ── Unified process result: Simple by default, Advanced on demand ──
+        Row(
+            Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text("PROCESS LOG", color = AlvisiaSilver.copy(alpha = 0.55f),
+                fontSize = 9.sp, fontWeight = FontWeight.Bold)
+            Spacer(Modifier.weight(1f))
+            TextButton(onClick = { logMode = "simple" }) {
+                Text("SIMPLE", color = if (logMode == "simple") AlvisiaCyan else AlvisiaSilver.copy(alpha = 0.45f),
+                    fontSize = 10.sp, fontWeight = FontWeight.Bold)
+            }
+            TextButton(onClick = { logMode = "advanced" }) {
+                Text("ADVANCED", color = if (logMode == "advanced") AlvisiaCyan else AlvisiaSilver.copy(alpha = 0.45f),
+                    fontSize = 10.sp, fontWeight = FontWeight.Bold)
+            }
+        }
         Row(
             Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(4.dp)
@@ -306,23 +389,62 @@ fun ToolWorkspaceScreen(
             }
         }
 
-        // ── Color-coded console ─────────────────────────────────────────
         Spacer(Modifier.height(4.dp))
-        LazyColumn(
-            Modifier
-                .weight(1f)
-                .background(Color(0xFF070D14), RoundedCornerShape(10.dp))
-                .padding(8.dp)
-        ) {
-            items(logs) { line ->
-                val color = when {
-                    line.startsWith("OK ") -> Color(0xFF00E676)  // green
-                    line.startsWith("X ") -> AlvisiaRed             // red
-                    line.startsWith("... ") -> Color(0xFFFFAA00)   // yellow
-                    line.startsWith("> ") -> AlvisiaCyan           // blue header
-                    else -> AlvisiaSilver                            // white/gray
+        if (logMode == "advanced") {
+            LazyColumn(
+                Modifier
+                    .weight(1f)
+                    .background(Color(0xFF070D14), RoundedCornerShape(10.dp))
+                    .padding(8.dp)
+            ) {
+                items(logs) { line ->
+                    val color = when {
+                        line.startsWith("OK ") -> Color(0xFF00E676)
+                        line.startsWith("X ") -> AlvisiaRed
+                        line.startsWith("... ") -> Color(0xFFFFAA00)
+                        line.startsWith("> ") -> AlvisiaCyan
+                        else -> AlvisiaSilver
+                    }
+                    Text(line, color = color, fontFamily = FontFamily.Monospace, fontSize = 10.sp)
                 }
-                Text(line, color = color, fontFamily = FontFamily.Monospace, fontSize = 10.sp)
+            }
+        } else {
+            Column(
+                Modifier
+                    .weight(1f)
+                    .fillMaxWidth()
+                    .background(Color(0xFF070D14), RoundedCornerShape(10.dp))
+                    .padding(14.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text(
+                    when {
+                        running -> "PROCESSING"
+                        errorLine != null -> "NEEDS ATTENTION"
+                        successLine != null -> "COMPLETED"
+                        else -> "READY"
+                    },
+                    color = summaryColor,
+                    fontWeight = FontWeight.Black,
+                    fontSize = 12.sp
+                )
+                if (running) {
+                    val realProgress = logs.asReversed().firstNotNullOfOrNull { line ->
+                        Regex("""^PROGRESS\\s+(\\d{1,3})%$""").find(line)?.groupValues?.get(1)?.toIntOrNull()
+                    }?.coerceIn(0, 100)
+                    if (realProgress != null) {
+                        LinearProgressIndicator(progress = { realProgress / 100f }, modifier = Modifier.fillMaxWidth(), color = AlvisiaCyan)
+                        Text("$realProgress%", color = AlvisiaCyan, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold, fontSize = 11.sp)
+                    } else {
+                        LinearProgressIndicator(modifier = Modifier.fillMaxWidth(), color = AlvisiaCyan)
+                        Text("LIVE PROCESS • stage sedang berjalan", color = AlvisiaSilver.copy(alpha = 0.65f), fontSize = 9.sp)
+                    }
+                }
+                Text(simpleSummary, color = Color.White, fontSize = 12.sp)
+                if (successLine != null && errorLine == null) {
+                    Text("Lihat folder OUT untuk membuka hasil pekerjaan.",
+                        color = AlvisiaSilver.copy(alpha = 0.65f), fontSize = 10.sp)
+                }
             }
         }
 
@@ -364,6 +486,28 @@ fun ToolWorkspaceScreen(
                     Text("📂 OPEN FOLDER", color = AlvisiaCyan, fontSize = 10.sp, fontWeight = FontWeight.Bold)
                 }
             }
+        }
+        if (confirmClearWorkspace) {
+            AlertDialog(
+                onDismissRequest = { confirmClearWorkspace = false },
+                title = { Text("Clear workspace files?") },
+                text = {
+                    Text("This action permanently removes files in WORK and OUT, including generated results. Save anything you want to keep before continuing.")
+                },
+                confirmButton = {
+                    TextButton(onClick = {
+                        confirmClearWorkspace = false
+                        onRun(null, null)
+                    }) {
+                        Text("CLEAR WORK + OUT", color = AlvisiaRed, fontWeight = FontWeight.Bold)
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { confirmClearWorkspace = false }) {
+                        Text("CANCEL", color = AlvisiaCyan)
+                    }
+                }
+            )
         }
     }
 }

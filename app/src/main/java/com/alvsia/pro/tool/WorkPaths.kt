@@ -43,6 +43,32 @@ object WorkPaths {
         return File(dirOut(), name).also { it.mkdirs() }
     }
 
+    /**
+     * Isolated workspace for one live task. Every concurrent tool run gets its
+     * own IN/WORK/OUT tree so switching tools or running another task cannot
+     * overwrite an active task's staged bytes or intermediate output.
+     */
+    fun taskRoot(taskId: String): File {
+        val safe = taskId.replace(Regex("[^A-Za-z0-9._-]"), "_").take(160).ifBlank { "task" }
+        return File(alvsiaRoot(), "TASKS/$safe").also { it.mkdirs() }
+    }
+
+    fun taskModuleOut(taskId: String, moduleId: Int): File {
+        val name = moduleName(moduleId)
+        return File(taskRoot(taskId), "OUT/$name").also { it.mkdirs() }
+    }
+
+    fun taskModuleIn(taskId: String, moduleId: Int): File {
+        val name = moduleName(moduleId)
+        return File(taskRoot(taskId), "IN/$name").also { it.mkdirs() }
+    }
+
+    fun taskModuleWork(taskId: String, moduleId: Int): File {
+        val name = moduleName(moduleId)
+        return File(taskRoot(taskId), "WORK/$name").also { it.mkdirs() }
+    }
+
+
     fun moduleIn(moduleId: Int): File {
         val name = moduleName(moduleId)
         return File(dirIn(), name).also { it.mkdirs() }
@@ -79,12 +105,13 @@ object WorkPaths {
         16 -> "LINJ"
         17 -> "AUDIT"
         18 -> "LPROTECT"
+        19 -> "ALVSIA_PRIVATE"
         else -> "MISC"
     }
 
     fun ensureTree() {
         dirIn(); dirWork(); dirOut()
-        for (id in 1..18) {
+        for (id in 1..19) {
             moduleIn(id); moduleWork(id); moduleOut(id)
         }
     }
@@ -96,7 +123,7 @@ object WorkPaths {
         try {
             f.writeText(
                 """
-                ALVSIA PREMIUM TOOL 5.5.0 - modern I/O
+                ALVSIA PRO 5.5.2 - modern I/O
                 ====================================
                 Root: Download/ALVSIA/
 
@@ -104,10 +131,10 @@ object WorkPaths {
                   WORK/<MODULE>/  temp / intermediate
                   OUT/<MODULE>/   final results (always check here)
 
-                Modules: PAK OBB LUA SCAN ASSET REPORT REBRAND SO FRIDA XOR DEC PAKD STR LINJ AUDIT LPROTECT
+                Modules: PAK OBB LUA SCAN ASSET REPORT REBRAND SO FRIDA XOR DEC PAKD STR LINJ AUDIT LPROTECT ALVSIA_PRIVATE
 
                 Key:  @ALVSIA_PRO
-                Owner: @OriginalOnwerALV
+                Owner: @ALVSIA_PRO
                 """.trimIndent()
             )
         } catch (_: Exception) {
