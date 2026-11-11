@@ -64,7 +64,7 @@ fun SplashScreen(onFinished: () -> Unit) {
     val logoAlpha = remember { Animatable(0f) }
     val logoScale = remember { Animatable(0.72f) }
     val textAlpha = remember { Animatable(0f) }
-    var status by remember { mutableStateOf("INIT SECURE CHANNEL...") }
+    var status by remember { mutableStateOf("INITIALIZING SMART CORE...") }
     var tick by remember { mutableFloatStateOf(0f) }
 
     val cols = remember {
@@ -124,8 +124,8 @@ fun SplashScreen(onFinished: () -> Unit) {
                 "ESTABLISHING UPLINK...",
                 "HANDSHAKE TLS 1.3 ... OK",
                 "VERIFYING INTEGRITY ... OK",
-                "LOADING CORE MODULES ...",
-                "SYSTEM ONLINE"
+                "LOADING SMART ENGINES ...",
+                "SMART PREMIUM ONLINE"
             )
             for (s in steps) {
                 status = s
@@ -218,7 +218,7 @@ fun SplashScreen(onFinished: () -> Unit) {
             }
             Spacer(Modifier.height(22.dp))
             Text(
-                "ALVSIA PREMIUM TOOL",
+                "ALVSIA SMART PREMIUM",
                 style = TextStyle(
                     color = AlvisiaSilver,
                     fontWeight = FontWeight.Black,
@@ -229,7 +229,7 @@ fun SplashScreen(onFinished: () -> Unit) {
             )
             Spacer(Modifier.height(6.dp))
             Text(
-                "4.6  ·  SECURE RUNTIME",
+                "SMART CORE  ·  7-LAYER SECURITY",
                 color = AlvisiaBlue.copy(alpha = 0.85f),
                 fontSize = 11.sp,
                 fontFamily = FontFamily.Monospace,
