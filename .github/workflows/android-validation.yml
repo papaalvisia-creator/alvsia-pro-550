@@ -1,7 +1,7 @@
 name: Android Security Validation
 on:
   push:
-    branches: [ main, fix/task-output-routing-20261111, feat/combined-smart-lua-xop-release-20261110, feat/lua-intelligence-orchestrator-20261107, fix/chaquopy-python312-ci, fix/lua-normalization-fallback-20261103, release/5.5.2-19-module-redesign ]
+    branches: [ main, feat/alvsia-smart-premium-security-final-20261111, fix/task-output-routing-20261111, feat/combined-smart-lua-xop-release-20261110, feat/lua-intelligence-orchestrator-20261107, fix/chaquopy-python312-ci, fix/lua-normalization-fallback-20261103, release/5.5.2-19-module-redesign ]
   pull_request:
     branches: [ main, feat/full-reference-source-registry-20261106 ]
   workflow_dispatch:
@@ -38,7 +38,7 @@ jobs:
         run: python3 tools/security_release_check.py
 
       - name: Verify security protections are wired into runtime
-        run: python3 -m unittest tests.test_security_wiring
+        run: python3 -m unittest tests.test_security_wiring tests.test_security_fabric
 
       - name: Verify active Unaux Python TLS pin policy
         run: python3 -m unittest discover -s tests -p 'test_pinned_http.py'
