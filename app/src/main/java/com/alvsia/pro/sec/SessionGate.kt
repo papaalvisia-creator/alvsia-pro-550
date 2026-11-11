@@ -152,6 +152,9 @@ object SessionGate {
     // ── Runtime hostile check ─────────────────────────────────────────────
     fun runtimeHostile(ctx: Context): Boolean {
         if (Guard.hostile(ctx)) return true
+        // Re-check executable foreign mappings at the exact protected-operation
+        // boundary, not only on the periodic RASP schedule.
+        if (RuntimeMappingGuard.signals(ctx).isNotEmpty()) return true
         // Re-run the bounded Kotlin VM + native mini-VM at every protected
         // dispatch, not only on the periodic background RASP tick.
         if (DualVmGuard.inspect(ctx).isNotEmpty()) return true
