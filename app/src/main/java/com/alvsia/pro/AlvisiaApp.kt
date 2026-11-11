@@ -60,7 +60,7 @@ class AlvisiaApp : Application() {
                 com.alvsia.pro.sec.TelegramNotifier.notify(
                     this,
                     "CRASH_FORENSICS",
-                    previousExit.take(3500),
+                    previousExit?.take(3500).orEmpty(),
                     ""
                 )
             }
