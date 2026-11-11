@@ -147,7 +147,7 @@ class TestLuaCandidateDeduplication(unittest.TestCase):
         def accept_only_heping(candidate):
             if bytes(candidate)[-1:] != b"C":
                 raise ValueError("fixture rejects this candidate")
-            return object()
+            return "return 7"
 
         with tempfile.TemporaryDirectory() as td:
             src = Path(td) / "candidate.luac"
@@ -155,14 +155,14 @@ class TestLuaCandidateDeduplication(unittest.TestCase):
             src.write_bytes(source)
             fake_private = types.SimpleNamespace(LuaOpcodeConverter=FakeConverter)
             with patch.dict(sys.modules, {"alvsia_private": fake_private}):
-                with patch("lua_engine.decompiler53.load_chunk",
+                # decompile_bytes now performs strict chunk validation itself;
+                # patch that single parser entry point instead of validating twice.
+                with patch("lua_engine.decompiler53.decompile_bytes",
                            side_effect=accept_only_heping):
-                    with patch("lua_engine.decompiler53.decompile_bytes",
-                               return_value="return 7"):
-                        with patch("lua_engine.streaming_decompiler.validate_lua_source",
-                                   return_value=(True, "fixture source accepted")):
-                            from lua_engine.streaming_decompiler import stream_decompile_lua53
-                            ok, message = stream_decompile_lua53(src, dst)
+                    with patch("lua_engine.streaming_decompiler.validate_lua_source",
+                               return_value=(True, "fixture source accepted")):
+                        from lua_engine.streaming_decompiler import stream_decompile_lua53
+                        ok, message = stream_decompile_lua53(src, dst)
 
             self.assertTrue(ok, message)
             self.assertIn("variant=heping", message)
