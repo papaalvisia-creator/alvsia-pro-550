@@ -95,6 +95,7 @@ jobs:
           python3 -m unittest discover -s tests -p 'test_so_patch_url_parity.py'
           python3 tests/test_lua_engine.py
           python3 -m pytest -q tests/test_lua_orchestrator.py
+          python3 -m pytest -q tests/test_module_adapters.py tests/test_lua_processing_watchdog.py
           python3 -m unittest discover -s tests -p 'test_lua*.py'
           python3 -m unittest discover -s tests -p 'test_streaming_decompiler.py'
 
