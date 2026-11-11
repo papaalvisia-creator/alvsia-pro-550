@@ -88,22 +88,17 @@ jobs:
           set -euo pipefail
           LUA53_DIR="$RUNNER_TEMP/lua-5.3"
           if ! command -v luac5.3 >/dev/null 2>&1; then
-            git clone --depth 1 --branch v5.3.6 https://github.com/lua/lua.git "$LUA53_DIR"
-            test -f "$LUA53_DIR/makefile"
-            (
-              cd "$LUA53_DIR"
-              rm -f luac
-              cc -O2 -DLUA_USE_LINUX -I . -o luac \
-                luac.c lundump.c lopcodes.c lobject.c lstate.c \
-                lstring.c lgc.c lmem.c lzio.c lapi.c ltable.c \
-                ltm.c ldebug.c ldo.c lcode.c lparser.c llex.c \
-                lfunc.c lvm.c lzio.c ldump.c lctype.c ltablib.c \
-                lauxlib.c linit.c lbaselib.c ldblib.c loadlib.c \
-                lmathlib.c lcorolib.c loslib.c lstrlib.c lutf8lib.c \
-                ldump.c -lm -ldl
-            )
-            test -x "$LUA53_DIR/luac"
-            install -m 0755 "$LUA53_DIR/luac" "$RUNNER_TEMP/luac5.3"
+            TARBALL="$RUNNER_TEMP/lua-5.3.6.tar.gz"
+            curl --fail --location --retry 8 --retry-connrefused --silent --show-error \
+              https://www.lua.org/ftp/lua-5.3.6.tar.gz -o "$TARBALL"
+            echo "fc5fd69bb8736323f026672b1b7235da613d7177e72558893a0bdcd320466d60  $TARBALL" | sha256sum -c -
+            rm -rf "$LUA53_DIR"
+            mkdir -p "$LUA53_DIR"
+            tar -xzf "$TARBALL" --strip-components=1 -C "$LUA53_DIR"
+            test -f "$LUA53_DIR/src/luac.c"
+            make -C "$LUA53_DIR/src" linux
+            test -x "$LUA53_DIR/src/luac"
+            install -m 0755 "$LUA53_DIR/src/luac" "$RUNNER_TEMP/luac5.3"
             export PATH="$RUNNER_TEMP:$PATH"
           fi
           command -v luac5.3 || command -v "$RUNNER_TEMP/luac5.3"
