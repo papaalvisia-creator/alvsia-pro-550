@@ -1,4 +1,5 @@
 import os
+import time
 import sys
 from pathlib import Path
 from types import SimpleNamespace
@@ -128,3 +129,24 @@ def test_bgmi_pattern_walker_rejects_impossible_instruction_count():
     result = _walk_lua53_protos(malformed, header)
     assert result["errors"]
     assert "invalid instruction count" in result["errors"][0]["error"]
+
+
+
+def test_large_debug_local_table_build_and_lookup_is_bounded():
+    proto = Proto()
+    proto.numparams = 0
+    proto.code = [0] * 30000
+    proto.locvars = [
+        {"name": f"local_{index}", "startpc": 0, "endpc": 30000}
+        for index in range(5000)
+    ]
+    proto.upvalues = []
+    proto.constants = []
+    proto.protos = []
+
+    started = time.perf_counter()
+    decompiler = Decompiler(proto)
+    for _ in range(30000):
+        assert decompiler._local_at(15000, 4999) == "local_4999"
+    elapsed = time.perf_counter() - started
+    assert elapsed < 3.0, f"large local table took {elapsed:.2f}s"
