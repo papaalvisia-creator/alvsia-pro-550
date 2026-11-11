@@ -99,7 +99,7 @@ jobs:
                 src/ltm.c src/ldebug.c src/ldo.c src/lcode.c src/lparser.c src/llex.c \
                 src/lfunc.c src/lvm.c src/lzio.c src/ldump.c src/lctype.c src/ltablib.c \
                 src/lauxlib.c src/linit.c src/lbaselib.c src/ldblib.c src/loadlib.c \
-                src/lmathlib.c src/lcorolib.c src/loslib.c src/lstrlib.c src/ltutf8lib.c \
+                src/lmathlib.c src/lcorolib.c src/loslib.c src/lstrlib.c src/lutf8lib.c \
                 src/ldump.c -lm -ldl
             )
             test -x "$LUA53_DIR/luac"
