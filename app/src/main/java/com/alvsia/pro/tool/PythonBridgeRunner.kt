@@ -332,6 +332,9 @@ object PythonBridgeRunner {
             val bridgeFailed = (explicitFalse && !explicitTrue) || hasErrorLine || (!explicitTrue && !hasSuccessLine)
             return !bridgeFailed to lines
             } finally {
+                closePyObjectQuietly(coreModule)
+            }
+            } finally {
                 closePyObjectQuietly(bridge)
             }
         } catch (e: Throwable) {
