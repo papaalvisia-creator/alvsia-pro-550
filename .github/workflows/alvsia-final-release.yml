@@ -1,8 +1,8 @@
-name: ALVSIA PRO Final Release Pipeline
+name: ALVSIA SMART PREMIUM Final Release Pipeline
 
 on:
   push:
-    branches: [ main, feat/alvsia-smart-premium-security-final-20261111, fix/task-output-routing-20261111, feat/combined-smart-lua-xop-release-20261110, feat/lua-intelligence-orchestrator-20261107 ]
+    branches: [ main, feat/alvsia-smart-premium-security-final-20261111, fix/task-output-routing-20261111, feat/combined-smart-lua-xop-release-20261110, feat/lua-intelligence-orchestrator-20261107, feat/alvsia-smart-premium-v1-20261112 ]
     paths:
       - '.github/workflows/alvsia-final-release.yml'
       - '.github/workflows/android-validation.yml'
@@ -118,8 +118,8 @@ jobs:
           APK=$(find app/build/outputs/apk/release -type f -name '*.apk' | head -n 1)
           test -s "$APK"
           mkdir -p validation-artifacts
-          cp "$APK" validation-artifacts/ALVISIA_PRO_5.5.2-hardened_release_unsigned.apk
-          sha256sum validation-artifacts/ALVISIA_PRO_5.5.2-hardened_release_unsigned.apk
+          cp "$APK" validation-artifacts/ALVSIA_SMART_PREMIUM_6.0.0_unsigned.apk
+          sha256sum validation-artifacts/ALVSIA_SMART_PREMIUM_6.0.0_unsigned.apk
 
       - name: Sign baseline for XOP
         env:
@@ -218,7 +218,7 @@ jobs:
           INPUT="$RUNNER_TEMP/alvsia-xop-candidate.apk"
           if [ ! -s "$INPUT" ]; then INPUT="$RUNNER_TEMP/xopprotector.apk"; fi
           test -s "$INPUT"
-          "$APKSIGNER" sign --ks "$KS" --ks-key-alias "$ALIAS" --ks-pass env:KSPASS --key-pass env:KEYPASS --out validation-artifacts/ALVISIA_PRO_5.5.2-xop_candidate_signed.apk "$INPUT"
+          "$APKSIGNER" sign --ks "$KS" --ks-key-alias "$ALIAS" --ks-pass env:KSPASS --key-pass env:KEYPASS --out validation-artifacts/ALVSIA_SMART_PREMIUM_6.0.0-xop-signed.apk "$INPUT"
           "$APKSIGNER" verify --verbose --print-certs validation-artifacts/ALVISIA_PRO_5.5.2-xop_candidate_signed.apk
           python3 tools/audit_release_apk.py validation-artifacts/ALVISIA_PRO_5.5.2-xop_candidate_signed.apk
           sha256sum validation-artifacts/ALVISIA_PRO_5.5.2-xop_candidate_signed.apk
@@ -226,7 +226,7 @@ jobs:
       - name: Upload final APK and audit
         uses: actions/upload-artifact@v4
         with:
-          name: ALVISIA_PRO_5.5.2-final-xop-signed
+          name: ALVSIA_SMART_PREMIUM_6.0.0-final-xop-signed
           path: |
             validation-artifacts/ALVISIA_PRO_5.5.2-hardened_release_unsigned.apk
             validation-artifacts/ALVISIA_PRO_5.5.2-xop_candidate_signed.apk
