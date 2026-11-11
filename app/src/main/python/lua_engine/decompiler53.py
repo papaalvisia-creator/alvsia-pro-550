@@ -10,6 +10,8 @@ import struct
 import io
 import re
 import math
+import time
+from bisect import bisect_right
 from pathlib import Path
 from typing import List, Optional, Any, Dict, Tuple
 
@@ -55,9 +57,12 @@ INVALID_CONSTANT_REF_COUNT = 0
 PUBGM_OPCODE_MAP = (17,18,19,20,21,22,23,24,25,26,27,28,29,0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46)
 
 class Reader:
-    def __init__(self, data: bytes, *, pubgm: bool = False, hybrid_long_string_size: bool = False):
+    def __init__(self, data: bytes, *, pubgm: bool = False,
+                 hybrid_long_string_size: bool = False, deadline: float | None = None):
         self._d = memoryview(data)
         self._pos = 0
+        self.deadline = deadline
+        self._read_ops = 0
         self.int_size = 4
         self.sizet_size = 4
         self.instr_size = 4
@@ -71,6 +76,10 @@ class Reader:
         return len(self._d) - self._pos
 
     def _read(self, n):
+        self._read_ops += 1
+        if self.deadline is not None and (self._read_ops & 0x3FF) == 0:
+            if time.monotonic() >= self.deadline:
+                raise TimeoutError("Lua 5.3 parser deadline exceeded while reading bytecode")
         if not isinstance(n, int) or n < 0:
             raise ValueError(f"invalid Lua chunk read length {n!r} at offset {self._pos}")
         end = self._pos + n
@@ -251,8 +260,10 @@ def load_proto(r: Reader, depth: int = 0) -> Proto:
     return p
 
 
-def load_chunk(data: bytes, *, hybrid_long_string_size: bool = False, pubgm: bool = False) -> Proto:
-    r = Reader(data, pubgm=pubgm, hybrid_long_string_size=hybrid_long_string_size)
+def load_chunk(data: bytes, *, hybrid_long_string_size: bool = False,
+               pubgm: bool = False, deadline: float | None = None) -> Proto:
+    r = Reader(data, pubgm=pubgm, hybrid_long_string_size=hybrid_long_string_size,
+               deadline=deadline)
     # header
     sig = r._read(4)
     if sig != b"\x1bLua":
@@ -311,8 +322,10 @@ _UNOP_MAP = {"UNM": "-", "BNOT": "~", "NOT": "not ", "LEN": "#"}
 
 
 class Decompiler:
-    def __init__(self, proto: Proto, name: str = "main", depth: int = 0, upval_names: List[str] = None):
+    def __init__(self, proto: Proto, name: str = "main", depth: int = 0,
+                 upval_names: List[str] = None, deadline: float | None = None):
         self.p = proto
+        self.deadline = deadline
         self.name = name
         self.depth = depth
         self.indent = "  " * depth
@@ -334,6 +347,10 @@ class Decompiler:
         # PC → active locals at that pc
         self._pc_locals: Dict[int, Dict[int, str]] = {}
         self._build_local_map()
+
+    def _check_deadline(self):
+        if self.deadline is not None and time.monotonic() >= self.deadline:
+            raise TimeoutError("Lua 5.3 decompiler deadline exceeded")
 
     def _build_local_map(self):
         p = self.p
@@ -368,12 +385,52 @@ class Decompiler:
             if not found:
                 self._all_locals.append((s, e, i, nm))
 
+        # Build a per-register interval index once. The former _local_at scanned
+        # every debug local for every bytecode instruction (O(instructions ×
+        # locals)); large protected chunks could therefore run for hours.
+        events_by_reg = {}
+        for order, (startpc, endpc, reg_id, name) in enumerate(self._all_locals):
+            if endpc <= startpc:
+                continue
+            events = events_by_reg.setdefault(reg_id, {})
+            events.setdefault(startpc, [[], []])[1].append((order, name))
+            events.setdefault(endpc, [[], []])[0].append(order)
+
+        self._local_segments = {}
+        for reg_id, events in events_by_reg.items():
+            active = {}
+            positions = sorted(events)
+            starts, ends, names = [], [], []
+            for index, position in enumerate(positions[:-1]):
+                if self.deadline is not None and (index & 0x3FF) == 0:
+                    self._check_deadline()
+                ending, beginning = events[position]
+                for order in ending:
+                    active.pop(order, None)
+                for order, name in beginning:
+                    active[order] = name
+                next_position = positions[index + 1]
+                if not active or next_position <= position:
+                    continue
+                # Preserve the old list-scan rule: the last active local wins.
+                name = active[max(active)]
+                if names and names[-1] == name and ends[-1] == position:
+                    ends[-1] = next_position
+                else:
+                    starts.append(position)
+                    ends.append(next_position)
+                    names.append(name)
+            self._local_segments[reg_id] = (starts, ends, names)
+
     def _local_at(self, pc: int, reg: int) -> Optional[str]:
-        best = None
-        for startpc, endpc, r, nm in self._all_locals:
-            if r == reg and startpc <= pc < endpc:
-                best = nm
-        return best
+        indexed = self._local_segments.get(reg)
+        if not indexed:
+            return None
+        starts, ends, names = indexed
+        index = bisect_right(starts, pc) - 1
+        if index >= 0 and pc < ends[index]:
+            return names[index]
+        return None
 
     def _k(self, idx: int) -> str:
         if idx < 0 or idx >= len(self.p.constants):
@@ -475,6 +532,8 @@ class Decompiler:
             local_decl[s].append((r, nm))
 
         while i < n:
+            if (i & 0xFF) == 0:
+                self._check_deadline()
             if i in skip_pcs:
                 i += 1
                 continue
@@ -867,7 +926,7 @@ class Decompiler:
                 if sub.is_vararg:
                     params.append("...")
                 uv_names = [uv.get("name") for uv in p.upvalues]
-                sub_dec = Decompiler(sub, sub_name, self.depth, uv_names)
+                sub_dec = Decompiler(sub, sub_name, self.depth, uv_names, self.deadline)
                 sub_body = sub_dec.decompile()
                 if lv_decls:
                     for r, nm2 in lv_decls:
@@ -938,14 +997,16 @@ class Decompiler:
 
 
 # ── Top-level entry ───────────────────────────────────────────────────────────
-def decompile_bytes(data: bytes) -> str:
+def decompile_bytes(data: bytes, *, deadline: float | None = None) -> str:
     global INVALID_CONSTANT_REF_COUNT
     INVALID_CONSTANT_REF_COUNT = 0
     errors = []
     for variant in ("standard", "pubgm"):
         try:
-            proto = load_chunk(data, pubgm=(variant == "pubgm"))
+            proto = load_chunk(data, pubgm=(variant == "pubgm"), deadline=deadline)
             break
+        except TimeoutError:
+            raise
         except Exception as exc:
             errors.append(f"{variant}: {exc}")
     else:
@@ -961,7 +1022,7 @@ def decompile_bytes(data: bytes) -> str:
         "",
     ]
 
-    dec = Decompiler(proto, "main", 0, [])
+    dec = Decompiler(proto, "main", 0, [], deadline)
     body = dec.decompile()
 
     # Collect nested function definitions that were emitted inline
