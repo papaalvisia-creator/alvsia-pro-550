@@ -63,7 +63,7 @@ fun OutputBrowserScreen(onBack: () -> Unit, onUseWithStudio: (StudioItem, Uri) -
         val outputRoots = mutableListOf<Pair<File, String>>()
 
         // Legacy output tree remains readable for older app versions.
-        val legacyOut = File(root, "OUT")
+        val legacyOut = WorkPaths.dirOut()
         if (legacyOut.isDirectory) outputRoots.add(legacyOut to "OUT")
 
         // Current task-isolated engine writes to TASKS/<task-id>/OUT/<MODULE>.
