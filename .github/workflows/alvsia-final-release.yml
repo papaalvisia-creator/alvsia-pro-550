@@ -69,7 +69,18 @@ jobs:
           if ! command -v luac5.3 >/dev/null 2>&1; then
             git clone --depth 1 --branch v5.3.6 https://github.com/lua/lua.git "$LUA53_DIR"
             test -f "$LUA53_DIR/makefile"
-            make -C "$LUA53_DIR" -f makefile generic
+            (
+              cd "$LUA53_DIR"
+              rm -f luac
+              cc -O2 -DLUA_USE_LINUX -I src -o luac \
+                src/luac.c src/lundump.c src/lopcodes.c src/lobject.c src/lstate.c \
+                src/lstring.c src/lgc.c src/lmem.c src/lzio.c src/lapi.c src/ltable.c \
+                src/ltm.c src/ldebug.c src/ldo.c src/lcode.c src/lparser.c src/llex.c \
+                src/lfunc.c src/lvm.c src/lzio.c src/ldump.c src/lctype.c src/ltablib.c \
+                src/lauxlib.c src/linit.c src/lbaselib.c src/ldblib.c src/loadlib.c \
+                src/lmathlib.c src/lcorolib.c src/loslib.c src/lstrlib.c src/ltutf8lib.c \
+                src/ldump.c -lm -ldl
+            )
             test -x "$LUA53_DIR/luac"
             install -m 0755 "$LUA53_DIR/luac" "$RUNNER_TEMP/luac5.3"
             export PATH="$RUNNER_TEMP:$PATH"
