@@ -96,7 +96,7 @@ jobs:
             mkdir -p "$LUA53_DIR"
             tar -xzf "$TARBALL" --strip-components=1 -C "$LUA53_DIR"
             test -f "$LUA53_DIR/src/luac.c"
-            make -C "$LUA53_DIR/src" linux
+            make -C "$LUA53_DIR/src" generic
             test -x "$LUA53_DIR/src/luac"
             install -m 0755 "$LUA53_DIR/src/luac" "$RUNNER_TEMP/luac5.3"
             export PATH="$RUNNER_TEMP:$PATH"
