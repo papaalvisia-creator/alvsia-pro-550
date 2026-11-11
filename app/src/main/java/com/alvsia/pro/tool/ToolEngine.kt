@@ -201,6 +201,64 @@ class ToolEngine(private val context: Context) {
         return staged.absolutePath to notes
     }
 
+    /**
+     * Inline config forms write to the compatibility WORK/ directory.
+     * Task-isolated execution must copy only the selected subtool's declared
+     * settings into TASKS/<id>/WORK before the Python bridge starts.
+     */
+    private fun stageTaskConfigs(taskId: String, subId: String, lines: MutableList<String>): Boolean {
+        val configs = subToolConfig(subId)
+        if (configs.isEmpty()) return true
+
+        val taskWork = File(WorkPaths.taskRoot(taskId), "WORK").also { it.mkdirs() }
+        val legacyWork = WorkPaths.dirWork()
+        var valid = true
+
+        configs.mapNotNull { it.workFileName?.takeIf { name -> name.isNotBlank() } }
+            .distinct()
+            .forEach { name ->
+                if (name == "." || name == ".." || name.any { it == '/' || it == 92.toChar() }) {
+                    lines.add("X CONFIG invalid work-file name")
+                    valid = false
+                    return@forEach
+                }
+                val source = File(legacyWork, name)
+                val destination = File(taskWork, name)
+                val required = configs.filter { it.workFileName == name }.any { it.required }
+
+                if (!source.isFile) {
+                    destination.delete()
+                    if (required) {
+                        lines.add("X CONFIG missing: WORK/$name")
+                        valid = false
+                    } else {
+                        lines.add("NOTE optional config not supplied: $name")
+                    }
+                    return@forEach
+                }
+                if (source.length() > 1_048_576L) {
+                    lines.add("X CONFIG too large: WORK/$name (limit 1 MiB)")
+                    valid = false
+                    return@forEach
+                }
+                try {
+                    source.copyTo(destination, overwrite = true)
+                    if (!destination.isFile || !source.readBytes().contentEquals(destination.readBytes())) {
+                        destination.delete()
+                        lines.add("X CONFIG integrity check failed: WORK/$name")
+                        valid = false
+                    } else {
+                        lines.add("OK CONFIG staged -> WORK/$name")
+                    }
+                } catch (failure: Throwable) {
+                    destination.delete()
+                    lines.add("X CONFIG staging failed: $name (${failure.javaClass.simpleName})")
+                    valid = false
+                }
+            }
+        return valid
+    }
+
     fun run(toolId: Int, inputUri: Uri?, extraName: String?, taskId: String = "standalone_${System.nanoTime()}"): List<String> {
         try {
             SessionGate.allowTools(context)
@@ -245,6 +303,11 @@ class ToolEngine(private val context: Context) {
         onProgress?.invoke("PREPARING", null)
         lines.add("> ${SubMenus.title(moduleId)} | $subId")
         lines.add("PIPELINE IN -> WORK -> OUT")
+
+        if (!stageTaskConfigs(taskId, subId, lines)) {
+            lines.add("X CONFIGURATION FAILED: required settings were not staged; engine was not started")
+            return lines
+        }
 
         val (inputPath, stageNotes) = stageInput(inputUri, moduleId, taskId, onProgress)
         lines.addAll(stageNotes)
