@@ -1,10 +1,10 @@
 from __future__ import annotations
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass, asdict, replace
 from pathlib import Path
 import re
 from .container import unwrap_lua_container
 
-LUA_VERSIONS = {0x51: "5.1", 0x52: "5.2", 0x53: "5.3", 0x54: "5.4"}
+LUA_VERSIONS = {0x51: "5.1", 0x52: "5.2", 0x53: "5.3", 0x54: "5.4", 0x55: "5.5"}
 
 @dataclass(frozen=True)
 class LuaInfo:
@@ -25,13 +25,208 @@ class LuaInfo:
         return d
 
 
+def _find_comment_prefixed_magic(data: bytes):
+    """Return (offset, format, version) only for comment/shebang-only prefixes."""
+    candidates = []
+    for marker, fmt in ((b"\x1bLua", "luac"), (b"\x1bLJ", "luajit")):
+        offset = data.find(marker, 1, min(len(data), 65536))
+        if offset > 0:
+            candidates.append((offset, fmt))
+    for offset, fmt in sorted(candidates):
+        try:
+            prefix = data[:offset].decode("utf-8")
+        except UnicodeDecodeError:
+            continue
+        lines = prefix.splitlines()
+        if not lines or not all(
+            not line.strip() or line.lstrip().startswith(("--", "#!"))
+            for line in lines
+        ):
+            continue
+        if any(ord(ch) < 32 and ch not in "\t\r\n" for ch in prefix):
+            continue
+        version = data[offset + 4] if fmt == "luac" and len(data) > offset + 4 else None
+        return offset, fmt, version
+    return None
+
+
+_UTF8_REPLACEMENT = b"\xef\xbf\xbd"
+
+
+def _corruption_notes(data: bytes) -> tuple[str, ...]:
+    """Report U+FFFD markers that prove a binary was decoded as UTF-8 text.
+
+    We only *report* the evidence. Missing bytes are never guessed: exact
+    recovery requires the original binary artifact.
+    """
+    count = data.count(_UTF8_REPLACEMENT)
+    if not count:
+        return ()
+    ratio = count / max(1, len(data))
+    return (
+        f"utf8_replacement_markers={count}",
+        f"utf8_replacement_ratio={ratio:.4f}",
+        "binary decoded as UTF-8 text: U+FFFD replaced original bytes; "
+        "exact recovery requires the original binary",
+    )
+
+
+_LUA53_HEADER = {
+    # version byte -> canonical 33-byte header for a 32-bit size_t / 8-byte
+    # lua_Integer+lua_Number build (the layout used by BGMI/HePing chunks).
+    0x53: bytes.fromhex("1b4c7561530019930d0a1a0a0404040808")
+          + b"\x78\x56" + b"\x00" * 6 + b"\x00" * 5 + b"\x28\x77\x40",
+}
+
+
+def diagnose_text_corruption(data: bytes) -> dict:
+    """Classify binary->text transport damage without guessing any byte.
+
+    A file that was decoded as UTF-8 with ``errors="replace"`` and then had its
+    line endings normalised to CRLF shows a signature that can be reproduced
+    byte-for-byte: every invalid byte becomes ``EF BF BD`` and every bare LF
+    becomes ``0D 0A``. Detecting that signature is evidence, not repair.
+    """
+    markers = data.count(_UTF8_REPLACEMENT)
+    crlf = data.count(b"\r\n")
+    bare_lf = data.count(b"\n") - crlf
+    verdict = "clean"
+    if markers:
+        verdict = "text_transport_corruption"
+    elif crlf and crlf > max(4, len(data) // 4096):
+        verdict = "crlf_normalised"
+    return {
+        "utf8_replacement_markers": markers,
+        "crlf_pairs": crlf,
+        "bare_lf": bare_lf,
+        "verdict": verdict,
+        "recoverable_bytes": 0 if markers else len(data),
+        "lost_bytes": markers,
+        "note": (
+            "input was decoded as UTF-8 text and line endings were normalised; "
+            f"{markers} original byte(s) were destroyed and cannot be recovered"
+            if markers else "no text-transport damage detected"
+        ),
+    }
+
+
+def restore_lua_header(data: bytes) -> tuple[bytes, int]:
+    """Restore only the deterministic Lua 5.3 header when it is provably damaged.
+
+    Returns ``(payload, restored_byte_count)``. The body is never touched: any
+    U+FFFD inside it still represents a lost byte, so callers must keep
+    reporting the file as unrecoverable rather than pretending it decompiles.
+    """
+    if len(data) < 12 or not data.startswith(b"\x1bLua"):
+        return data, 0
+    version = data[4]
+    canonical = _LUA53_HEADER.get(version)
+    if canonical is None:
+        return data, 0
+    # Locate the end of the damaged header by scanning for the first position
+    # where the canonical tail (from LUAC_INT onward) is still intact.
+    anchor = canonical[17:25]  # 78 56 00 00 00 00 00 00
+    pos = data.find(anchor, 5, 96)
+    if pos < 0:
+        return data, 0
+    start = pos - 17
+    if start < 0:
+        return data, 0
+    if data[start:pos] == canonical[:17]:
+        return data, 0
+    restored = canonical[:17] + data[pos:]
+    changed = sum(1 for a, b in zip(data[start:pos], canonical[:17]) if a != b)
+    return restored, max(changed, 1)
+
+
 def detect_bytes(data: bytes) -> LuaInfo:
+    info = _classify_bytes(data)
+    extra = _corruption_notes(data)
+    if not extra:
+        return info
+    # A bytecode chunk containing U+FFFD markers is corrupt; never present it
+    # as a confidently valid chunk.
+    confidence = min(info.confidence, 0.30) if info.kind == "bytecode" else info.confidence
+    return replace(info, notes=tuple(info.notes) + extra, confidence=confidence)
+
+
+def _read_luau_varint(data: bytes, offset: int):
+    value = 0
+    shift = 0
+    for _ in range(5):
+        if offset >= len(data):
+            return None
+        byte = data[offset]
+        offset += 1
+        value |= (byte & 0x7f) << shift
+        if not byte & 0x80:
+            return value, offset
+        shift += 7
+    return None
+
+
+def _luau_header_version(data: bytes):
+    """Conservatively recognize Luau's version/type/string-table/proto header."""
+    if not data or not 3 <= data[0] <= 14:
+        return None
+    version = data[0]
+    offset = 1
+    if version >= 4:
+        if offset >= len(data) or not 1 <= data[offset] <= 3:
+            return None
+        offset += 1
+    parsed = _read_luau_varint(data, offset)
+    if parsed is None:
+        return None
+    string_count, offset = parsed
+    if string_count > 65536:
+        return None
+    for _ in range(string_count):
+        parsed = _read_luau_varint(data, offset)
+        if parsed is None:
+            return None
+        length, offset = parsed
+        if length > 1024 * 1024 or offset + length > len(data):
+            return None
+        offset += length
+    # Optional userdata type-name mapping: byte id + varint string-table
+    # index pairs, terminated by a zero byte.
+    while offset < len(data):
+        type_id = data[offset]
+        offset += 1
+        if type_id == 0:
+            break
+        parsed = _read_luau_varint(data, offset)
+        if parsed is None:
+            return None
+        _name_index, offset = parsed
+    else:
+        return None
+    parsed = _read_luau_varint(data, offset)
+    if parsed is None:
+        return None
+    proto_count, offset = parsed
+    if not 1 <= proto_count <= 100000 or offset >= len(data):
+        return None
+    return version
+
+
+def _classify_bytes(data: bytes) -> LuaInfo:
     size = len(data)
     magic = data[:8].hex()
+    luau_version = _luau_header_version(data)
+    if luau_version is not None:
+        return LuaInfo(
+            "bytecode", f"Luau bytecode v{luau_version}", "luau",
+            size, magic, 0.88,
+            ("Luau header candidate; strict decompiler validation required",),
+        )
     if data.startswith(b"\x1bLJ"):
         ver = "LuaJIT 2.0/2.1"
-        if len(data) >= 3 and data[2] == 2:
+        if len(data) >= 4 and data[3] == 0x02:
             ver = "LuaJIT 2.1"
+        elif len(data) >= 4 and data[3] == 0x01:
+            ver = "LuaJIT 2.0"
         return LuaInfo("bytecode", ver, "luajit", size, magic, 0.99)
     if data.startswith(b"\x1bLua"):
         vb = data[4] if len(data) > 4 else 0
@@ -40,32 +235,105 @@ def detect_bytes(data: bytes) -> LuaInfo:
             return LuaInfo("bytecode", f"Lua {version}", "luac", size, magic, 0.99)
         return LuaInfo("bytecode", None, "luac-unknown", size, magic, 0.90,
                        ("Lua magic present but version byte is unknown",))
+    embedded = _find_comment_prefixed_magic(data)
+    if embedded:
+        offset, fmt, version_byte = embedded
+        if fmt == "luajit":
+            return LuaInfo("bytecode", "LuaJIT 2.0/2.1", "luajit", size, magic, 0.94,
+                           (f"comment_prefix_offset={offset}", "embedded LuaJIT bytecode"))
+        version = LUA_VERSIONS.get(version_byte)
+        if version:
+            return LuaInfo("bytecode", f"Lua {version}", "luac", size, magic, 0.94,
+                           (f"comment_prefix_offset={offset}", "embedded Lua bytecode"))
+        return LuaInfo("bytecode", None, "luac-unknown", size, magic, 0.85,
+                       (f"comment_prefix_offset={offset}", "embedded Lua magic with unknown version"))
     head = data[:8192].decode("utf-8", "ignore")
     stripped = head.lstrip("\ufeff \t\r\n")
     if re.search(r"^(?:#!.*\n\s*)?(?:local|return|function|if|for|while|repeat|do)\b", stripped):
         return LuaInfo("source", None, "lua-source", size, magic, 0.85)
+    # Short scripts commonly begin with a call or assignment rather than
+    # a block keyword. Require a printable prefix to avoid binary false hits.
+    printable = all(b in (9, 10, 13) or 32 <= b < 127 for b in data[:4096])
+    if printable and (
+        re.match(r"^[A-Za-z_][A-Za-z0-9_.]*\s*\(", stripped)
+        or re.match(r"^[A-Za-z_][A-Za-z0-9_]*\s*=", stripped)
+        or stripped.startswith("--")
+    ):
+        return LuaInfo("source", None, "lua-source", size, magic, 0.78)
     if b"function" in data[:4096] and all((b in (9,10,13) or 32 <= b < 127) for b in data[:4096]):
         return LuaInfo("source", None, "lua-source", size, magic, 0.70)
     return LuaInfo("unknown", None, "unknown", size, magic, 0.0)
 
 
-def detect_lua(path) -> LuaInfo:
-    p = Path(path)
-    data = p.read_bytes()
-    info = detect_bytes(data)
-    # Accept any valid zlib header: CMF=0x78 with FLG such that (CMF*256+FLG)%31==0
-    # (78 01, 78 5E, 78 9C, 78 DA are the common ones at various compression levels).
-    def _is_zlib_header(d: bytes) -> bool:
-        return len(d) >= 2 and d[0] == 0x78 and (d[0] * 256 + d[1]) % 31 == 0
+MAX_IN_MEMORY_CONTAINER_BYTES = 256 * 1024 * 1024
+MAX_TEXT_READ_BYTES = 64 * 1024 * 1024
 
-    if info.kind != "unknown" or not _is_zlib_header(data):
+
+def detect_lua(path) -> LuaInfo:
+    """Detect Lua using a bounded header read; only unwrap bounded containers."""
+    p = Path(path)
+    if not p.is_file():
+        return LuaInfo("unknown", None, "missing", 0, "", 0.0,
+                       ("input file not found",))
+    size = p.stat().st_size
+    with p.open("rb") as source:
+        sample = source.read(8192)
+    detected = detect_bytes(sample)
+    info = LuaInfo(detected.kind, detected.version, detected.format, size,
+                   sample[:8].hex(), detected.confidence, detected.notes)
+
+    def _is_zlib_header(data: bytes) -> bool:
+        return len(data) >= 2 and data[0] == 0x78 and (data[0] * 256 + data[1]) % 31 == 0
+
+    if info.kind != "unknown" or not _is_zlib_header(sample):
         return info
+    if size > MAX_IN_MEMORY_CONTAINER_BYTES:
+        return LuaInfo(
+            "unknown", None, "container-exceeds-memory-budget", size,
+            sample[:8].hex(), 0.10,
+            (f"compressed container exceeds in-memory unwrap budget ({MAX_IN_MEMORY_CONTAINER_BYTES} bytes); use streaming decompiler",),
+            True, "unknown", 0,
+        )
     try:
+        data = p.read_bytes()
         payload, ci = unwrap_lua_container(data)
-        inner = detect_bytes(payload)
-        return LuaInfo(inner.kind, inner.version, inner.format, len(data), data[:8].hex(),
+        inner = detect_bytes(payload[:8192])
+        return LuaInfo(inner.kind, inner.version, inner.format, size, sample[:8].hex(),
                        min(0.98, inner.confidence),
                        tuple(ci.notes) + tuple(inner.notes), True, ci.format, ci.chunks)
     except Exception as exc:
-        return LuaInfo("unknown", None, "container-unknown", len(data), data[:8].hex(), 0.10,
+        return LuaInfo("unknown", None, "container-unknown", size, sample[:8].hex(), 0.10,
                        (f"container detection failed: {exc}",), True, "unknown", 0)
+
+def read_lua_text_strict(path, *, allow_utf8_bom: bool = True) -> str:
+    """Read a Lua *source* file as text without ever destroying bytes.
+
+    Binary payloads must never pass through ``errors="replace"``: doing so
+    silently rewrites every invalid byte to U+FFFD and turns a recoverable
+    ``.luac`` chunk into an unrecoverable one. Callers that genuinely expect
+    source should use this helper and surface the raised error to the user.
+    """
+    p = Path(path)
+    if p.stat().st_size > MAX_TEXT_READ_BYTES:
+        raise ValueError(
+            f"{p.name} exceeds the strict text-read limit ({MAX_TEXT_READ_BYTES} bytes); "
+            "use a streaming text operation"
+        )
+    raw = p.read_bytes()
+    if allow_utf8_bom and raw.startswith(b"\xef\xbb\xbf"):
+        raw = raw[3:]
+    if raw.startswith((b"\x1bLua", b"\x1bLJ")):
+        raise ValueError(
+            f"{p.name} is Lua bytecode, not source; refusing to decode it as text"
+        )
+    if b"\x00" in raw:
+        raise ValueError(
+            f"{p.name} contains NUL bytes; refusing to decode binary data as text"
+        )
+    try:
+        return raw.decode("utf-8")
+    except UnicodeDecodeError as exc:
+        raise ValueError(
+            f"{p.name} is not valid UTF-8 text ({exc.reason} at byte {exc.start}); "
+            "refusing lossy decode that would destroy the original bytes"
+        ) from exc

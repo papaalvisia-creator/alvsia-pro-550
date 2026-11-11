@@ -31,6 +31,7 @@ SEED_ENV = "ALVSIA_SEAL_SEED_HEX"
 MAGIC = b"ALVSEAL2"
 MODULES = (
     "alvsia_bridge_impl.py",
+    "alvsia_metadata.py",
     "alvsia_private.py",
     "alvsia_vm_protect.py",
     "lua_engine/pattern_registry.py",
@@ -46,11 +47,15 @@ MODULES = (
     "lua_engine/engine.py",
     "lua_engine/decompiler53.py",
     "lua_engine/bgmi.py",
+    "lua_engine/t24.py",
     "lua_engine/luajit_decompiler.py",
     "lua_engine/container.py",
     "lua_engine/detector.py",
     "lua_engine/multi_format.py",
     "lua_engine/streaming_decompiler.py",
+    "lua_engine/orchestrator.py",
+    "lua_engine/protection.py",
+    "lua_engine/protection_pipeline.py",
     "lua_engine/vm_deobfuscator.py",
 )
 

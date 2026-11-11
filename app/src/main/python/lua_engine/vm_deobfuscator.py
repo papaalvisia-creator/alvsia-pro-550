@@ -75,7 +75,8 @@ def deobfuscate_alvseal3_source(input_path: Path, out_dir: Path) -> Dict[str, An
 
     out_dir.mkdir(parents=True, exist_ok=True)
     try:
-        text = input_path.read_text(encoding="utf-8", errors="replace")
+        from .detector import read_lua_text_strict
+        text = read_lua_text_strict(input_path)
     except Exception as exc:
         return {"ok": False, "error": f"read failed: {exc}"}
 
@@ -275,18 +276,34 @@ def _parse_lua53_header(data: bytes) -> Optional[Dict[str, Any]]:
         return None
 
 
-def _walk_lua53_protos(data: bytes, header: Dict[str, Any]) -> Dict[str, Any]:
-    """Walk the Lua 5.3 chunk structure and return summary stats.
-    Stops on first parse error — we report what was parsed honestly.
-    """
-    r = Reader(data)
+def _walk_lua53_protos(
+    data: bytes,
+    header: Dict[str, Any],
+    deadline: float | None = None,
+) -> Dict[str, Any]:
+    """Bounded Lua 5.3 structure walk; malformed counts fail closed, never loop unbounded."""
+    r = Reader(data, deadline=deadline)
     r.lua_int_size = header["lua_int_size"]
     r.lua_num_size = header["lua_num_size"]
     r._pos = header["main_offset"]
     protos = []
     errors = []
+    proto_count = 0
+
+    def skip_bytes(count: int) -> None:
+        if count < 0 or count > r.remaining():
+            raise ValueError(f"invalid bytecode section length {count} at offset {r._pos}")
+        r._pos += count
 
     def load_proto(depth, idx_in_parent):
+        nonlocal proto_count
+        if deadline is not None and time.monotonic() >= deadline:
+            raise TimeoutError("BGMI pattern scan deadline exceeded")
+        if depth > 128:
+            raise ValueError("Lua proto nesting exceeds 128 levels")
+        proto_count += 1
+        if proto_count > 100000:
+            raise ValueError("Lua proto count exceeds 100000")
         start = r._pos
         info = {"depth": depth, "idx": idx_in_parent, "offset": start}
         try:
@@ -298,28 +315,45 @@ def _walk_lua53_protos(data: bytes, header: Dict[str, Any]) -> Dict[str, Any]:
             info["maxstacksize"] = r.uint8()
             n_code = r.int_()
             info["code_count"] = n_code
-            r._pos += n_code * 4  # skip code
+            if n_code < 0 or n_code > r.remaining() // 4:
+                raise ValueError(f"invalid instruction count {n_code}")
+            skip_bytes(n_code * 4)
             n_const = r.int_()
             info["const_count"] = n_const
-            # Skip constants — we don't need them for detection
-            for _ in range(n_const):
+            if n_const < 0 or n_const > r.remaining():
+                raise ValueError(f"invalid constant count {n_const}")
+            for const_index in range(n_const):
+                if deadline is not None and (const_index & 0x3FF) == 0 and time.monotonic() >= deadline:
+                    raise TimeoutError("BGMI constant scan deadline exceeded")
                 t = r.uint8()
-                if t == 0: pass
-                elif t == 1: r._pos += 1
-                elif t == 3: r._pos += header["lua_num_size"]
-                elif t == 19: r._pos += header["lua_int_size"]
+                if t == 0:
+                    pass
+                elif t == 1:
+                    skip_bytes(1)
+                elif t == 3:
+                    skip_bytes(header["lua_num_size"])
+                elif t == 19:
+                    skip_bytes(header["lua_int_size"])
                 elif t in (4, 20):
                     sz = r.uint8()
                     if sz == 0xFF:
                         sz = r.sizet_()
-                    r._pos += max(0, sz - 1)
+                    skip_bytes(max(0, sz - 1))
+                else:
+                    raise ValueError(f"unsupported Lua constant type {t}")
             n_upv = r.int_()
             info["upvalue_count"] = n_upv
-            r._pos += n_upv * 2
+            if n_upv < 0 or n_upv > r.remaining() // 2:
+                raise ValueError(f"invalid upvalue count {n_upv}")
+            skip_bytes(n_upv * 2)
             n_nested = r.int_()
             info["nested_count"] = n_nested
+            if n_nested < 0 or n_nested > min(100000, r.remaining() // 8):
+                raise ValueError(f"invalid nested proto count {n_nested}")
             protos.append(info)
             for i in range(n_nested):
+                if deadline is not None and time.monotonic() >= deadline:
+                    raise TimeoutError("BGMI proto scan deadline exceeded")
                 try:
                     load_proto(depth + 1, i)
                 except Exception as e:
@@ -329,7 +363,7 @@ def _walk_lua53_protos(data: bytes, header: Dict[str, Any]) -> Dict[str, Any]:
                         "offset": r._pos,
                         "error": f"{type(e).__name__}: {e}",
                     })
-                    return  # stop recursing after first error
+                    return
         except Exception as e:
             info["error"] = f"{type(e).__name__}: {e}"
             protos.append(info)
@@ -344,13 +378,15 @@ def detect_bgmi_vm_pattern(input_path: Path) -> bool:
     """True if [input_path] is a Lua 5.3 bytecode chunk with BGMI-style
     VM obfuscation pattern (large main function + nested proto with many constants)."""
     try:
+        if input_path.stat().st_size > 256 * 1024 * 1024:
+            return False
         data = input_path.read_bytes()
         header = _parse_lua53_header(data)
         if header is None:
             return False
         if header["version"] != 0x53:
             return False  # only Lua 5.3 for now
-        walk = _walk_lua53_protos(data, header)
+        walk = _walk_lua53_protos(data, header, deadline=time.monotonic() + 3.0)
         protos = walk["protos"]
         if not protos:
             return False
@@ -390,12 +426,16 @@ def deobfuscate_bgmi_vm_pattern(input_path: Path, out_dir: Path) -> Dict[str, An
     t0 = time.time()
     out_dir.mkdir(parents=True, exist_ok=True)
     try:
+        if input_path.stat().st_size > 256 * 1024 * 1024:
+            return {"ok": False, "error": "BGMI analysis input exceeds 256 MiB safety limit",
+                    "input": str(input_path)}
         data = input_path.read_bytes()
         header = _parse_lua53_header(data)
         if header is None:
             return {"ok": False, "error": "not a Lua 5.3 chunk",
                     "input": str(input_path)}
-        walk = _walk_lua53_protos(data, header)
+        analysis_deadline = time.monotonic() + 12.0
+        walk = _walk_lua53_protos(data, header, deadline=analysis_deadline)
         protos = walk["protos"]
         errors = walk["errors"]
 
@@ -407,7 +447,7 @@ def deobfuscate_bgmi_vm_pattern(input_path: Path, out_dir: Path) -> Dict[str, An
 
         # Extract constants from main function only (first proto)
         # We re-walk the main proto to actually read its constants this time.
-        constants = _extract_main_constants(data, header)
+        constants = _extract_main_constants(data, header, deadline=analysis_deadline)
         const_path = out_dir / (input_path.stem + "_constants.txt")
         with const_path.open("w", encoding="utf-8") as f:
             f.write(f"# ALVSIA PRO 5.5.0 — BGMI-VM partial recovery\n")
@@ -509,21 +549,31 @@ def deobfuscate_bgmi_vm_pattern(input_path: Path, out_dir: Path) -> Dict[str, An
                 "elapsed_ms": int((time.time() - t0) * 1000)}
 
 
-def _extract_main_constants(data: bytes, header: Dict[str, Any]) -> list:
-    """Walk the main function and extract its constants (typed)."""
-    r = Reader(data)
+def _extract_main_constants(
+    data: bytes,
+    header: Dict[str, Any],
+    deadline: float | None = None,
+) -> list:
+    """Extract a bounded constant pool for BGMI diagnostics."""
+    r = Reader(data, deadline=deadline)
     r.lua_int_size = header["lua_int_size"]
     r.lua_num_size = header["lua_num_size"]
     r._pos = header["main_offset"]
     constants = []
     try:
-        r.string()  # source name
-        r.int_(); r.int_()  # line defined
-        r.uint8(); r.uint8(); r.uint8()  # numparams, is_vararg, maxstack
+        r.string()
+        r.int_(); r.int_()
+        r.uint8(); r.uint8(); r.uint8()
         n_code = r.int_()
+        if n_code < 0 or n_code > r.remaining() // 4:
+            raise ValueError(f"invalid instruction count {n_code}")
         r._pos += n_code * 4
         n_const = r.int_()
-        for _ in range(n_const):
+        if n_const < 0 or n_const > r.remaining():
+            raise ValueError(f"invalid constant count {n_const}")
+        for index in range(n_const):
+            if deadline is not None and (index & 0x3FF) == 0 and time.monotonic() >= deadline:
+                raise TimeoutError("BGMI constant extraction deadline exceeded")
             t = r.uint8()
             if t == 0:
                 constants.append(("nil", None))

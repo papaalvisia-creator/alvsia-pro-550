@@ -107,11 +107,37 @@ def test_long_strings_use_standard_size_t_in_normalized_chunk():
         assert len(out_path.read_text(encoding="utf-8", errors="replace")) > 50
 
 
+def test_roundtrip_standard_to_bgmi_and_back_is_byte_exact():
+    """Encrypt (standard->BGMI) then decrypt (BGMI->standard) must round-trip."""
+    key = b"ALVISIA-roundtrip-key"
+    literal = b"ROUNDTRIP_LITERAL_9000"
+    src = _make_bgmi_chunk(key, literal)
+
+    standard = transform_bgmi_lua(src, key, decrypt=True)
+    bgmi = transform_bgmi_lua(standard, key, decrypt=False)
+    restored = transform_bgmi_lua(bgmi, key, decrypt=True)
+
+    # Header ABI flips back to the BGMI 4-byte size_t when encrypting.
+    assert bgmi[12:16] == b"\x04\x04\x04\x08"
+    # And the full standard chunk is reproduced byte-for-byte.
+    assert restored == standard
+    assert literal in restored
+
+    with tempfile.TemporaryDirectory() as td:
+        out_path = Path(td) / "roundtrip.lua"
+        src_path = Path(td) / "roundtrip.luac"
+        src_path.write_bytes(restored)
+        result = decompile_file(src_path, out_path)
+        assert result.get("ok"), result
+        assert "ROUNDTRIP_LITERAL_9000" in out_path.read_text(encoding="utf-8", errors="replace")
+
+
 def main():
     tests = (
         test_bgmi_detection_and_opcode_normalization,
         test_structure_only_mode_preserves_encrypted_string_bytes,
         test_long_strings_use_standard_size_t_in_normalized_chunk,
+        test_roundtrip_standard_to_bgmi_and_back_is_byte_exact,
     )
     for test in tests:
         test()

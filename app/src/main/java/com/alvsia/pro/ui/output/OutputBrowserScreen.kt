@@ -6,6 +6,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -41,47 +43,64 @@ import com.alvsia.pro.ui.theme.AlvisiaCyan
 import com.alvsia.pro.ui.theme.AlvisiaDeep
 import com.alvsia.pro.ui.theme.AlvisiaSilver
 import com.alvsia.pro.tool.WorkPaths
+import com.alvsia.pro.ui.home.StudioCatalog
+import com.alvsia.pro.ui.home.StudioItem
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
 @Composable
-fun OutputBrowserScreen(onBack: () -> Unit) {
+fun OutputBrowserScreen(onBack: () -> Unit, onUseWithStudio: (StudioItem, Uri) -> Unit) {
     val ctx = LocalContext.current
     var files by remember { mutableStateOf<List<Pair<File, String>>>(emptyList()) }
     var selectedFile by remember { mutableStateOf<File?>(null) }
     var previewText by remember { mutableStateOf("") }
 
-    LaunchedEffect(Unit) {
+    val refreshFiles = {
         WorkPaths.bindApp(ctx)
-        val outDir = WorkPaths.dirOut()
-        if (outDir.isDirectory) {
-            files = outDir.walkTopDown()
-                .filter { it.isFile && it.length() > 0 && it.length() < 5_000_000 }
-                .sortedByDescending { it.lastModified() }
-                .take(200)
-                .map { f ->
-                    val rel = f.relativeTo(outDir).path
-                    val date = SimpleDateFormat("MM-dd HH:mm", Locale.US).format(Date(f.lastModified()))
-                    f to "$rel  (${f.length()} B)  $date"
+        val root = WorkPaths.alvsiaRoot()
+        val outputRoots = mutableListOf<Pair<File, String>>()
+
+        // Legacy output tree remains readable for older app versions.
+        val legacyOut = WorkPaths.dirOut()
+        if (legacyOut.isDirectory) outputRoots.add(legacyOut to "OUT")
+
+        // Current task-isolated engine writes to TASKS/<task-id>/OUT/<MODULE>.
+        // Index these files too; scanning only OUT/ hid every new task result.
+        val tasksRoot = File(root, "TASKS")
+        tasksRoot.listFiles()?.filter { it.isDirectory }?.forEach { task ->
+            val taskOut = File(task, "OUT")
+            if (taskOut.isDirectory) {
+                outputRoots.add(taskOut to "TASKS/${task.name}/OUT")
+            }
+        }
+
+        val discovered = outputRoots.flatMap { (base, label) ->
+            base.walkTopDown()
+                .filter { it.isFile && it.length() > 0 }
+                .map { file ->
+                    val rel = file.relativeTo(base).path
+                    val date = SimpleDateFormat("MM-dd HH:mm", Locale.US).format(Date(file.lastModified()))
+                    file to "$label/$rel  (${file.length()} B)  $date"
                 }.toList()
         }
+        files = discovered
+            .distinctBy { it.first.absolutePath }
+            .sortedByDescending { it.first.lastModified() }
+            .take(500)
     }
+    LaunchedEffect(Unit) { refreshFiles() }
 
     Column(
         Modifier.fillMaxSize().background(AlvisiaDeep).statusBarsPadding().padding(12.dp)
     ) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
             TextButton(onClick = onBack) { Text("← BACK", color = AlvisiaCyan, fontWeight = FontWeight.Bold, fontSize = 12.sp) }
-            TextButton(onClick = {
-                WorkPaths.bindApp(ctx)
-                val outDir = WorkPaths.dirOut()
-                if (outDir.isDirectory) { outDir.deleteRecursively(); outDir.mkdirs(); files = emptyList() }
-            }) { Text("CLEAR ALL", color = Color(0xFFFF2D55), fontWeight = FontWeight.Bold, fontSize = 11.sp) }
+            TextButton(onClick = { refreshFiles() }) { Text("REFRESH", color = AlvisiaCyan, fontWeight = FontWeight.Bold, fontSize = 11.sp) }
         }
         Text("OUTPUT BROWSER", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 16.sp)
-        Text("${files.size} files in OUT/", color = AlvisiaSilver.copy(alpha = 0.5f), fontSize = 11.sp)
+        Text("${files.size} files in OUT/ + TASKS/*/OUT/", color = AlvisiaSilver.copy(alpha = 0.5f), fontSize = 11.sp)
         Spacer(Modifier.height(8.dp))
 
         LazyColumn(Modifier.fillMaxWidth().weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -93,7 +112,7 @@ fun OutputBrowserScreen(onBack: () -> Unit) {
                         .clickable {
                             selectedFile = file
                             val ext = file.extension.lowercase()
-                            previewText = if (ext in listOf("txt","lua","json","csv","xml","log","py","md")) {
+                            previewText = if (ext in listOf("txt","lua","json","csv","xml","log","py","md") && file.length() <= 5_000_000) {
                                 try { file.readText(Charsets.UTF_8).take(2000) } catch (_: Exception) { "(error reading)" }
                             } else "(binary — use OPEN)"
                         }.padding(8.dp)
@@ -117,6 +136,28 @@ fun OutputBrowserScreen(onBack: () -> Unit) {
             Spacer(Modifier.height(2.dp))
             LazyColumn(Modifier.fillMaxWidth().height(200.dp).clip(RoundedCornerShape(8.dp)).background(Color(0xFF070D14)).padding(8.dp)) {
                 items(previewText.lines().take(40)) { line -> Text(line, color = AlvisiaSilver, fontFamily = FontFamily.Monospace, fontSize = 9.sp) }
+            }
+        }
+        if (selectedFile?.isFile == true) {
+            Spacer(Modifier.height(8.dp))
+            Text("CONTINUE IN ANOTHER STUDIO", color = AlvisiaCyan, fontWeight = FontWeight.Bold, fontSize = 10.sp)
+            Text("The selected output will be passed as the next tool's input.", color = AlvisiaSilver.copy(alpha = 0.6f), fontSize = 10.sp)
+            Row(
+                Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                StudioCatalog.all.forEach { studio ->
+                    TextButton(onClick = {
+                        try {
+                            val uri = FileProvider.getUriForFile(ctx, "${ctx.packageName}.provider", selectedFile!!)
+                            onUseWithStudio(studio, uri)
+                        } catch (_: Exception) {
+                            previewText = "Unable to share this output through the app file provider."
+                        }
+                    }) {
+                        Text("${studio.icon} ${studio.title}", color = AlvisiaCyan, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
             }
         }
     }

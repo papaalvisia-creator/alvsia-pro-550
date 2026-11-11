@@ -29,6 +29,68 @@ from functools import lru_cache
 from dataclasses import dataclass
 import os, sys
 import uuid
+
+
+def _verify_pinned_git_blob(data: bytes, expected_sha1: str) -> bool:
+    """Verify a GitHub raw download against its git blob SHA-1.
+    Git blob SHA: sha1('blob ' + str(len(data)) + chr(0) + data)
+    """
+    import hashlib
+    header = ("blob " + str(len(data)) + chr(0)).encode()
+    actual = hashlib.sha1(header + data).hexdigest()
+    return actual == expected_sha1
+
+
+def _safe_captcha_integer(expression):
+    """Evaluate only bounded integer arithmetic; never execute Python code."""
+    import ast
+    import operator
+    if not isinstance(expression, str) or len(expression) > 256:
+        raise ValueError("invalid captcha expression")
+    tree = ast.parse(expression, mode="eval")
+    allowed_bin = {
+        ast.Add: operator.add, ast.Sub: operator.sub, ast.Mult: operator.mul,
+        ast.FloorDiv: operator.floordiv, ast.Mod: operator.mod,
+    }
+    nodes = list(ast.walk(tree))
+    if len(nodes) > 64:
+        raise ValueError("captcha expression too complex")
+
+    def visit(node, depth=0):
+        if depth > 16:
+            raise ValueError("captcha expression too deep")
+        if isinstance(node, ast.Expression):
+            return visit(node.body, depth + 1)
+        if isinstance(node, ast.Constant) and type(node.value) is int:
+            value = node.value
+        elif isinstance(node, ast.UnaryOp) and isinstance(node.op, (ast.UAdd, ast.USub)):
+            operand = visit(node.operand, depth + 1)
+            value = operand if isinstance(node.op, ast.UAdd) else -operand
+        elif isinstance(node, ast.BinOp) and type(node.op) in allowed_bin:
+            left = visit(node.left, depth + 1)
+            right = visit(node.right, depth + 1)
+            if isinstance(node.op, (ast.FloorDiv, ast.Mod)) and right == 0:
+                raise ValueError("division by zero")
+            value = allowed_bin[type(node.op)](left, right)
+        else:
+            raise ValueError("unsupported captcha expression")
+        if not isinstance(value, int) or abs(value) > 1000000000:
+            raise ValueError("captcha result out of range")
+        return value
+
+    return visit(tree)
+
+
+def _alvsia_safe_extract_zip(zip_file, destination):
+    """Extract ZIP entries only when their resolved path stays under destination."""
+    root = Path(destination).resolve()
+    root.mkdir(parents=True, exist_ok=True)
+    for member in zip_file.infolist():
+        target = (root / member.filename).resolve()
+        if target != root and root not in target.parents:
+            raise ValueError("Unsafe ZIP entry path rejected")
+        zip_file.extract(member, root)
+
 import urllib.request
 try:
     import select, tty, termios
@@ -582,7 +644,7 @@ def get_neon_header() -> Panel:
         grid.add_column(justify="left", ratio=1)
         grid.add_column(justify="right", ratio=1)
         grid.add_row(
-            Text.assemble(" ", rainbow_text("𝐎𝐖𝐍𝐄𝐑 ➩", off), " ", Text("@OriginalOnwerALV", style="bold white")),
+            Text.assemble(" ", rainbow_text("𝐎𝐖𝐍𝐄𝐑 ➩", off), " ", Text("@ALVSIA_PRO", style="bold white")),
             Text.assemble(rainbow_text("𝐔𝐏𝐓𝐈𝐌𝐄 ➩", off + 3), " ", Text(to_fancy(now.strftime('%H:%M:%S')), style="bold white")),
         )
         grid.add_row(
@@ -607,7 +669,7 @@ def get_neon_header() -> Panel:
     grid.add_column(justify="left", ratio=1)
     grid.add_column(justify="right", ratio=1)
     grid.add_row(
-        f"[bold {b_color}] {to_fancy('𝐎𝐖𝐍𝐄𝐑')} ➩[/bold {b_color}] [bold white]@OriginalOnwerALV[/]",
+        f"[bold {b_color}] {to_fancy('𝐎𝐖𝐍𝐄𝐑')} ➩[/bold {b_color}] [bold white]@ALVSIA_PRO[/]",
         f"[bold {b_color}]{to_fancy('𝐔𝐏𝐓𝐈𝐌𝐄')} ➩[/bold {b_color}] [bold white]{to_fancy(now.strftime('%H:%M:%S'))}[/]"
     )
     grid.add_row(
@@ -807,7 +869,7 @@ def _ks_show_banner(hwid: str) -> None:
     _ks_row("[bold yellow]🔑 ALVSIA KEY SYSTEM v2.0[/bold yellow]")
     _ks_box_mid()
     _ks_row(f"[dim]HWID:[/dim]  [bold white]{hwid}[/bold white]")
-    _ks_row("[dim]Contact [bold cyan]@OriginalOnwerALV[/bold cyan] for a key[/dim]")
+    _ks_row("[dim]Contact [bold cyan]@ALVSIA_PRO[/bold cyan] for a key[/dim]")
     _ks_box_bot()
 
 
@@ -874,7 +936,7 @@ def _ks_prompt_key(hwid: str) -> bool:
     console.print()
     console.print(Panel(
         "[bold red]❌ Too many invalid attempts.[/bold red]\n"
-        "[yellow]Contact [bold cyan]@OriginalOnwerALV[/bold cyan] to get a valid key.[/yellow]",
+        "[yellow]Contact [bold cyan]@ALVSIA_PRO[/bold cyan] to get a valid key.[/yellow]",
         title="[bold white on red] 🚫 ACCESS DENIED [/]",
         border_style="red",
         box=box.HEAVY,
@@ -3676,7 +3738,10 @@ def download_skin_tool():
     """GitHub se download + extract (Sirf download dikhe, extract background mein)"""
     
     # Download pinned to specific commit hash — not /main/ (unpinned)
-    GITHUB_URL = "https://raw.githubusercontent.com/sellacountvinay-creator/SKIN_TOOL/cbd3d0e257963b54f34a908b6864040c7f96fbb1/SKIN_TOOL.zip"
+    # URL is pinned to an immutable commit; the downloaded bytes are then
+    # verified against the git blob SHA-1 of SKIN_TOOL.zip at that commit.
+    GITHUB_URL = "https://raw.githubusercontent.com/sellacountvinay-creator/SKIN_TOOL/5c7ad2b4996fcd468bf245be43580d1fe131423e/SKIN_TOOL.zip"
+    SKIN_TOOL_BLOB_SHA1 = "cbd3d0e257963b54f34a908b6864040c7f96fbb1"
     
     base_dir = Path("ALVSIA_PRO_DATA")
     skin_tool_dir = base_dir / "SKIN_TOOL"
@@ -3743,12 +3808,17 @@ def download_skin_tool():
         console.print("[bold {get_banner_color()}]✔ Download complete![/]")
         
         # ============================================================
+        # Integrity gate: refuse to unpack a tampered or truncated download.
+        if not _verify_pinned_git_blob(zip_path.read_bytes(), SKIN_TOOL_BLOB_SHA1):
+            zip_path.unlink(missing_ok=True)
+            raise RuntimeError("SKIN_TOOL.zip failed pinned git-blob integrity check")
+
         # 🔥 EXTRACT (BACKGROUND MEIN - KUCH DIKHAO MAT)
         # ============================================================
        # console.print("[dim]📦 Extracting... (Please wait)[/]")
         
         with zipfile.ZipFile(zip_path, 'r') as zip_ref:
-            zip_ref.extractall(base_dir)
+            _alvsia_safe_extract_zip(zip_ref, base_dir)
         
         # 🔥 ZIP DELETE (CHUP CHAP)
         if zip_path.exists():
@@ -4238,7 +4308,7 @@ def run_obb_analysis_tool():
             pak_org = TencentPakFile(org_path)
             pak_mod = TencentPakFile(mod_path)
 
-            console.print("[bold yellow]🔥POWER BY- @OriginalOnwerALV...👇[/bold yellow]")
+            console.print("[bold yellow]🔥POWER BY- @ALVSIA_PRO...👇[/bold yellow]")
             if not pak_mod._index:
                 console.print("[bold cyan]..[/bold cyan]")
                 pak_mod._index = pak_org._index
@@ -7952,15 +8022,18 @@ def run_lua_tool():
                 ))
                 
                 # --- GITHUB RAW URLS ---
+                _csv_commit = "d013eca408f85d073c195e42a363b49076babd1d"
                 csv_urls = {
-                    "PUBG.csv": "https://raw.githubusercontent.com/sellacountvinay-creator/BGMI_CSV/a3f7c9d14e28b65042f1893c47a56d0e5f8b2c31/PUBG.csv",
-                    "BGMI.csv": "https://raw.githubusercontent.com/sellacountvinay-creator/BGMI_CSV/a3f7c9d14e28b65042f1893c47a56d0e5f8b2c31/BGMI.csv"
+                    "PUBG.csv": ("https://raw.githubusercontent.com/sellacountvinay-creator/BGMI_CSV/" + _csv_commit + "/PUBG.csv",
+                                 "2601457787bd2d793880fb1a8c485d0e76144942"),
+                    "BGMI.csv": ("https://raw.githubusercontent.com/sellacountvinay-creator/BGMI_CSV/" + _csv_commit + "/BGMI.csv",
+                                 "ac72bf1d3ca5f0ae72b65c1845c9c471e4a4a6af"),
                 }
                 
                 try:
                     BGMI_CSV_folder.mkdir(parents=True, exist_ok=True)
                     
-                    for filename, url in csv_urls.items():
+                    for filename, (url, expected_blob) in csv_urls.items():
                         with Progress(
                             TextColumn("[bold cyan]⬇️ {task.description}"),
                             BarColumn(bar_width=50, complete_style=f"bold {get_banner_color()}", finished_style="bold green"),
@@ -7996,6 +8069,10 @@ def run_lua_tool():
                                                     file_size=f"{file_size_mb:.2f} MB"
                                                 )
                                 
+                                if not _verify_pinned_git_blob(file_path.read_bytes(), expected_blob):
+                                    file_path.unlink(missing_ok=True)
+                                    console.print(f"[bold red]❌ Integrity check failed:[/] {filename}")
+                                    continue
                                 console.print(f"[bold green]✔ Downloaded:[/] [cyan]{filename}[/]")
                             else:
                                 console.print(f"[bold red]❌ Failed:[/] {filename} (Status: {response.status_code})")
@@ -8305,13 +8382,16 @@ def run_lua_tool():
                     title="[bold black on bright_yellow] 📥 DOWNLOADING 📥 [/]",
                     border_style="bright_yellow", box=box.HEAVY
                 ))
+                _csv_commit = "d013eca408f85d073c195e42a363b49076babd1d"
                 csv_urls = {
-                    "PUBG.csv": "https://raw.githubusercontent.com/sellacountvinay-creator/BGMI_CSV/a3f7c9d14e28b65042f1893c47a56d0e5f8b2c31/PUBG.csv",
-                    "BGMI.csv": "https://raw.githubusercontent.com/sellacountvinay-creator/BGMI_CSV/a3f7c9d14e28b65042f1893c47a56d0e5f8b2c31/BGMI.csv"
+                    "PUBG.csv": ("https://raw.githubusercontent.com/sellacountvinay-creator/BGMI_CSV/" + _csv_commit + "/PUBG.csv",
+                                 "2601457787bd2d793880fb1a8c485d0e76144942"),
+                    "BGMI.csv": ("https://raw.githubusercontent.com/sellacountvinay-creator/BGMI_CSV/" + _csv_commit + "/BGMI.csv",
+                                 "ac72bf1d3ca5f0ae72b65c1845c9c471e4a4a6af"),
                 }
                 try:
                     BGMI_CSV_folder.mkdir(parents=True, exist_ok=True)
-                    for filename, url in csv_urls.items():
+                    for filename, (url, expected_blob) in csv_urls.items():
                         with Progress(
                             TextColumn("[bold cyan]⬇️ {task.description}"),
                             BarColumn(bar_width=50, complete_style=f"bold {get_banner_color()}", finished_style="bold green"),
@@ -8333,6 +8413,10 @@ def run_lua_tool():
                                             if total_size > 0:
                                                 percent = int((downloaded / total_size) * 100)
                                                 progress.update(task, completed=percent, file_size=f"{downloaded/(1024*1024):.2f} MB")
+                                if not _verify_pinned_git_blob(file_path.read_bytes(), expected_blob):
+                                    file_path.unlink(missing_ok=True)
+                                    console.print(f"[bold red]❌ Integrity check failed:[/] {filename}")
+                                    continue
                                 console.print(f"[bold green]✔ Downloaded:[/] [cyan]{filename}[/]")
                             else:
                                 console.print(f"[bold red]❌ Failed:[/] {filename} (Status: {response.status_code})")
@@ -10686,7 +10770,7 @@ def run_combined_modding_tool():
             print(f"              {G}~SKIN TOOL : SYSTEM DEVELOPER~{RESET}\n")
 
             print(f"{G}╔════════════════════════════════════════════════════════════╗")
-            print(f"{G}║ {G}{to_fancy('OWNER:')}  {W}{to_fancy('@OriginalOnwerALV'):<18} {G}{to_fancy('𝐔𝐏𝐓𝐈𝐌:')} {W}{uptime_str:<12} {G}║")
+            print(f"{G}║ {G}{to_fancy('OWNER:')}  {W}{to_fancy('@ALVSIA_PRO'):<18} {G}{to_fancy('𝐔𝐏𝐓𝐈𝐌:')} {W}{uptime_str:<12} {G}║")
             print(f"{G}║ {G}{to_fancy('DEVICE:')} {W}{to_fancy(phone_model):<18} {G}{to_fancy('DATE:')}   {W}{current_date:<12} {G}║")
             print(f"{G}║ {G}{to_fancy('HWID:')}   {W}{hwid[:15]:<18} {G}{to_fancy('SYSTEM:')} {Y}{to_fancy('REAL DEVICE ✔')} {G}║")
             print(f"{G}╚════════════════════════════════════════════════════════════╝")
@@ -11050,7 +11134,9 @@ DEVICE_FILE = SECURITY_DIR / "device.json"
 
 # ==================== AUTHOR LICENSE SYSTEM ====================
 
-AUTHOR_PASSWORD = "ALVSIA_MASTER_20277"
+# Master password is never stored in source. Provide it via the environment
+# variable ALVSIA_AUTHOR_PASSWORD for local author tooling; empty = fail-closed.
+AUTHOR_PASSWORD = os.environ.get("ALVSIA_AUTHOR_PASSWORD", "")
 
 LICENSE_TYPES = {
     "1DAY": {"duration": 1, "label": "1 Day Trial", "prefix": "ALVSIA-1DAY-", "price": "Free"},
@@ -11149,7 +11235,7 @@ def save_license_data(license_key, device_id):
         "device_model": get_device_model(), "android_version": get_android_version(),
         "activation_date": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "license_hash": generate_license_hash(license_key, device_id),
-        "tool_version": "ALVSIA v8.0 Secure", "activated_by": "@OriginalOnwerALV"
+        "tool_version": "ALVSIA v8.0 Secure", "activated_by": "@ALVSIA_PRO"
     }
     json_str = json.dumps(data)
     encoded = hashlib.md5(json_str.encode()).hexdigest() + "|" + json_str
@@ -11222,7 +11308,7 @@ def check_device_model():
                 console.print(f"[bold red]║  [bold cyan]... and {len(ALLOWED_DEVICE_MODELS)-8} more[bold red]                [bold red]║[/bold red]")
             console.print(f"[bold red]║  [bold cyan]Your Model: [bold white]{current_model}[bold red]                       [bold red]║[/bold red]")
             console.print(f"[bold red]║  [bold cyan]Your Brand: [bold white]{current_brand}[bold red]                       [bold red]║[/bold red]")
-            console.print(f"[bold red]║  [bold yellow]Contact @OriginalOnwerALV to add your model[bold red]           [bold red]║[/bold red]")
+            console.print(f"[bold red]║  [bold yellow]Contact @ALVSIA_PRO to add your model[bold red]           [bold red]║[/bold red]")
             console.print(f"[bold red]╚{'═' * 56}╝[/bold red]")
             return False
     elif ALLOWED_BRANDS and len(ALLOWED_BRANDS) > 0:
@@ -11239,7 +11325,7 @@ def check_device_model():
             console.print(f"[bold red]║  [bold cyan]... and {len(ALLOWED_BRANDS)-8} more[bold red]                            [bold red]║[/bold red]")
         console.print(f"[bold red]║  [bold cyan]Your Brand: [bold white]{current_brand}[bold red]                        [bold red]║[/bold red]")
         console.print(f"[bold red]║  [bold cyan]Your Model: [bold white]{current_model}[bold red]                       [bold red]║[/bold red]")
-        console.print(f"[bold red]║  [bold yellow]Contact @OriginalOnwerALV for access[bold red]                    [bold red]║[/bold red]")
+        console.print(f"[bold red]║  [bold yellow]Contact @ALVSIA_PRO for access[bold red]                    [bold red]║[/bold red]")
         console.print(f"[bold red]╚{'═' * 56}╝[/bold red]")
         return False
     console.print(f"[bold yellow]⚠ No model restrictions active[/bold yellow]")
@@ -11278,7 +11364,7 @@ def check_device_lock():
         console.print(f"[bold red]║  [bold cyan]Registered: [bold white]{saved_id}[bold red]                  [bold red]║[/bold red]")
         console.print(f"[bold red]║  [bold cyan]Current:    [bold white]{current_device_id}[bold red]                  [bold red]║[/bold red]")
         console.print(f"[bold red]║  [bold cyan]Model:      [bold white]{saved_device.get('device_model', 'N/A')}[bold red]                        [bold red]║[/bold red]")
-        console.print(f"[bold red]║  [bold yellow]Contact @OriginalOnwerALV to transfer license[bold red]             [bold red]║[/bold red]")
+        console.print(f"[bold red]║  [bold yellow]Contact @ALVSIA_PRO to transfer license[bold red]             [bold red]║[/bold red]")
         console.print(f"[bold red]╚{'═' * 56}╝[/bold red]")
         return False
     return True
@@ -11292,7 +11378,7 @@ def check_expiry():
         console.print(f"[bold red]║  [bold white on red] ⏰ TOOL EXPIRED! [/bold white on red]                               [bold red]║[/bold red]")
         console.print(f"[bold red]║  [bold yellow]Expiry Date: {TOOL_EXPIRY_DATE.strftime('%d-%m-%Y')}[bold red]                          [bold red]║[/bold red]")
         console.print(f"[bold red]║  [bold yellow]Current Date: {now.strftime('%d-%m-%Y')}[bold red]                         [bold red]║[/bold red]")
-        console.print(f"[bold red]║  [bold cyan]Contact @OriginalOnwerALV for renewal[bold red]                     [bold red]║[/bold red]")
+        console.print(f"[bold red]║  [bold cyan]Contact @ALVSIA_PRO for renewal[bold red]                     [bold red]║[/bold red]")
         console.print(f"[bold red]╚{'═' * 56}╝[/bold red]")
         return False
     remaining = (TOOL_EXPIRY_DATE - now).days
@@ -11319,7 +11405,11 @@ def is_author():
     console.print(f"[bold cyan]║  [bold white]Enter master password to continue[bold cyan]                     [bold cyan]║[/bold cyan]")
     console.print(f"[bold cyan]╚{'═' * 56}╝[/bold cyan]")
     password = safe_input(f"\n[bold red]🔑 Master Password: [/bold red]").strip()
-    if password == AUTHOR_PASSWORD:
+    import hmac as _hmac
+    if not AUTHOR_PASSWORD:
+        console.print("\n[bold red]❌ Author password not configured (set ALVSIA_AUTHOR_PASSWORD).[/bold red]")
+        return False
+    if _hmac.compare_digest(password, AUTHOR_PASSWORD):
         console.print(f"\n[bold green]✅ Author Verified![/bold green]")
         return True
     else:
@@ -11801,7 +11891,7 @@ def check_license():
     console.print(f"\n[bold magenta]╔{'═' * 56}╗[/bold magenta]")
     console.print(f"[bold magenta]║  [bold yellow]🔑 LICENSE ACTIVATION REQUIRED[bold magenta]                      [bold magenta]║[/bold magenta]")
     console.print(f"[bold magenta]║  [bold white]Enter your premium license key to continue[bold magenta]          [bold magenta]║[/bold magenta]")
-    console.print(f"[bold magenta]║  [bold cyan]Contact @OriginalOnwerALV to get license key[bold magenta]              [bold magenta]║[/bold magenta]")
+    console.print(f"[bold magenta]║  [bold cyan]Contact @ALVSIA_PRO to get license key[bold magenta]              [bold magenta]║[/bold magenta]")
     console.print(f"[bold magenta]║  [dim]Your Device ID: {current_device_id}[bold magenta]                  [bold magenta]║[/bold magenta]")
     console.print(f"[bold magenta]╚{'═' * 56}╝[/bold magenta]")
     attempts = 3
@@ -11842,7 +11932,7 @@ def check_license():
                 console.print(f"[bold green]║  [bold cyan]Status: [bold green]✅ LIFETIME ACTIVE[/bold green]                     [bold green]║[/bold green]")
             else:
                 console.print(f"[bold green]║  [bold cyan]Status: [bold green]✅ ACTIVE ({remaining} days)[/bold green]              [bold green]║[/bold green]")
-            console.print(f"[bold green]║  [bold yellow]Thank you for choosing @OriginalOnwerALV![/bold green]                 [bold green]║[/bold green]")
+            console.print(f"[bold green]║  [bold yellow]Thank you for choosing @ALVSIA_PRO![/bold green]                 [bold green]║[/bold green]")
             console.print(f"[bold green]╚{'═' * 56}╝[/bold green]")
             return True
         if license_key in VALID_LICENSE_KEYS:
@@ -11854,12 +11944,12 @@ def check_license():
             console.print(f"[bold red]╔{'═' * 56}╗[/bold red]")
             console.print(f"[bold red]║  [bold red]❌ INVALID LICENSE KEY![/bold red]                              [bold red]║[/bold red]")
             console.print(f"[bold red]║  [bold yellow]Attempts remaining: {attempts}[/bold red]                          [bold red]║[/bold red]")
-            console.print(f"[bold red]║  [bold cyan]Contact @OriginalOnwerALV for valid key[/bold red]                   [bold red]║[/bold red]")
+            console.print(f"[bold red]║  [bold cyan]Contact @ALVSIA_PRO for valid key[/bold red]                   [bold red]║[/bold red]")
             console.print(f"[bold red]╚{'═' * 56}╝[/bold red]")
         else:
             console.print(f"\n[bold red]╔{'═' * 56}╗[/bold red]")
             console.print(f"[bold red]║  [bold white on red] 🚫 ALL ATTEMPTS USED! ACCESS DENIED! [/bold white on red]          [bold red]║[/bold red]")
-            console.print(f"[bold red]║  [bold yellow]Contact @OriginalOnwerALV for license key[/bold red]                 [bold red]║[/bold red]")
+            console.print(f"[bold red]║  [bold yellow]Contact @ALVSIA_PRO for license key[/bold red]                 [bold red]║[/bold red]")
             console.print(f"[bold red]║  [bold cyan]Device ID: [bold white]{current_device_id}[/bold red]                  [bold red]║[/bold red]")
             console.print(f"[bold red]╚{'═' * 56}╝[/bold red]")
             return False
@@ -11912,7 +12002,7 @@ def show_license_info():
 # ==================== RESET LICENSE ====================
 
 def reset_license():
-    admin_password = "ALVSIA_2027"
+    admin_password = os.environ.get("ALVSIA_ADMIN_PASSWORD", "")
     console.print(f"\n[bold red]╔{'═' * 56}╗[/bold red]")
     console.print(f"[bold red]║  [bold white on red] 🔐 ADMIN LICENSE RESET [/bold white on red]                      [bold red]║[/bold red]")
     console.print(f"[bold red]║  [bold yellow]⚠ This will reset ALL license data![/bold red]    [bold red]║[/bold red]")
@@ -11920,7 +12010,11 @@ def reset_license():
     console.print(f"[bold red]║  [bold yellow]⚠ Re-activation will be required![/bold red]      [bold red]║[/bold red]")
     console.print(f"[bold red]╚{'═' * 56}╝[/bold red]")
     password = safe_input(f"[bold red]🔐 Enter Admin Password: [/bold red]").strip()
-    if password != admin_password:
+    import hmac as _hmac
+    if not admin_password:
+        console.print("[bold red]❌ Admin reset disabled: set ALVSIA_ADMIN_PASSWORD.[/bold red]")
+        return False
+    if not _hmac.compare_digest(password, admin_password):
         console.print(f"[bold red]❌ Wrong admin password![/bold red]")
         return False
     console.print(f"[bold cyan]🔄 Resetting license data...[/bold cyan]")
@@ -12309,17 +12403,6 @@ if __name__ == '__main__':
 # ══════════════════════════════════════════════════════════════════════════════
 import re as _re, hashlib as _hashlib
 
-def _verify_pinned_git_blob(data: bytes, expected_sha1: str) -> bool:
-    """Verify a GitHub raw download against its git blob SHA-1.
-    Git blob SHA: sha1('blob ' + str(len(data)) + chr(0) + data)
-    """
-    import hashlib
-    header = ("blob " + str(len(data)) + chr(0)).encode()
-    actual = hashlib.sha1(header + data).hexdigest()
-    return actual == expected_sha1
-
-
-
 # ── Module 10: SO Analyzer ────────────────────────────────────────────────────
 
 def so_xor_brute(input_path, out_dir):
@@ -12391,22 +12474,56 @@ def so_aes_probe(input_path, out_dir):
 
 
 def so_patch_url(input_path, out_dir, old_url="", new_url=""):
-    """Patch a plaintext URL inside a .so binary."""
+    """Patch every exact occurrence of a plaintext URL in a binary copy.
+
+    The source file is never modified. Replacement bytes are NUL-padded to
+    the original URL width so later binary offsets remain stable.
+    """
     from pathlib import Path
-    p = Path(input_path); out_dir = Path(out_dir); out_dir.mkdir(parents=True, exist_ok=True)
+    p = Path(input_path)
+    out_dir = Path(out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
     if not old_url or not new_url:
         return {"ok": False, "error": "old_url and new_url required"}
-    raw = bytearray(p.read_bytes())
-    old_b = old_url.encode(); new_b = new_url.encode()
+    try:
+        old_b = old_url.encode("utf-8")
+        new_b = new_url.encode("utf-8")
+    except UnicodeError:
+        return {"ok": False, "error": "URL encoding must be UTF-8"}
+    if not old_b:
+        return {"ok": False, "error": "old_url must not be empty"}
     if len(new_b) > len(old_b):
         return {"ok": False, "error": "new_url must be <= old_url length"}
-    idx = raw.find(old_b)
-    if idx == -1:
+    try:
+        raw = p.read_bytes()
+    except OSError as exc:
+        return {"ok": False, "error": "input read failed: %s" % type(exc).__name__}
+    count = raw.count(old_b)
+    if count == 0:
         return {"ok": False, "error": "old_url not found in binary"}
-    raw[idx:idx+len(old_b)] = new_b + b"\x00" * (len(old_b) - len(new_b))
+    offsets = []
+    cursor = 0
+    while True:
+        idx = raw.find(old_b, cursor)
+        if idx < 0:
+            break
+        offsets.append("0x%X" % idx)
+        cursor = idx + len(old_b)
+    padded = new_b + b"\x00" * (len(old_b) - len(new_b))
+    patched = raw.replace(old_b, padded)
     out_file = out_dir / ("patched_%s" % p.name)
-    Path(out_file).write_bytes(bytes(raw))
-    return {"ok": True, "out": str(out_file), "patched_at": "0x%X" % idx}
+    try:
+        out_file.write_bytes(patched)
+    except OSError as exc:
+        return {"ok": False, "error": "output write failed: %s" % type(exc).__name__}
+    return {
+        "ok": True,
+        "out": str(out_file),
+        "patched_count": count,
+        "patched_offsets": offsets,
+        "original_sha256": __import__("hashlib").sha256(raw).hexdigest(),
+        "output_sha256": __import__("hashlib").sha256(patched).hexdigest(),
+    }
 
 
 # ── Module 11: Frida Tracer ───────────────────────────────────────────────────
@@ -12939,7 +13056,7 @@ def pak_deep_aes(input_path, out_dir, key_hex="", iv_hex=""):
     dec_file = result["out"]
     try:
         with zipfile.ZipFile(dec_file) as zf:
-            zf.extractall(out_dir)
+            _alvsia_safe_extract_zip(zf, out_dir)
             result["extracted"] = len(zf.namelist())
     except Exception:
         result["note"] = "decrypted but not a valid ZIP/PAK"
@@ -12982,7 +13099,7 @@ def pak_deep_zuc(input_path, out_dir, key_hex="", iv_hex=""):
     import zipfile
     try:
         with zipfile.ZipFile(result["out"]) as zf:
-            zf.extractall(out_dir)
+            _alvsia_safe_extract_zip(zf, out_dir)
             result["extracted"] = len(zf.namelist())
     except Exception:
         result["note"] = "decrypted but not ZIP"
@@ -12997,7 +13114,7 @@ def pak_deep_sm4(input_path, out_dir, key_hex="", mode="ECB", iv_hex=""):
     import zipfile
     try:
         with zipfile.ZipFile(result["out"]) as zf:
-            zf.extractall(out_dir)
+            _alvsia_safe_extract_zip(zf, out_dir)
             result["extracted"] = len(zf.namelist())
     except Exception:
         result["note"] = "decrypted but not ZIP"
@@ -13014,7 +13131,7 @@ def pak_deep_auto(input_path, out_dir):
     if raw[:2] == b"PK":
         try:
             with zipfile.ZipFile(str(p)) as zf:
-                zf.extractall(str(out_dir))
+                _alvsia_safe_extract_zip(zf, str(out_dir))
                 return {"ok": True, "method": "plain_zip", "extracted": len(zf.namelist()), "out": str(out_dir)}
         except Exception: pass
     # Try zlib

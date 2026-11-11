@@ -1,5 +1,6 @@
 """Static regression checks for the 19-module Android tool menu/bridge contract."""
 from pathlib import Path
+from typing import Optional, Tuple
 import re
 import ast
 import tempfile
@@ -40,8 +41,24 @@ def test_python_auth_normalizes_java_string_and_lua_avoids_art_oom():
     assert "fun lock(@Suppress(\"UNUSED_PARAMETER\") ctx: Context)" in gate
     lock_body = gate.split("fun lock(@Suppress(\"UNUSED_PARAMETER\") ctx: Context)", 1)[1].split("\n    }", 1)[0]
     assert "synchronized(this)" in lock_body, "RASP lock must serialize with Python token validation"
-    assert "ART_SAFE_LIMIT = 1L * 1024L * 1024L" in unluac
-    assert "if in_size > 1 * 1024 * 1024:" in impl
+    assert "ART_SAFE_LIMIT = 256L * 1024L" in unluac
+    lua_branch = impl.split("# ── 5  LUA Tools", 1)[1].split('if sid == "lua_format_probe":', 1)[0]
+    assert "result = feat.run_lua_smart(ip, dest_lua, jars_dir=jars)" in lua_branch
+    features = (ROOT / "app/src/main/python/alvsia_features.py").read_text(encoding="utf-8")
+    # run_lua_smart is the public front door; the detailed engine pipeline is
+    # intentionally delegated to _run_lua_smart_legacy after intelligence analysis.
+    smart_start = features.index("def run_lua_smart(")
+    smart_end = features.index("\ndef run_lua_universal(", smart_start)
+    smart = features[smart_start:smart_end]
+    legacy_start = features.index("def _run_lua_smart_legacy(")
+    legacy_end = features.find("\ndef ", legacy_start + 5)
+    legacy = features[legacy_start:legacy_end if legacy_end >= 0 else None]
+    streaming = (ROOT / "app/src/main/python/lua_engine/streaming_decompiler.py").read_text(encoding="utf-8")
+    assert "_run_lua_smart_legacy(" in smart and "analyze_file(" in smart
+    assert "decompile_large(" in legacy and "preflight_only=True" in legacy
+    assert "build_engine_registry" in legacy and "run_decompiler_pipeline" in legacy
+    assert "def decompile_large(" in streaming and "preflight_only" in streaming
+    assert "if in_size > 1 * 1024 * 1024:" not in lua_branch
 
 def test_menu_ids_are_unique_and_reachable():
     menus = MENUS.read_text(encoding="utf-8")
@@ -254,10 +271,10 @@ def test_run_unzip_rejects_zip_slip_and_extracts_safe_entries():
 def test_large_lua_source_is_detected_before_bytecode_fallback():
     source = (ROOT / "app/src/main/python/lua_engine/streaming_decompiler.py").read_text(encoding="utf-8")
     tree = ast.parse(source)
+    helper = next(node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name == "_comment_prefix_lua_magic")
     fn = next(node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name == "preflight_magic")
-    import re
-    namespace = {"Path": Path, "re": re}
-    exec(compile(ast.Module(body=[fn], type_ignores=[]), "streaming_decompiler.py", "exec"), namespace)
+    namespace = {"Path": Path, "re": re, "Optional": Optional, "Tuple": Tuple}
+    exec(compile(ast.Module(body=[helper, fn], type_ignores=[]), "streaming_decompiler.py", "exec"), namespace)
     with tempfile.TemporaryDirectory() as td:
         sample = Path(td) / "primary_BRPlayerCharacterBase.lua"
         sample.write_text("local function main()\n  return true\nend\n" + ("-- filler\n" * 700000), encoding="utf-8")
@@ -302,6 +319,132 @@ def test_profile_catalog_matches_canonical_nineteen_modules():
     assert names == chips, f"Home/profile module names differ: home={names}, profile={chips}"
 
 
+def test_reference_inspection_subtools_are_registered_and_read_only():
+    menus = MENUS.read_text(encoding="utf-8")
+    bridge = BRIDGE_IMPL.read_text(encoding="utf-8")
+    helper = (ROOT / "app/src/main/python/alvsia_reference_tools.py").read_text(encoding="utf-8")
+    for sid in ("lua_format_probe", "anti_re_source_triage", "so_dump_audit"):
+        assert sid in menus
+        assert sid in bridge
+    assert "probe_lua_file" in helper
+    assert "scan_source_file" in helper
+    assert "inspect_dump_file" in helper
+    assert "execution_performed" in helper
+    assert "memory_acquisition" in helper
+    assert "subprocess.run(" not in helper
+    assert "ptrace(" not in helper
+    assert "process_vm_readv(" not in helper
+
+
+def test_reference_inspection_helpers_smoke():
+    import importlib.util
+    helper_path = ROOT / "app/src/main/python/alvsia_reference_tools.py"
+    spec = importlib.util.spec_from_file_location("alvsia_reference_tools", str(helper_path))
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    with tempfile.TemporaryDirectory() as td:
+        root = Path(td)
+        lua = root / "sample.luac"
+        lua.write_bytes(b"\x1bLua\x53\x00" + (b"\x00" * 40))
+        assert module.probe_lua_file(lua)["format"] == "Lua 5.3"
+        source = root / "sample.py"
+        source.write_text("import base64\nexec(payload)\n", encoding="utf-8")
+        findings = module.scan_source_file(source)["findings"]
+        assert any(item["indicator"] == "dynamic_execution" for item in findings)
+        dump = root / "sample.dmp"
+        dump.write_bytes((b"\x00" * 5000) + b"HELLO_WORLD" + (b"\x00" * 100))
+        report = module.inspect_dump_file(dump, block_size=4096)
+        assert report["size"] == dump.stat().st_size
+        assert report["strings"]
+        assert report["memory_acquisition"] is False
+        assert report["secret_extraction"] is False
+
+def test_pak_integrity_audit_is_registered_and_read_only():
+    bridge = BRIDGE_IMPL.read_text(encoding="utf-8")
+    menus = MENUS.read_text(encoding="utf-8")
+    core = (ROOT / "app/src/main/python/alvsia_core.py").read_text(encoding="utf-8")
+    assert "pak_deep_integrity_audit" in bridge
+    assert "pak_deep_integrity_audit" in menus
+    assert "def run_pak_integrity_audit(" in core
+    assert "slot_fingerprint_sha256" in core
+    assert "invalid_ranges" in core
+    assert "overlaps" in core
+    assert "Original PAK was not modified" in bridge
+
+def test_obb_integrity_audit_is_registered_and_read_only():
+    bridge = BRIDGE_IMPL.read_text(encoding="utf-8")
+    menus = MENUS.read_text(encoding="utf-8")
+    helper = (ROOT / "app/src/main/python/alvsia_reference_tools.py").read_text(encoding="utf-8")
+    assert "obb_integrity_audit" in bridge
+    assert "obb_integrity_audit" in menus
+    assert "def audit_archive_file(" in helper
+    assert "archive.open(info, \"r\")" in helper
+    assert "extractall(" not in helper
+
+
+def test_reference_inspectors_format_and_archive_fixtures():
+    import importlib.util
+    import zipfile
+    helper_path = ROOT / "app/src/main/python/alvsia_reference_tools.py"
+    spec = importlib.util.spec_from_file_location("alvsia_reference_tools_fixtures", str(helper_path))
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    with tempfile.TemporaryDirectory() as td:
+        root = Path(td)
+        lj = root / "sample.lj"
+        lj.write_bytes(b"\x1bLJ" + b"\x00" * 24)
+        assert module.probe_lua_file(lj)["format"] == "LuaJIT bytecode"
+
+        good = root / "good.obb"
+        with zipfile.ZipFile(str(good), "w", zipfile.ZIP_STORED) as archive:
+            archive.writestr("assets/data.bin", b"ALVSIA-OBB-TEST")
+        good_report = module.audit_archive_file(good)
+        assert good_report["ok"] is True
+        assert good_report["crc_checked_bytes"] == len(b"ALVSIA-OBB-TEST")
+        assert good_report["crc_coverage_complete"] is True
+
+        unsafe = root / "unsafe.obb"
+        with zipfile.ZipFile(str(unsafe), "w", zipfile.ZIP_STORED) as archive:
+            archive.writestr("../outside.txt", b"blocked")
+        unsafe_report = module.audit_archive_file(unsafe)
+        assert unsafe_report["ok"] is False
+        assert unsafe_report["unsafe_paths"] == ["../outside.txt"]
+
+        limited_report = module.audit_archive_file(good, max_total_bytes=1)
+        assert limited_report["ok"] is False
+        assert limited_report["crc_coverage_complete"] is False
+        assert limited_report["skipped_crc"]
+
+
+def test_xor_known_vector_selftest_is_registered():
+    bridge = BRIDGE_IMPL.read_text(encoding="utf-8")
+    menus = MENUS.read_text(encoding="utf-8")
+    assert "xor_selftest" in bridge
+    assert "xor_selftest" in menus
+    assert "9fe1e8bc97ec9eb791ff9e8ab0cad781bb8dcd8ab2cb939bbbdecacfa89c" in bridge
+    assert 'sid not in ("xor_batch", "xor_selftest")' in bridge
+
+
+def test_decrypt_known_answer_selftest_is_registered():
+    bridge = BRIDGE_IMPL.read_text(encoding="utf-8")
+    menus = MENUS.read_text(encoding="utf-8")
+    assert "dec_selftest" in bridge
+    assert "dec_selftest" in menus
+    assert "69c4e0d86a7b0430d8cdb78070b4c55a" in bridge
+    assert "7649abac8119b246cee98e9b12e9197d" in bridge
+    assert "NIST AES known-answer tests" in bridge
+
+
+def test_private_module_19_uses_dedicated_workspace_paths():
+    paths = (ROOT / "app/src/main/java/com/alvsia/pro/tool/WorkPaths.kt").read_text(encoding="utf-8")
+    bridge = BRIDGE_IMPL.read_text(encoding="utf-8")
+    assert '19 -> "ALVSIA_PRIVATE"' in paths
+    assert "fun moduleOut(moduleId: Int)" in paths
+    assert 'return File(dirOut(), name).also { it.mkdirs() }' in paths
+    ensure = paths.split("fun ensureTree()", 1)[1].split("fun readme(", 1)[0]
+    assert "for (id in 1..19)" not in ensure
+    assert 'dest = out_dir("ALVSIA_PRIVATE")' in bridge
+
 if __name__ == "__main__":
     tests = (
         test_python_auth_normalizes_java_string_and_lua_avoids_art_oom,
@@ -317,6 +460,14 @@ if __name__ == "__main__":
         test_large_lua_source_is_detected_before_bytecode_fallback,
         test_run_unzip_rejects_zip_slip_and_extracts_safe_entries,
         test_large_file_helpers_stream_and_report_hashes,
+        test_reference_inspection_subtools_are_registered_and_read_only,
+        test_reference_inspection_helpers_smoke,
+        test_pak_integrity_audit_is_registered_and_read_only,
+        test_obb_integrity_audit_is_registered_and_read_only,
+        test_reference_inspectors_format_and_archive_fixtures,
+        test_xor_known_vector_selftest_is_registered,
+        test_decrypt_known_answer_selftest_is_registered,
+        test_private_module_19_uses_dedicated_workspace_paths,
     )
     for test in tests:
         test()

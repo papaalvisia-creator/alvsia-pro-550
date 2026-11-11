@@ -10,6 +10,7 @@ import sys
 _MAGIC = b"ALVSEAL2"
 _MAP = {
     "alvsia_bridge_impl": "alvsia_bridge_impl.alv",
+    "alvsia_metadata": "alvsia_metadata.alv",
     "alvsia_private": "alvsia_private.alv",
     "alvsia_vm_protect": "alvsia_vm_protect.alv",
     "lua_engine.pattern_registry": "lua_engine_pattern_registry.alv",
@@ -25,11 +26,15 @@ _MAP = {
     "lua_engine.engine": "lua_engine_engine.alv",
     "lua_engine.decompiler53": "lua_engine_decompiler53.alv",
     "lua_engine.bgmi": "lua_engine_bgmi.alv",
+    "lua_engine.t24": "lua_engine_t24.alv",
     "lua_engine.luajit_decompiler": "lua_engine_luajit_decompiler.alv",
     "lua_engine.container": "lua_engine_container.alv",
     "lua_engine.detector": "lua_engine_detector.alv",
     "lua_engine.multi_format": "lua_engine_multi_format.alv",
     "lua_engine.streaming_decompiler": "lua_engine_streaming_decompiler.alv",
+    "lua_engine.orchestrator": "lua_engine_orchestrator.alv",
+    "lua_engine.protection": "lua_engine_protection.alv",
+    "lua_engine.protection_pipeline": "lua_engine_protection_pipeline.alv",
     "lua_engine.vm_deobfuscator": "lua_engine_vm_deobfuscator.alv",
 }
 

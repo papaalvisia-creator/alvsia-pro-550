@@ -31,8 +31,15 @@ import java.util.zip.Inflater
  */
 object UnluacRunner {
 
-    /** Hard safety limit for the in-process (ART) unluac call. */
-    private const val ART_SAFE_LIMIT = 1L * 1024L * 1024L
+    /**
+     * Conservative safety limit for in-process ART unluac.
+     *
+     * unluac builds a sizeable object graph from bytecode and can consume
+     * several times the input size. A ~1 MB Lua chunk is not safe to parse
+     * inside the app process on low-memory Android devices; route it to the
+     * isolated Chaquopy/streaming pipeline instead.
+     */
+    private const val ART_SAFE_LIMIT = 256L * 1024L
 
     /**
      * Above this, we go straight to the streaming Python fallback rather
@@ -50,6 +57,8 @@ object UnluacRunner {
     private val LUA_MAGIC = byteArrayOf(0x1B, 0x4C, 0x75, 0x61)  // \x1bLua
     private val LUAJIT_MAGIC = byteArrayOf(0x1B, 0x4C, 0x4A)     // \x1bLJ
     private val DEFLATE_HEADER = byteArrayOf(0x78, 0xDA.toByte())
+
+    private data class InflatedMember(val bytesWritten: Long, val endOffset: Long)
 
     private fun hasPrefix(data: ByteArray, prefix: ByteArray): Boolean {
         if (data.size < prefix.size) return false
@@ -70,7 +79,6 @@ object UnluacRunner {
         input: File,
         outDir: File
     ): Pair<File?, String?> {
-        // Quick sniff of first 2 bytes — only proceed on raw-DEFLATE header.
         val head = ByteArray(2)
         try {
             RandomAccessFile(input, "r").use { raf ->
@@ -86,50 +94,65 @@ object UnluacRunner {
 
         val outFile = File(outDir, input.nameWithoutExtension + "_unwrapped.luac")
         outFile.parentFile?.mkdirs()
+        // Never append a new run to a stale output from an earlier attempt.
+        try { outFile.delete() } catch (_: Exception) { }
         var chunkCount = 0
         var totalBytes = 0L
         try {
             RandomAccessFile(input, "r").use { raf ->
                 val fileSize = raf.length()
-                // Memory-map the input in pieces so we never allocate the full file.
                 val channel = raf.channel
                 var mapStart = 0L
+                // Ignore marker-like bytes inside a member already decoded;
+                // the inflater's exact end offset is more reliable than
+                // searching compressed payload bytes for another 0x78DA.
+                var skipMarkersBefore = 0L
                 while (mapStart < fileSize) {
                     val mapSize = minOf(fileSize - mapStart, STREAM_CHUNK_SIZE.toLong())
-                    val mbb: MappedByteBuffer = channel.map(
-                        FileChannel.MapMode.READ_ONLY, mapStart, mapSize
+                    // Include one look-ahead byte so a 0x78DA marker split
+                    // across two mapping windows is not silently missed.
+                    val mapLength = minOf(
+                        fileSize - mapStart,
+                        mapSize + if (mapStart + mapSize < fileSize) 1L else 0L
                     )
-                    mbb.order(ByteOrder.BIG_ENDIAN)
+                    val mbb: MappedByteBuffer = channel.map(
+                        FileChannel.MapMode.READ_ONLY, mapStart, mapLength
+                    )
                     scanForDeflateMarkers(mbb, mapStart) { markerOffset ->
-                        // Try to inflate from this marker to end of file (streaming).
-                        // Because the mapped region may be smaller than the actual
-                        // DEFLATE stream, we use a RandomAccessFile-backed input
-                        // stream for the inflater so it can read past the mapped
-                        // region if necessary.
-                        val inflated = inflateFromOffset(input, markerOffset)
-                        if (inflated != null && inflated.first > 0) {
-                            FileOutputStream(outFile, true).use { fos ->
-                                fos.write(inflated.second)
+                        if (markerOffset < skipMarkersBefore) return@scanForDeflateMarkers
+                        val remaining = UNWRAP_OUTPUT_LIMIT - totalBytes
+                        if (remaining <= 0L) {
+                            throw IllegalStateException(
+                                "decompressed Lua container exceeds $UNWRAP_OUTPUT_LIMIT bytes"
+                            )
+                        }
+                        val partFile = File(outDir, "${outFile.name}.$markerOffset.part")
+                        try {
+                            val member = inflateFromOffset(input, markerOffset, partFile, remaining)
+                            if (member != null && member.bytesWritten > 0L) {
+                                FileOutputStream(outFile, true).use { fos ->
+                                    FileInputStream(partFile).use { fis ->
+                                        fis.copyTo(fos, STREAM_CHUNK_SIZE)
+                                    }
+                                    fos.fd.sync()
+                                }
+                                totalBytes += member.bytesWritten
+                                chunkCount++
+                                skipMarkersBefore = member.endOffset
                             }
-                            totalBytes += inflated.first
-                            chunkCount++
-                            if (totalBytes > UNWRAP_OUTPUT_LIMIT) {
-                                throw IllegalStateException(
-                                    "decompressed Lua container exceeds $UNWRAP_OUTPUT_LIMIT bytes"
-                                )
-                            }
+                        } finally {
+                            try { partFile.delete() } catch (_: Exception) { }
                         }
                     }
                     mapStart += mapSize
-                    // Release mapping hint
-                    // (JVM GC handles this; explicit unmap not portable in Kotlin.)
                 }
             }
-        } catch (t: Throwable) {
-            // Partial output may still be usable as LuaS input — keep it.
-            if (outFile.exists() && outFile.length() == 0L) outFile.delete()
-            return outFile.takeIf { it.exists() && it.length() > 0 } to
-                "container=chunked-raw-deflate chunks=$chunkCount bytes=$totalBytes partial=true err=${t.message}"
+        } catch (_: Throwable) {
+            // Never pass a truncated multi-member payload to a decompiler.
+            // Keep the original input intact so the Python normalizer can
+            // retry with its EOF-aware stream parser and emit diagnostics.
+            try { outFile.delete() } catch (_: Exception) { }
+            return input to null
         }
 
         if (chunkCount == 0) {
@@ -137,21 +160,22 @@ object UnluacRunner {
             return input to null
         }
 
-        // Validate the unwrapped payload starts with Lua / LuaJIT magic.
         val sniff = ByteArray(4)
         try {
-            FileInputStream(outFile).use { fis ->
-                if (fis.read(sniff) >= 4) {
-                    val isLua = hasPrefix(sniff, LUA_MAGIC)
-                    val isLuaJit = hasPrefix(sniff, LUAJIT_MAGIC)
-                    if (!isLua && !isLuaJit) {
-                        outFile.delete()
-                        return input to null
-                    }
-                }
+            if (outFile.length() < sniff.size.toLong()) {
+                outFile.delete()
+                return input to null
+            }
+            RandomAccessFile(outFile, "r").use { raf -> raf.readFully(sniff) }
+            val isLua = hasPrefix(sniff, LUA_MAGIC)
+            val isLuaJit = hasPrefix(sniff, LUAJIT_MAGIC)
+            if (!isLua && !isLuaJit) {
+                outFile.delete()
+                return input to null
             }
         } catch (_: Exception) {
-            // keep outFile if we couldn't even sniff — let unluac decide
+            try { outFile.delete() } catch (_: Exception) { }
+            return input to null
         }
 
         return outFile to
@@ -181,49 +205,71 @@ object UnluacRunner {
     }
 
     /**
-     * Inflates a raw-DEFLATE stream starting at [offset] in [file], reading
-     * up to end-of-file. Returns (bytesWritten, rawInflatedBytes). The
-     * inflated output is streamed into a ByteArrayOutputStream up to a
-     * bounded cap; oversized payloads are written directly to the output
-     * file by the caller via the returned bytes.
+     * Inflate one raw-DEFLATE member to a temporary file. Memory stays
+     * bounded to two fixed-size buffers regardless of decompressed size.
+     * A candidate is accepted only when the inflater reaches its end marker.
      */
-    private fun inflateFromOffset(file: File, offset: Long): Pair<Long, ByteArray>? {
-        val inflater = Inflater(true)  // raw inflate, no zlib wrapper
+    private fun inflateFromOffset(
+        file: File,
+        offset: Long,
+        output: File,
+        maxOutputBytes: Long
+    ): InflatedMember? {
+        val inflater = Inflater(true)
+        var totalOut = 0L
+        var finished = false
+        var memberEndOffset = -1L
         try {
-            val input = ByteArray(STREAM_CHUNK_SIZE)
-            val out = ByteArrayOutputStream(STREAM_CHUNK_SIZE)
-            var totalIn = 0L
-            var totalOut = 0L
+            val inputBuffer = ByteArray(STREAM_CHUNK_SIZE)
+            val outputBuffer = ByteArray(STREAM_CHUNK_SIZE)
             RandomAccessFile(file, "r").use { raf ->
-                raf.seek(offset)
-                var reading = true
-                while (reading) {
-                    val n = raf.read(input)
-                    if (n <= 0) break
-                    totalIn += n
-                    inflater.setInput(input, 0, n)
-                    val buf = ByteArray(STREAM_CHUNK_SIZE)
-                    while (!inflater.needsInput() && !inflater.finished()) {
-                        val written = inflater.inflate(buf)
+                // The marker is the two-byte zlib-style 0x78DA tag;
+                // this payload is raw DEFLATE, so the inflater must start
+                // immediately after those marker bytes.
+                raf.seek(offset + 2L)
+                FileOutputStream(output, false).use { out ->
+                    while (!inflater.finished()) {
+                        if (inflater.needsInput()) {
+                            val count = raf.read(inputBuffer)
+                            if (count <= 0) break
+                            inflater.setInput(inputBuffer, 0, count)
+                        }
+                        val written = inflater.inflate(outputBuffer)
                         if (written > 0) {
-                            out.write(buf, 0, written)
                             totalOut += written.toLong()
-                            if (totalOut > UNWRAP_OUTPUT_LIMIT) {
-                                return totalOut to out.toByteArray()
+                            if (totalOut > maxOutputBytes) {
+                                throw IllegalStateException(
+                                    "inflated member exceeds remaining output limit $maxOutputBytes"
+                                )
                             }
-                        } else if (inflater.needsDictionary() || inflater.needsInput()) {
-                            reading = false
+                            out.write(outputBuffer, 0, written)
+                        } else if (inflater.needsDictionary()) {
+                            break
+                        } else if (!inflater.needsInput() && !inflater.finished()) {
                             break
                         }
                     }
-                    if (inflater.finished()) break
+                    out.flush()
+                    out.fd.sync()
+                    finished = inflater.finished()
+                    if (finished) {
+                        // getRemaining() is the unconsumed tail of the last
+                        // input buffer; subtract it from the file position to
+                        // find the exact end of this DEFLATE member.
+                        memberEndOffset = raf.filePointer - inflater.remaining.toLong()
+                    }
                 }
             }
-            return if (totalOut > 0) totalOut to out.toByteArray() else null
-        } catch (t: Throwable) {
+            return if (finished && totalOut > 0L && memberEndOffset > offset) {
+                InflatedMember(totalOut, memberEndOffset)
+            } else null
+        } catch (_: Throwable) {
             return null
         } finally {
             inflater.end()
+            if (!finished || totalOut == 0L) {
+                try { output.delete() } catch (_: Exception) { }
+            }
         }
     }
 
@@ -290,7 +336,7 @@ object UnluacRunner {
         }
         output.parentFile?.mkdirs()
 
-        val size = input.length()
+        val inputSize = input.length()
         val lines = mutableListOf<String>()
 
         // Stage 1: Try streaming container unwrap (works for any size).
@@ -305,26 +351,30 @@ object UnluacRunner {
             lines.add("OK LUA container -> $containerNote")
         }
 
-        // Stage 2: Decide path based on size.
-        if (size > ART_HARD_LIMIT) {
+        // Stage 2: Decide path using the actual bytes passed to ART.
+        // A small compressed wrapper can expand dramatically; checking only
+        // the original file size could send a huge normalized chunk into the
+        // in-process parser and cause an Android OOM.
+        val normalizedSize = normalized.length()
+        if (normalizedSize > ART_HARD_LIMIT) {
             // Too large for in-process unluac; mark and let caller fall through
             // to the Python streaming fallback in alvsia_bridge_impl.
             lines.add(
-                "... ART unluac skipped: input $size bytes exceeds ART_HARD_LIMIT ($ART_HARD_LIMIT)"
+                "... ART unluac skipped: normalized payload $normalizedSize bytes exceeds ART_HARD_LIMIT ($ART_HARD_LIMIT)"
             )
             lines.add("diagnostic: switching to streaming Python decompiler fallback")
-            // Ensure normalized file is preserved if it exists; caller will
-            // route to the Python path.
+            lines.add("diagnostic: original input=$inputSize bytes; normalized payload=$normalizedSize bytes")
             if (normalized != input && normalized.isFile) {
                 lines.add("OK normalized container -> ${normalized.absolutePath}")
             }
             return lines
         }
 
-        if (size > ART_SAFE_LIMIT) {
+        if (normalizedSize > ART_SAFE_LIMIT) {
             lines.add(
-                "... ART unluac skipped: input $size bytes exceeds ART_SAFE_LIMIT ($ART_SAFE_LIMIT)"
+                "... ART unluac skipped: normalized payload $normalizedSize bytes exceeds ART_SAFE_LIMIT ($ART_SAFE_LIMIT)"
             )
+            lines.add("diagnostic: original input=$inputSize bytes; normalized payload=$normalizedSize bytes")
             lines.add("diagnostic: Python fallback will handle this input")
             if (normalized != input && normalized.isFile) {
                 lines.add("OK normalized container -> ${normalized.absolutePath}")

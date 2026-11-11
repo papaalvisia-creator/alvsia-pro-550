@@ -1,0 +1,143 @@
+name: Smart Lua Real BRPlayerCharacterBase Acceptance
+
+on:
+  push:
+    branches:
+      - feat/smart-lua-recovery-fusion-20261109
+    paths:
+      - .github/workflows/smart-lua-real-sample-acceptance.yml
+      - app/src/main/python/lua_engine/**
+      - app/src/main/python/lua_intelligence/**
+      - tests/test_lua*.py
+  pull_request:
+    branches:
+      - feat/full-reference-source-registry-20261106
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  real-sample-acceptance:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - name: Checkout ALVSIA PRO source
+        uses: actions/checkout@v4
+
+      - name: Checkout authorized BRPlayerCharacterBase sample
+        uses: actions/checkout@v4
+        with:
+          repository: papaalvisia-creator/kumpulan-source-tool
+          ref: sample/brplayercharacterbase-20261109-175719
+          token: ${{ secrets.SMART_LUA_SAMPLE_TOKEN }}
+          path: authorized-sample
+          fetch-depth: 1
+
+      - name: Verify exact authorized sample
+        env:
+          EXPECTED_SHA256: a99539e2a78bd4e11febb919735fbd9f43a94aa3a0ddc7b6efc610854b10433a
+          EXPECTED_SIZE: "5583230"
+        run: |
+          set -euo pipefail
+          SAMPLE="$GITHUB_WORKSPACE/authorized-sample/samples/lua/BRPlayerCharacterBase.lua"
+          test -f "$SAMPLE"
+          test "$(stat -c %s "$SAMPLE")" = "$EXPECTED_SIZE"
+          echo "$EXPECTED_SHA256  $SAMPLE" | sha256sum -c -
+          xxd -l 64 "$SAMPLE"
+          echo "AUTHORIZED SAMPLE: PASS"
+
+      - name: Install Lua 5.3 compiler
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y lua5.3
+
+      - name: Inspect parser failure regions
+        run: |
+          set -euo pipefail
+          SAMPLE="$GITHUB_WORKSPACE/authorized-sample/samples/lua/BRPlayerCharacterBase.lua"
+          echo "== around 427680 =="
+          xxd -g1 -s 427680 -l 192 "$SAMPLE"
+          echo "== around 3216950 =="
+          xxd -g1 -s 3216950 -l 192 "$SAMPLE"
+          echo "== size =="
+          stat -c %s "$SAMPLE"
+
+      - name: Smart Lua adaptive recovery
+        run: |
+          set -euo pipefail
+          mkdir -p acceptance
+          python - <<'PY'
+          import hashlib
+          import sys
+          from pathlib import Path
+          sys.path.insert(0, "app/src/main/python")
+
+          from lua_engine.streaming_decompiler import preflight_magic
+          from lua_engine.decompiler53 import decompile_bytes
+          from lua_engine.engine import validate_lua_source
+
+          sample = Path("authorized-sample/samples/lua/BRPlayerCharacterBase.lua")
+          raw = sample.read_bytes()
+          expected = "a99539e2a78bd4e11febb919735fbd9f43a94aa3a0ddc7b6efc610854b10433a"
+          actual = hashlib.sha256(raw).hexdigest()
+          if actual != expected:
+              raise SystemExit(f"SHA mismatch: {actual}")
+
+          kind = preflight_magic(sample)
+          print(f"preflight={kind}")
+          if kind != "luac_53":
+              raise SystemExit(f"unexpected preflight dialect: {kind}")
+
+          source = decompile_bytes(raw)
+          if not source.strip():
+              raise SystemExit("empty recovered source")
+
+          out = Path("acceptance/BRPlayerCharacterBase.lua")
+          out.write_text(source, encoding="utf-8")
+          ok, note = validate_lua_source(out, expected_version="Lua 5.3")
+          print("recovery_engine=ALVSIA adaptive standard/PUBGM")
+          print(f"source_validation={ok} {note}")
+          print(f"source_bytes={len(source.encode('utf-8'))}")
+          if not ok:
+              raise SystemExit("ALVSIA source validation failed")
+
+          print("SMART LUA REAL SAMPLE RECOVERY: PASS")
+          PY
+
+      - name: Diagnose first recovered syntax failure
+        if: ${{ always() }}
+        run: |
+          set +e
+          lua5.3 -e 'assert(loadfile("acceptance/BRPlayerCharacterBase.lua"))' 2> acceptance/syntax-error.txt
+          cat acceptance/syntax-error.txt
+          LINE=$(grep -oE 'BRPlayerCharacterBase.lua:[0-9]+' acceptance/syntax-error.txt | tail -1 | cut -d: -f2)
+          if [ -n "$LINE" ]; then
+            START=$((LINE-5)); [ "$START" -lt 1 ] && START=1
+            END=$((LINE+5))
+            nl -ba acceptance/BRPlayerCharacterBase.lua | sed -n "${START},${END}p"
+          fi
+          if [ -n "$LINE" ]; then START=$((LINE-4)); [ "$START" -lt 1 ] && START=1; END=$((LINE+4)); nl -ba acceptance/BRPlayerCharacterBase.lua | sed -n "${START},${END}p"; fi
+          exit 0
+
+      - name: Lua compiler syntax gate
+        run: |
+          set -euo pipefail
+          lua5.3 -e 'local f,err=loadfile("acceptance/BRPlayerCharacterBase.lua"); if not f then error(err) end; print("LUA 5.3 COMPILER: PASS")'
+
+      - name: Upload real acceptance evidence
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: smart-lua-real-brplayer-acceptance
+          path: acceptance
+          if-no-files-found: error
+
+      - name: Final gate
+        run: |
+          echo "REAL SAMPLE ACCEPTANCE: PASS"
+          echo "Exact authorized sample hash verified"
+          echo "Adaptive Lua 5.3 recovery passed"
+          echo "Recovered source passed ALVSIA validation"
+          echo "Recovered source passed Lua 5.3 compiler syntax gate"

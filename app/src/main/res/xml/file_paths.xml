@@ -1,7 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
 <paths>
-    <!-- Only generated outputs may be opened/shared through FileProvider. -->
+    <!-- The UI issues content URIs only for files selected from output lists. -->
     <files-path name="alvsia_private_output" path="ALVSIA/OUT/" />
     <external-files-path name="alvsia_app_output" path="ALVSIA/OUT/" />
     <external-path name="alvsia_public_output" path="Download/ALVSIA/OUT/" />
+
+    <!-- Task-isolated outputs live under TASKS/<id>/OUT; include task roots so
+         selected result files can be opened/shared on devices using either
+         public Downloads or the app-private fallback workspace. -->
+    <files-path name="alvsia_private_tasks" path="ALVSIA/TASKS/" />
+    <external-files-path name="alvsia_app_tasks" path="ALVSIA/TASKS/" />
+    <external-path name="alvsia_public_tasks" path="Download/ALVSIA/TASKS/" />
 </paths>

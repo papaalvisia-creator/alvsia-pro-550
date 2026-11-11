@@ -88,6 +88,9 @@ object AssetVault {
                 dest.writeBytes(bytes)
             } catch (_: Exception) {
                 continue
+            } finally {
+                // Do not keep decrypted JAR plaintext resident after materialization.
+                bytes.fill(0)
             }
             try {
                 dest.setReadable(true, true)
