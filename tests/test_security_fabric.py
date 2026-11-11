@@ -36,5 +36,13 @@ class SecurityFabricTests(unittest.TestCase):
         self.assertIn("take(16)", src)
         self.assertIn("/data/local/tmp/", src)
 
+    def test_session_integrity_uses_keystore_with_safe_fallback(self):
+        src = read("app/src/main/java/com/alvsia/pro/sec/SessionGate.kt")
+        self.assertIn("AndroidKeyStore", src)
+        self.assertIn("KeyProperties.KEY_ALGORITHM_HMAC_SHA256", src)
+        self.assertIn("setIsStrongBoxBacked(true)", src)
+        self.assertIn("SecureRandom", src)
+        self.assertIn("process-local key", src)
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
