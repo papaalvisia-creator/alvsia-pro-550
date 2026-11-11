@@ -2,7 +2,7 @@ name: ALVSIA PRO Final Release Pipeline
 
 on:
   push:
-    branches: [ feat/alvsia-smart-premium-security-final-20261111, fix/task-output-routing-20261111, feat/combined-smart-lua-xop-release-20261110, feat/lua-intelligence-orchestrator-20261107 ]
+    branches: [ main, feat/alvsia-smart-premium-security-final-20261111, fix/task-output-routing-20261111, feat/combined-smart-lua-xop-release-20261110, feat/lua-intelligence-orchestrator-20261107 ]
     paths:
       - '.github/workflows/alvsia-final-release.yml'
       - '.github/workflows/android-validation.yml'
