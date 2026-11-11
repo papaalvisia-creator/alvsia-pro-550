@@ -2,8 +2,14 @@ package com.alvsia.pro.tool
 
 import android.app.ActivityManager
 import android.content.Context
+import android.content.ContentValues
 import android.os.Build
+import android.os.Environment
+import android.provider.MediaStore
 import java.io.File
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 /** Persists previous process-exit diagnostics; never changes runtime behavior. */
 object RuntimeExitDiagnostics {
