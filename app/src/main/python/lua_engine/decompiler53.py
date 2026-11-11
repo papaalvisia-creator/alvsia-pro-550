@@ -365,26 +365,21 @@ class Decompiler:
             if i < len(p.locvars):
                 nm = p.locvars[i].get("name")
             self._all_locals.append((0, len(p.code), i, _safe(nm, f"arg{i}")))
-        # remaining locvars after params
-        param_count = p.numparams
-        # We number the remaining slots in order
-        # lua assigns locvar[i] to register i (params fill 0..numparams-1)
+        # Parameter slots are already present. Index them once so each
+        # debug-local declaration is O(1) to match, rather than scanning all
+        # earlier locals and making large debug tables O(locals²).
+        param_slots = {
+            reg_id: index
+            for index, (_start, _end, reg_id, _name) in enumerate(self._all_locals)
+        }
         for i, lv in enumerate(p.locvars):
             nm = _safe(lv.get("name"), f"_v{i}")
-            s, e = lv["startpc"], lv["endpc"]
-            reg = i  # locvars are indexed by their slot
-            # Replace params if already added
-            # locvars[0..numparams-1] are the params
-            # Find if already added
-            found = False
-            for j, (ss, ee, rr, nn) in enumerate(self._all_locals):
-                if rr == i and ss == 0:
-                    # already a param
-                    self._all_locals[j] = (s, e, reg, nm)
-                    found = True
-                    break
-            if not found:
-                self._all_locals.append((s, e, i, nm))
+            startpc, endpc = lv["startpc"], lv["endpc"]
+            slot = param_slots.get(i)
+            if slot is not None:
+                self._all_locals[slot] = (startpc, endpc, i, nm)
+            else:
+                self._all_locals.append((startpc, endpc, i, nm))
 
         # Build a per-register interval index once. The former _local_at scanned
         # every debug local for every bytecode instruction (O(instructions ×
