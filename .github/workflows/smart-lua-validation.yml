@@ -3,7 +3,7 @@ on:
   push:
     branches: [ feat/alvsia-program-intelligence-core-20261109, feat/smart-lua-recovery-fusion-20261109 ]
   pull_request:
-    branches: [ feat/full-reference-source-registry-20261106 ]
+    branches: [ main, feat/full-reference-source-registry-20261106 ]
 permissions:
   contents: read
 jobs:
@@ -36,6 +36,8 @@ jobs:
         run: timeout 120s python tests/test_lua_engine.py
       - name: Run Smart Lua orchestrator regression tests
         run: timeout 120s python -m pytest -vv -ra tests/test_lua_orchestrator.py
+      - name: Run adapter routing and processing watchdog regressions
+        run: timeout 120s python -m pytest -vv -ra tests/test_module_adapters.py tests/test_lua_processing_watchdog.py
       - name: Run Lua module unittest suite
         run: timeout 120s python -m unittest discover -s tests -p 'test_lua*.py' -v
       - name: Run streaming decompiler unittest suite
