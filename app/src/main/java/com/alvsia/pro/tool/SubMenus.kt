@@ -14,7 +14,7 @@ object SubMenus {
         2  -> "PAK Rebuild"
         3  -> "PAK Compact"
         4  -> "OBB Tools"
-        5  -> "LUA Tools"
+        5  -> "SMART LUA"
         6  -> "File Scan"
         7  -> "Workspace"
         8  -> "Export Report"
@@ -100,6 +100,24 @@ object SubMenus {
                 "Select .luac file or folder → OUT/PUBGLUA/*_std.luac"),
             SubTool("t24_lua_decompile", "T24 Lua Decompile", "Normalize T24 v4 Lua 5.3 bytecode and run the validated ALVSIA decompiler",
                 "Select one T24 .luac → OUT/LUA_T24/ normalized bytecode and decompile report"),
+            // Smart Lua unified surface: keep the legacy capabilities available in
+            // one workflow while dispatching their original engine IDs in MainActivity.
+            SubTool("lua_patch_byte", "Smart Lua Inject · Patch Bytecode", "Patch bytecode with validation",
+                "CONFIG: offset=0x1234 and patch_hex=DEADBEEF → OUT/LINJ/*_patched.luac"),
+            SubTool("lua_inject_hook", "Smart Lua Inject · Hook", "Inject hook source with validation",
+                "Enter hook source in CONFIG → OUT/LINJ/*_hooked.lua"),
+            SubTool("lua_mod_repack", "Smart Lua Inject · Repack", "Repack edited PAK tree",
+                "Place edited tree in WORK/MOD or OUT/PAK → OUT/LINJ/*_modded.pak"),
+            SubTool("lua_smart_protect", "Smart Lua Protect", "Balanced protection with validation",
+                "Select UTF-8 .lua source → OUT/LPROTECT/*_protected.lua"),
+            SubTool("lua_smart_protect_strong", "Smart Lua Protect · Strong", "Strong protection with validation",
+                "Select UTF-8 .lua source → OUT/LPROTECT/*_protected.lua"),
+            SubTool("lua_protect_encrypt", "Smart Lua Protect · Encrypt", "AES-256-GCM authenticated package",
+                "Create WORK/lua_protect_key.txt → OUT/LPROTECT/*.alvlua"),
+            SubTool("lua_protect_decrypt", "Smart Lua Protect · Restore", "Restore an authenticated ALVLUA1 package",
+                "Use WORK/lua_protect_key.txt and select .alvlua → OUT/LPROTECT/*.lua"),
+            SubTool("lua_vm_protect", "Smart Lua Protect · VM", "VM-style protected Lua wrapper",
+                "Select .lua source → OUT/LPROTECT/*.alvlua3.lua"),
 
         )
 
