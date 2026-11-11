@@ -27,10 +27,15 @@ def test_local_scope_lookup_uses_active_last_declaration():
     proto.protos = []
 
     decompiler = Decompiler(proto)
+    # Lua 5.3 debug local-variable entries are indexed by register slot.
+    # The nested local occupies register 1 while the outer local remains live in
+    # register 0; looking up register 0 must therefore continue to return outer.
     assert decompiler._local_at(2, 0) == "outer"
-    assert decompiler._local_at(3, 0) == "inner"
-    assert decompiler._local_at(4, 0) == "inner"
+    assert decompiler._local_at(3, 0) == "outer"
+    assert decompiler._local_at(3, 1) == "inner"
+    assert decompiler._local_at(4, 1) == "inner"
     assert decompiler._local_at(5, 0) == "outer"
+    assert decompiler._local_at(5, 1) is None
     assert decompiler._local_at(10, 0) is None
 
 
