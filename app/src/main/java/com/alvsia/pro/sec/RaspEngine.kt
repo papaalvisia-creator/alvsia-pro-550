@@ -135,6 +135,11 @@ object RaspEngine {
         // failures are hard signals; root/emulator heuristics remain soft above.
         DualVmGuard.inspect(ctx).forEach { hard += it }
 
+        // Additional high-confidence runtime mapping guard. Only executable mappings
+        // from writable/suspicious locations are elevated; ordinary system/app libraries
+        // remain untouched to avoid false positives on legitimate devices.
+        RuntimeMappingGuard.signals(ctx).forEach { hard += "mapping_$it" }
+
         // Threat level = hard count * 10 + soft count
         threatLevel = hard.size * 10 + soft.size
 
