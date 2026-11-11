@@ -12,6 +12,7 @@ from typing import Callable, Iterable, Optional
 import os
 import shutil
 import subprocess
+import time
 
 from .engine import validate_lua_source, _find_java
 from lua_intelligence.fusion import FusionCandidate, fuse_candidates
@@ -120,7 +121,7 @@ def _run_luau_decompiler_cli(binary: Path, src: Path, dst: Path) -> tuple[bool, 
     try:
         proc = subprocess.run(
             [str(binary), str(src), "-o", str(dst)],
-            capture_output=True, text=True, timeout=180, check=False,
+            capture_output=True, text=True, timeout=_engine_timeout(), check=False,
         )
     except subprocess.TimeoutExpired:
         dst.unlink(missing_ok=True)
@@ -255,9 +256,25 @@ def run_decompiler_pipeline(
     specs = [spec for spec in specs if info.format in spec.formats]
     specs.sort(key=lambda item: item.priority)
 
+    try:
+        pipeline_budget = float(os.environ.get(
+            "ALVSIA_LUA_PIPELINE_TIMEOUT_SECONDS",
+            "180" if os.environ.get("ALVSIA_SEALED_RUNTIME") == "1" else "600",
+        ))
+    except (TypeError, ValueError):
+        pipeline_budget = 180.0 if os.environ.get("ALVSIA_SEALED_RUNTIME") == "1" else 600.0
+    pipeline_budget = max(30.0, min(pipeline_budget, 900.0))
+    pipeline_deadline = time.monotonic() + pipeline_budget
+
     results: list[EngineResult] = []
     valid_candidates: list[tuple[EngineSpec, Path, str]] = []
     for index, spec in enumerate(specs, 1):
+        if time.monotonic() >= pipeline_deadline:
+            results.append(EngineResult(
+                "pipeline_watchdog", False,
+                note=f"total decompiler pipeline budget exceeded after {pipeline_budget:g}s",
+            ))
+            break
         candidate = destination.parent / (
             destination.stem + f".candidate_{index}_{spec.name}.lua"
         )
