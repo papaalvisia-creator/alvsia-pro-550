@@ -59,18 +59,36 @@ fun OutputBrowserScreen(onBack: () -> Unit, onUseWithStudio: (StudioItem, Uri) -
 
     val refreshFiles = {
         WorkPaths.bindApp(ctx)
-        val outDir = WorkPaths.dirOut()
-        files = if (outDir.isDirectory) {
-            outDir.walkTopDown()
+        val root = WorkPaths.alvsiaRoot()
+        val outputRoots = mutableListOf<Pair<File, String>>()
+
+        // Legacy output tree remains readable for older app versions.
+        val legacyOut = File(root, "OUT")
+        if (legacyOut.isDirectory) outputRoots.add(legacyOut to "OUT")
+
+        // Current task-isolated engine writes to TASKS/<task-id>/OUT/<MODULE>.
+        // Index these files too; scanning only OUT/ hid every new task result.
+        val tasksRoot = File(root, "TASKS")
+        tasksRoot.listFiles()?.filter { it.isDirectory }?.forEach { task ->
+            val taskOut = File(task, "OUT")
+            if (taskOut.isDirectory) {
+                outputRoots.add(taskOut to "TASKS/${task.name}/OUT")
+            }
+        }
+
+        val discovered = outputRoots.flatMap { (base, label) ->
+            base.walkTopDown()
                 .filter { it.isFile && it.length() > 0 }
-                .sortedByDescending { it.lastModified() }
-                .take(200)
-                .map { f ->
-                    val rel = f.relativeTo(outDir).path
-                    val date = SimpleDateFormat("MM-dd HH:mm", Locale.US).format(Date(f.lastModified()))
-                    f to "$rel  (${f.length()} B)  $date"
+                .map { file ->
+                    val rel = file.relativeTo(base).path
+                    val date = SimpleDateFormat("MM-dd HH:mm", Locale.US).format(Date(file.lastModified()))
+                    file to "$label/$rel  (${file.length()} B)  $date"
                 }.toList()
-        } else emptyList()
+        }
+        files = discovered
+            .distinctBy { it.first.absolutePath }
+            .sortedByDescending { it.first.lastModified() }
+            .take(500)
     }
     LaunchedEffect(Unit) { refreshFiles() }
 
@@ -82,7 +100,7 @@ fun OutputBrowserScreen(onBack: () -> Unit, onUseWithStudio: (StudioItem, Uri) -
             TextButton(onClick = { refreshFiles() }) { Text("REFRESH", color = AlvisiaCyan, fontWeight = FontWeight.Bold, fontSize = 11.sp) }
         }
         Text("OUTPUT BROWSER", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 16.sp)
-        Text("${files.size} files in OUT/", color = AlvisiaSilver.copy(alpha = 0.5f), fontSize = 11.sp)
+        Text("${files.size} files in OUT/ + TASKS/*/OUT/", color = AlvisiaSilver.copy(alpha = 0.5f), fontSize = 11.sp)
         Spacer(Modifier.height(8.dp))
 
         LazyColumn(Modifier.fillMaxWidth().weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
