@@ -664,15 +664,11 @@ ALVSIA_STD_TO_BGMI: Dict[int, int] = {v: k for k, v in ALVSIA_BGMI_TO_STD.items(
 # HePing → Standard opcode map (from lua.py, different scramble)
 ALVSIA_HEPING_TO_STD: Dict[int, int] = {
     0:30, 1:31, 2:32, 3:33, 4:34, 5:30, 6:31, 7:32,
-    8:33, 9:34, 10:30,11:31,12:41,13:13,14:14,15:15,
-    16:16,17:17,18:18,19:19,20:20,21:21,22:22,23:23,
-    24:24,25:25,26:26,27:27,28:28,29:29,30:30,31:31,
-    32:32,33:33,34:34,35:35,36:36,37:37,38:38,39:39,
-    40:40,41:41,42:42,43:43,44:44,45:45,46:46,47:47,
+    8:33, 9:34, 10:30, 11:31, 12:41, 13:13, 14:14,
+    15:15, 16:16, 17:17, 18:18, 19:35, 20:36,
 }
 
-_STD_FMT = [0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
-            0,0,0,0,0,0,2,0,0,0,0,0,0,0,2,2,0,2,0,1,0,3,0]
+_STD_FMT = [0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,2,0,0,0,0,0,0,0,0,2,2,0,2,0,1,0,3]
 
 _LUA53_MAGIC_HEADER = (
     b'\x1bLua\x53\x00\x19\x93\r\n\x1a\n'
@@ -685,116 +681,260 @@ _ENC_START = 0x22  # bytes before this are NOT XOR-encrypted
 
 
 class LuaOpcodeConverter:
-    """Convert BGMI / HePing / PUBG scrambled Lua bytecode to standard Lua 5.3.
+    """Convert the supported BGMI/HePing Lua 5.3 chunk variant to standard Lua 5.3.
 
-    Handles:
-    - XOR decryption of string constant pool (BGMI key or HePing key)
-    - Opcode remapping using the verified per-game opcode table
-    - Instruction format preservation (iABC / iABx / iAsBx / iAx)
-    - Header rewrite to standard Lua 5.3 magic
-
-    Usage::
-
-        # Auto-detect variant (tries BGMI key first, then HePing)
-        conv = LuaOpcodeConverter()
-        out  = conv.convert_bytes(raw_data)           # returns std .luac bytes
-        conv.convert_folder('/in', '/out', variant='bgmi')
+    The reference tools transform string payloads while walking each Proto;
+    they do NOT XOR the complete Proto body. Opcode remapping is independent.
+    This implementation ports that structure with strict bounds/count checks.
     """
 
-    VARIANT_BGMI   = 'bgmi'
+    VARIANT_BGMI = 'bgmi'
     VARIANT_HEPING = 'heping'
 
     def __init__(self, variant: str = 'bgmi'):
-        self.variant = variant.lower()
+        self.variant = str(variant).lower()
         if self.variant == self.VARIANT_HEPING:
-            self._xor_key  = ALVSIA_HEPING_XOR_KEY
-            self._op_map   = ALVSIA_HEPING_TO_STD
+            self._xor_key = ALVSIA_HEPING_XOR_KEY
+            self._op_map = ALVSIA_HEPING_TO_STD
+        elif self.variant == self.VARIANT_BGMI:
+            self._xor_key = ALVSIA_BGMI_XOR_KEY
+            self._op_map = ALVSIA_BGMI_TO_STD
         else:
-            self._xor_key  = ALVSIA_BGMI_XOR_KEY
-            self._op_map   = ALVSIA_BGMI_TO_STD
+            raise ValueError('unsupported Lua variant: ' + self.variant)
 
-    def _xor_decrypt(self, data: bytes) -> bytes:
-        k  = self._xor_key
-        kl = len(k)
-        return bytes(b ^ k[i % kl] for i, b in enumerate(data))
+    class _Reader:
+        def __init__(self, data: bytes, key: bytes):
+            self.data = memoryview(data)
+            self.pos = 0
+            self.key = key
 
-    def _remap_proto(self, ba: bytearray, start: int) -> int:
-        """Walk a proto starting at *start*, remap opcodes, return end offset."""
-        r = start
-        def u8():  nonlocal r; v = ba[r]; r+=1; return v
-        def u32(): nonlocal r; v = _struct.unpack_from('<I',ba,r)[0]; r+=4; return v
-        def skip(n): nonlocal r; r += n
-        try:
-            u8()             # upvalue count
-            sz = u8()        # source string
-            if sz == 0xFF: sz = u32()
-            if sz > 0: skip(sz - 1)
-            u32(); u32()     # linedefined, lastline
-            u8(); u8(); u8() # numparams, is_vararg, maxstacksize
-            n = u32()        # sizecode
-            for _ in range(n):
-                raw = _struct.unpack_from('<I', ba, r)[0]
-                op  = raw & 0x3F
-                sop = self._op_map.get(op, op)
-                fmt = (_STD_FMT[op] if op < len(_STD_FMT)
-                       else _STD_FMT[sop] if sop < len(_STD_FMT) else 0)
-                A   = (raw >> 6)  & 0xFF
-                B   = (raw >> 23) & 0x1FF
-                C   = (raw >> 14) & 0x1FF
-                Bx  = (raw >> 14) & 0x3FFFF
-                sBx = Bx - 131071
-                Ax  = (raw >> 6)  & 0x3FFFFFF
-                if   fmt == 0: new_raw = (sop & 63)|(A<<6)|(C<<14)|(B<<23)
-                elif fmt == 1: new_raw = (sop & 63)|(A<<6)|(Bx<<14)
-                elif fmt == 2: new_raw = (sop & 63)|(A<<6)|((sBx+131071)<<14)
-                else:          new_raw = (sop & 63)|(Ax<<6)
-                _struct.pack_into('<I', ba, r, new_raw); r += 4
-            n_const = u32()
-            for _ in range(n_const):
-                ct = u8()
-                if ct == 0:   pass
-                elif ct == 1: u8()
-                elif ct in (3,19): skip(8)
-                elif ct == 2:  skip(8)
-                elif ct in (4,20):
-                    sz2 = u8()
-                    if sz2 == 0xFF: sz2 = u32()
-                    if sz2 > 0: skip(sz2 - 1)
-            n_up = u32(); skip(n_up * 2)
-            n_sub = u32()
-            for _ in range(n_sub):
-                r = self._remap_proto(ba, r)
-        except (IndexError, _struct.error):
-            pass
-        return r
+        def read(self, size: int) -> bytes:
+            if not isinstance(size, int) or size < 0 or self.pos + size > len(self.data):
+                raise ValueError('truncated Lua variant at offset %d: need %s, have %d' %
+                                 (self.pos, size, len(self.data) - self.pos))
+            out = bytes(self.data[self.pos:self.pos + size])
+            self.pos += size
+            return out
+
+        def u8(self) -> int:
+            return self.read(1)[0]
+
+        def u32(self) -> int:
+            return _struct.unpack('<I', self.read(4))[0]
+
+        def i32(self) -> int:
+            return _struct.unpack('<i', self.read(4))[0]
+
+        def i64(self) -> int:
+            return _struct.unpack('<q', self.read(8))[0]
+
+        def f64(self) -> float:
+            return _struct.unpack('<d', self.read(8))[0]
+
+        def string(self, encrypted: bool) -> bytes | None:
+            size = self.u8()
+            if size == 0xFF:
+                size = self.u32()
+            if size == 0:
+                return None
+            if size > len(self.data) - self.pos + 1:
+                raise ValueError('Lua string length exceeds remaining input at offset %d' % self.pos)
+            raw = self.read(size - 1)
+            if encrypted:
+                raw = bytes(value ^ self.key[i % len(self.key)] for i, value in enumerate(raw))
+            return raw
+
+    class _Writer:
+        def __init__(self):
+            self.data = bytearray()
+
+        def raw(self, value: bytes):
+            self.data.extend(value)
+
+        def u8(self, value: int):
+            self.data.append(value & 0xFF)
+
+        def u32(self, value: int):
+            self.data.extend(_struct.pack('<I', value))
+
+        def i32(self, value: int):
+            self.data.extend(_struct.pack('<i', value))
+
+        def i64(self, value: int):
+            self.data.extend(_struct.pack('<q', value))
+
+        def f64(self, value: float):
+            self.data.extend(_struct.pack('<d', value))
+
+        def string(self, value: bytes | None):
+            if value is None:
+                self.u8(0)
+                return
+            size = len(value) + 1
+            if size < 0xFF:
+                self.u8(size)
+            else:
+                self.u8(0xFF)
+                self.u32(size)
+            self.raw(value)
+
+    def _convert_proto(self, reader, writer, depth: int = 0):
+        if depth > 200:
+            raise ValueError('Lua prototype nesting exceeds safety limit')
+        writer.string(reader.string(encrypted=True))
+        line_defined = reader.i32()
+        writer.i32(line_defined)
+        writer.i32(reader.i32())
+        writer.u8(reader.u8())
+        writer.u8(reader.u8())
+        writer.u8(reader.u8())
+
+        code_count = reader.u32()
+        if code_count == 0 or code_count > (len(reader.data) - reader.pos) // 4:
+            raise ValueError('invalid instruction count %d at offset %d: %d bytes remain' %
+                             (code_count, reader.pos, len(reader.data) - reader.pos))
+        writer.u32(code_count)
+        for _ in range(code_count):
+            raw = reader.u32()
+            old_op = raw & 0x3F
+            if old_op >= len(_STD_FMT):
+                raise ValueError('opcode out of range: %d' % old_op)
+            new_op = self._op_map.get(old_op, old_op)
+            if not isinstance(new_op, int) or new_op < 0 or new_op >= len(_STD_FMT):
+                raise ValueError('opcode mapping out of range: %r' % (new_op,))
+            a = (raw >> 6) & 0xFF
+            b = (raw >> 23) & 0x1FF
+            c = (raw >> 14) & 0x1FF
+            bx = (raw >> 14) & 0x3FFFF
+            sbx = bx - 131071
+            ax = (raw >> 6) & 0x3FFFFFF
+            fmt = _STD_FMT[new_op]
+            if fmt == 0:
+                converted = (new_op & 0x3F) | (a << 6) | (c << 14) | (b << 23)
+            elif fmt == 1:
+                converted = (new_op & 0x3F) | (a << 6) | (bx << 14)
+            elif fmt == 2:
+                converted = (new_op & 0x3F) | (a << 6) | (((sbx + 131071) & 0x3FFFF) << 14)
+            else:
+                converted = (new_op & 0x3F) | (ax << 6)
+            writer.u32(converted)
+
+        constant_count = reader.u32()
+        if constant_count > len(reader.data) - reader.pos:
+            raise ValueError('invalid constant count %d at offset %d' % (constant_count, reader.pos))
+        writer.u32(constant_count)
+        for _ in range(constant_count):
+            tag = reader.u8()
+            writer.u8(tag)
+            if tag == 0:
+                continue
+            if tag == 1:
+                writer.u8(reader.u8())
+            elif tag == 3:
+                writer.f64(reader.f64())
+            elif tag == 19:
+                writer.i64(reader.i64())
+            elif tag in (4, 20):
+                writer.string(reader.string(encrypted=True))
+            else:
+                raise ValueError('unsupported Lua constant tag %d at offset %d' % (tag, reader.pos - 1))
+
+        upvalue_count = reader.u32()
+        if upvalue_count > (len(reader.data) - reader.pos) // 2:
+            raise ValueError('invalid upvalue count %d at offset %d' % (upvalue_count, reader.pos))
+        writer.u32(upvalue_count)
+        for _ in range(upvalue_count):
+            writer.u8(reader.u8())
+            writer.u8(reader.u8())
+
+        child_count = reader.u32()
+        if child_count > 100000:
+            raise ValueError('nested prototype count exceeds safety limit')
+        writer.u32(child_count)
+        for _ in range(child_count):
+            self._convert_proto(reader, writer, depth + 1)
+
+        line_count = reader.u32()
+        if line_count > (len(reader.data) - reader.pos):
+            raise ValueError('invalid compressed lineinfo count %d at offset %d' % (line_count, reader.pos))
+        lines = []
+        current_line = line_defined
+        for _ in range(line_count):
+            delta = reader.u8()
+            current_line += delta if delta <= 127 else delta - 256
+            lines.append(current_line)
+        writer.u32(len(lines))
+        for line in lines:
+            writer.i32(line)
+
+        # The game variant carries an additional abslineinfo table; standard 5.3 does not.
+        abs_count = reader.u32()
+        if abs_count > (len(reader.data) - reader.pos) // 8:
+            raise ValueError('invalid absolute lineinfo count %d at offset %d' % (abs_count, reader.pos))
+        reader.read(abs_count * 8)
+
+        local_count = reader.u32()
+        if local_count > (len(reader.data) - reader.pos) // 9:
+            raise ValueError('invalid local variable count %d at offset %d' % (local_count, reader.pos))
+        writer.u32(local_count)
+        for _ in range(local_count):
+            writer.string(reader.string(encrypted=True))
+            writer.i32(reader.i32())
+            writer.i32(reader.i32())
+
+        name_count = reader.u32()
+        if name_count > (len(reader.data) - reader.pos):
+            raise ValueError('invalid upvalue name count %d at offset %d' % (name_count, reader.pos))
+        writer.u32(name_count)
+        for _ in range(name_count):
+            writer.string(reader.string(encrypted=True))
 
     def convert_bytes(self, data: bytes) -> bytes:
-        """Convert *data* to standard Lua 5.3 bytecode."""
-        if len(data) < _HDR_LEN:
-            raise ValueError("Too short to be Lua bytecode")
-        header = data[:_ENC_START]
-        body   = self._xor_decrypt(data[_ENC_START:])
-        merged = bytearray(header + body)
-        self._remap_proto(merged, _HDR_LEN)
-        return _LUA53_MAGIC_HEADER + bytes(merged[_HDR_LEN:])
+        """Decode only the known structured game variant; reject partial parses."""
+        if len(data) < 34 or data[:4] != b'\x1bLua' or data[4] != 0x53:
+            raise ValueError('input is not a Lua 5.3 variant chunk')
+        if data[5] != 0 or data[6:12] != b'\x19\x93\x0d\x0a\x1a\x0a':
+            raise ValueError('Lua 5.3 check header does not match supported variant')
+        if data[12] != 4 or data[13] != 4 or data[14] != 4 or data[15] != 8 or data[16] != 8:
+            raise ValueError('unsupported variant field sizes: ' + data[12:17].hex())
+        if data[17:25] != b'\x78\x56\x00\x00\x00\x00\x00\x00':
+            raise ValueError('Lua integer check value mismatch')
+        if _struct.unpack('<d', data[25:33])[0] != 370.5:
+            raise ValueError('Lua number check value mismatch')
+        reader = self._Reader(data, self._xor_key)
+        reader.pos = 33
+        writer = self._Writer()
+        header = bytearray(data[:33])
+        header[13] = 4
+        writer.raw(header)
+        writer.u8(reader.u8())  # main closure upvalue count
+        self._convert_proto(reader, writer)
+        if reader.pos != len(reader.data):
+            raise ValueError('unexpected trailing bytes after Lua chunk: %d' % (len(reader.data) - reader.pos))
+        converted = bytes(writer.data)
+        # Verify the generated standard chunk with the strict in-app Lua 5.3 reader.
+        from lua_engine.decompiler53 import load_chunk
+        load_chunk(converted)
+        return converted
 
     def convert_file(self, src: str, dst: str | None = None) -> bytes:
         result = self.convert_bytes(Path(src).read_bytes())
-        if dst: Path(dst).write_bytes(result)
+        if dst:
+            Path(dst).parent.mkdir(parents=True, exist_ok=True)
+            Path(dst).write_bytes(result)
         return result
 
-    def convert_folder(self, src_dir: str, dst_dir: str,
-                       glob: str = '*.luac') -> Dict[str, str]:
-        out = Path(dst_dir); out.mkdir(parents=True, exist_ok=True)
+    def convert_folder(self, src_dir: str, dst_dir: str, glob: str = '*.luac') -> Dict[str, str]:
+        out = Path(dst_dir)
+        out.mkdir(parents=True, exist_ok=True)
         report: Dict[str, str] = {}
         for p in sorted(Path(src_dir).glob(glob)):
             try:
                 self.convert_file(str(p), str(out / p.name))
                 report[p.name] = 'OK'
-            except Exception as e:
-                report[p.name] = f'FAIL: {e}'
+            except Exception as exc:
+                report[p.name] = 'FAIL: ' + str(exc)
         return report
-
 
 # ══════════════════════════════════════════════════════════════════════════════
 # § 6  Compression Best-Fit Finder

@@ -11,8 +11,12 @@ data class IntegrityResult(val clean: Boolean, val reasons: List<String>)
 object IntegrityBomb {
 
     private val EXPECTED_CERT_SHA256 = BuildConfig.CERT_SHA256
-    private const val DEX_MIN = 100_000L
-    private const val DEX_MAX = 40_000_000L   // 40 MB — accommodates Reark stub DEX
+    // These bounds apply to the complete installed APK, not to a DEX entry.
+    // XopProtector adds encrypted payload assets, so a valid protected APK can
+    // exceed 40 MB while its shell DEX remains small. DEX structure, count and
+    // payload integrity are checked separately by DexGuardian below.
+    private const val APK_MIN_BYTES = 1_000_000L
+    private const val APK_MAX_BYTES = 100_000_000L // 100 MB upper sanity bound
 
     private var _lastReason = ""
     val lastReason: String get() = _lastReason
@@ -29,7 +33,7 @@ object IntegrityBomb {
         val reasons = mutableListOf<String>()
 
         if (!certOk(ctx)) reasons += "cert_mismatch"
-        if (!dexSizeOk(ctx)) reasons += "dex_size_bad"
+        if (!apkSizeOk(ctx)) reasons += "apk_size_bad"
         // Sprint 1 — Layer 5: DEX hash + count verification via DexGuardian
         val dexReport = DexGuardian.evaluate(ctx)
         if (!dexReport.clean) {
@@ -55,12 +59,17 @@ object IntegrityBomb {
         } catch (_: Exception) { false }
     }
 
-    private fun dexSizeOk(ctx: Context): Boolean {
+    /** Sanity-check the complete installed APK file. This is deliberately not
+     * named or treated as a DEX-size check: encrypted Xop assets contribute to
+     * APK size, while DexGuardian validates the actual DEX entries and payload.
+     */
+    private fun apkSizeOk(ctx: Context): Boolean {
         return try {
             val apk = File(ctx.applicationInfo.sourceDir)
-            val size = apk.length()
-            size in DEX_MIN..DEX_MAX
-        } catch (_: Exception) { true }
+            apk.isFile && apk.length() in APK_MIN_BYTES..APK_MAX_BYTES
+        } catch (_: Exception) {
+            false
+        }
     }
 
     private fun isClone(ctx: Context): Boolean {

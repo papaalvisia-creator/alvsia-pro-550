@@ -332,7 +332,11 @@ def obfuscate_lua(src_path, out_dir, passes: int = 1) -> dict:
     if not src.is_file():
         return {"ok": False, "error": f"input not found: {src}"}
 
-    text = src.read_text(encoding="utf-8", errors="replace")
+    from .detector import read_lua_text_strict
+    try:
+        text = read_lua_text_strict(src)
+    except ValueError as exc:
+        return {"ok": False, "error": str(exc)}
     original_lines = text.count("\n") + 1
 
     # Check it looks like Lua source

@@ -2,7 +2,7 @@ import json, tempfile, zlib
 from pathlib import Path
 import sys
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "app/src/main/python"))
-from lua_engine import detect_lua, analyze_lua, validate_lua_source, unwrap_lua_container
+from lua_engine import detect_lua, analyze_lua, validate_lua_source, unwrap_lua_container, decompile_lua
 from lua_engine.bgmi import transform_bgmi_lua
 
 def main():
@@ -14,14 +14,106 @@ def main():
         assert info.kind=="source" and info.format=="lua-source"
         ok,msg=validate_lua_source(src)
         assert ok, msg
+
+        # Structural validation must treat for/while's "do" as part of the
+        # loop block and ignore Lua keywords inside strings and comments.
+        loop_source = td / "loop_valid.lua"
+        loop_source.write_text(
+            'local function work(items)\n'
+            '  for i = 1, #items do\n'
+            '    while items[i] do\n'
+            '      do local marker = "end function if" end\n'
+            '      items[i] = nil\n'
+            '    end\n'
+            '  end\n'
+            '  repeat local done = true until done\n'
+            '  -- end end end (comment only)\n'
+            '  local text = [=[function fake() end]=]\n'
+            '  return text\n'
+            'end\n'
+            'return work\n',
+            encoding="utf-8",
+        )
+        loop_ok, loop_msg = validate_lua_source(loop_source)
+        assert loop_ok, loop_msg
+        malformed_source = (
+            'local function broken()\n'
+            '  for i = 1, 3 do return i\n'
+            'end\n'
+        )
+        malformed_ok, malformed_msg = validate_lua_source(malformed_source)
+        assert not malformed_ok and ("unclosed" in malformed_msg or "parser rejected" in malformed_msg), malformed_msg
+
+        # When the matching compiler is installed, parser validation must
+        # reject syntax errors that balanced block keywords cannot detect.
+        parser_invalid = td / "parser_invalid.lua"
+        parser_invalid.write_text("local = 1\\nreturn 1\\n", encoding="utf-8")
+        parser_ok, parser_msg = validate_lua_source(
+            parser_invalid, expected_version="Lua 5.3"
+        )
+        assert not parser_ok and "parser rejected" in parser_msg, parser_msg
+        parser_valid, parser_valid_msg = validate_lua_source(
+            src, expected_version="Lua 5.3"
+        )
+        assert parser_valid and "parser accepted" in parser_valid_msg, parser_valid_msg
         report=analyze_lua(src,td)
         assert report["ok"] and report["format"]=="lua-source"
         luac=td/"sample.luac"; luac.write_bytes(bytes.fromhex("1b4c756153") + bytes(32))
         li=detect_lua(luac)
         assert li.format=="luac" and li.version=="Lua 5.3"
+
+        lua55 = td / "sample_lua55.luac"
+        lua55.write_bytes(bytes.fromhex("1b4c75615500") + bytes(40))
+        li55 = detect_lua(lua55)
+        assert li55.format == "luac" and li55.version == "Lua 5.5", li55
+
+        # Luau has a distinct version/type/string-table/proto header and must
+        # not be mistaken for PUC Lua bytecode or arbitrary binary data.
+        luau = td / "sample.luau"
+        luau.write_bytes(bytes((13, 3, 0, 0, 1, 0, 0)))
+        luau_info = detect_lua(luau)
+        assert luau_info.format == "luau" and luau_info.version == "Luau bytecode v13", luau_info
+        luau_v7 = td / "sample_v7.luau"
+        luau_v7.write_bytes(bytes((7, 3, 0, 0, 1, 0, 0)))
+        luau_v7_info = detect_lua(luau_v7)
+        assert luau_v7_info.format == "luau" and luau_v7_info.version == "Luau bytecode v7", luau_v7_info
+        truncated_luau = td / "truncated_luau.bin"
+        truncated_luau.write_bytes(bytes((13, 3, 0, 1)))
+        assert detect_lua(truncated_luau).format == "unknown"
+
+        # Decompile dispatch must initialize its output/backend state for
+        # bytecode inputs even when no external unluac JAR is configured.
+        decompile_report = decompile_lua(luac, td / "decompile_out", jars_dir=td / "missing_jars")
+        assert isinstance(decompile_report, dict) and "ok" in decompile_report, decompile_report
+        assert "UnboundLocalError" not in str(decompile_report), decompile_report
+        assert "NameError" not in str(decompile_report), decompile_report
+
+        short_source = td / "short.lua"
+        short_source.write_text("print(1)\\n", encoding="utf-8")
+        source_report = decompile_lua(short_source, td / "source_out")
+        assert source_report.get("ok") and source_report.get("mode") == "source_passthrough", source_report
         lj=td/"sample.lj"; lj.write_bytes(bytes.fromhex("1b4c4a02") + bytes(20))
         ji=detect_lua(lj)
         assert ji.format=="luajit"
+        assert ji.version=="LuaJIT 2.1", ji
+        lj20=td/"sample_lj20.lj"; lj20.write_bytes(bytes.fromhex("1b4c4a01") + bytes(20))
+        ji20=detect_lua(lj20)
+        assert ji20.version=="LuaJIT 2.0", ji20
+
+        # Comment-prefixed bytecode must be identified and normalized for
+        # Smart Decompile instead of being mistaken for an unknown text file.
+        prefixed = td/"prefixed.lua"
+        prefixed.write_bytes(
+            b"-- exported by a Lua tool\n-- metadata\n"
+            + b"\x1bLua\x53\x00" + b"\x19\x93\x0d\x0a\x1a\x0a"
+            + bytes(32)
+        )
+        pi=detect_lua(prefixed)
+        assert pi.kind=="bytecode" and pi.format=="luac", pi
+        assert any(n.startswith("comment_prefix_offset=") for n in pi.notes), pi
+        arbitrary = td/"embedded.bin"
+        arbitrary.write_bytes(b"BIN\x00garbage\x1bLua\x53" + bytes(32))
+        assert detect_lua(arbitrary).kind=="unknown"
         bad=td/"bad.bin"; bad.write_bytes(bytes([0, 1]) + b"garbage")
         assert not analyze_lua(bad,td)["ok"]
 

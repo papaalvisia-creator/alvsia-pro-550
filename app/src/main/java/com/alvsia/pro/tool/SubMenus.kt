@@ -74,6 +74,8 @@ object SubMenus {
                 "Select unpacked folder / original .obb stem tree"),
             SubTool("obb_info",  "OBB Info",  "Size listing",
                 "Select .obb/.zip"),
+            SubTool("obb_integrity_audit", "OBB Integrity Audit", "Read-only ZIP/OBB CRC, path traversal, symlink, duplicate-entry and size-limit checks",
+                "Select .obb/.zip → OUT/OBB/*.integrity_audit.json; archive is never extracted or modified"),
         )
 
         // ── 5 LUA Tools ───────────────────────────────────────────────────
@@ -90,10 +92,14 @@ object SubMenus {
                 "Select file → OUT/LUA/*.xor"),
             SubTool("lua_multi_xor",   "Multi-XOR Probe",    "Candidate scan",
                 "Select file → OUT/LUA/*_xor_*.bin"),
+            SubTool("lua_format_probe", "Lua Format Probe", "Identify Lua 5.1–5.4, LuaJIT, source and common wrappers before selecting a decompiler",
+                "Select .lua/.luac/.bin → OUT/LUA/*.format_probe.json"),
             SubTool("lua_vm_deobfuscate", "VM Deobfuscate",  "Detect supported ALVSEAL/ALVLUA formats and report recovery results",
                 "Select protected .lua/.luac/.alvlua → OUT/LUA/*_recovered.lua or partial recovery report"),
             SubTool("pubg_lua_convert",  "PUBG→Std Convert",  "Convert PUBG/BGMI scrambled Lua bytecode to standard Lua 5.3 using XOR key from libUE4.so",
                 "Select .luac file or folder → OUT/PUBGLUA/*_std.luac"),
+            SubTool("t24_lua_decompile", "T24 Lua Decompile", "Normalize T24 v4 Lua 5.3 bytecode and run the validated ALVSIA decompiler",
+                "Select one T24 .luac → OUT/LUA_T24/ normalized bytecode and decompile report"),
 
         )
 
@@ -103,6 +109,8 @@ object SubMenus {
                 "Select any file → OUT/SCAN/strings.txt"),
             SubTool("hash_scan",   "Hash File",      "MD5 SHA1 SHA256",
                 "Select file → OUT/SCAN/hash.txt"),
+            SubTool("metadata_v39_decode", "IL2CPP Metadata v39 Decoder", "Decode and validate the offline global-metadata.dat v39 header",
+                "Select authorized global-metadata.dat v39 → OUT/SCAN/*_metadata_decoded.dat + JSON report"),
         )
 
         // ── 7 Workspace ───────────────────────────────────────────────────
@@ -143,6 +151,8 @@ object SubMenus {
                 "Select .so file or folder of .so files → OUT/URLSCAN/urls_found.txt"),
             SubTool("sm4_find_all",    "SM4 Key Finder+", "Scan .so for SM4_SECRET_NEW + SM4_SECRET_4 + SM4_SECRET_2 candidates",
                 "Select folder containing arm64-v8a/*.so → OUT/SM4/sm4_all_keys.txt"),
+            SubTool("so_dump_audit", "Offline Dump Analyzer", "Read-only hash, bounded entropy and printable-string report for an existing authorized dump; no live process access or key extraction",
+                "Select authorized .dmp/.bin → OUT/SO/*.offline_dump.json"),
 
         )
 
@@ -166,6 +176,8 @@ object SubMenus {
                 "Select .luac with XOR-wrapped LuaS → OUT/XOR/*_stripped.lua"),
             SubTool("xor_batch",       "Batch XOR",         "Apply same key to all files in WORK/BATCH/",
                 "Drop files in WORK/BATCH/, enter key in CONFIG → OUT/XOR/batch/", needsFile = false),
+            SubTool("xor_selftest", "XOR Known-Vector Self-Test", "Verify repeating-key XOR against a fixed known ciphertext and round-trip fixture",
+                "No input required → OUT/XOR/xor_selftest.json", needsFile = false),
         )
 
         // ── 13 Decrypt Engine ─────────────────────────────────────────────
@@ -182,6 +194,8 @@ object SubMenus {
                 "sm4_config.txt: key=<hex32> mode=CBC|ECB iv=<hex16>. → OUT/DEC/*_sm4.bin"),
             SubTool("dec_simple1",     "SIMPLE1 Restore",   "Alvsia SIMPLE1 reversal",
                 "Select SIMPLE1-encrypted .pak or blob → OUT/DEC/*_simple1.bin"),
+            SubTool("dec_selftest", "AES Known-Answer Self-Test", "Verify AES-ECB and AES-CBC against fixed NIST test vectors",
+                "No input required → OUT/DEC/decrypt_selftest.json", needsFile = false),
         )
 
         // ── 14 PAK Deep ───────────────────────────────────────────────────
@@ -196,6 +210,8 @@ object SubMenus {
                 "sm4_config.txt required. Select .pak → OUT/PAKD/*_sm4/"),
             SubTool("pak_deep_auto",   "Deep Auto-Probe",   "Try all encryption combos",
                 "Select .pak → OUT/PAKD/probe_report.txt + first successful extract"),
+            SubTool("pak_deep_integrity_audit", "PAK Integrity & Slot Fingerprint", "Read-only validation of payload/block ranges, overlapping slots, duplicate content hashes and SHA-256 fingerprints",
+                "Select .pak → OUT/PAKD/*.integrity_audit.json; source PAK is never modified"),
             SubTool("sm4_keyfind",     "SM4 Key Finder",    "Scan .so files for embedded SM4_SECRET_NEW candidates (aA0-pattern)",
                 "Select a folder containing arm64-v8a/*.so → OUT/SM4/sm4_keys.txt"),
         )
@@ -228,10 +244,16 @@ object SubMenus {
                 "Select .lua / .luac → OUT/AUDIT/lua_report.txt"),
             SubTool("audit_so",        "SO Coverage",       "Check native lib for exported symbols, debug info",
                 "Select .so → OUT/AUDIT/so_report.txt"),
+            SubTool("anti_re_source_triage", "Obfuscation & Behavior Triage", "Static indicators for encoded payloads, dynamic execution, process-memory APIs and anti-cheat evasion patterns; never executes input",
+                "Select .py/.lua/.js/.cpp → OUT/AUDIT/*.source_triage.json"),
         )
 
         // ── 18 Lua Protector ──────────────────────────────────────────────
         18 -> listOf(
+            SubTool("lua_smart_protect", "Smart Lua Protect", "Validated lexical local renaming and source compaction",
+                "Select UTF-8 .lua source → OUT/LPROTECT/*_protected.lua (balanced profile)"),
+            SubTool("lua_smart_protect_strong", "Smart Lua Protect Strong", "Local renaming, string encoding and comment stripping with validation",
+                "Select UTF-8 .lua source → OUT/LPROTECT/*_protected.lua (strong profile)"),
             SubTool("lua_protect_encrypt", "Protect Lua Source", "AES-256-GCM authenticated encryption",
                 "Create WORK/lua_protect_key.txt with a 64-character hex key. Select .lua → OUT/LPROTECT/*.alvlua"),
             SubTool("lua_protect_decrypt", "Restore Protected Lua", "Authenticate and decrypt an ALVLUA1 payload",

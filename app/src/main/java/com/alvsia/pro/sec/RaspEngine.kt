@@ -3,12 +3,12 @@ package com.alvsia.pro.sec
 import android.content.Context
 import android.os.Build
 import android.os.Debug
-import android.os.Handler
-import android.os.Looper
 import com.alvsia.pro.tool.RamToolVault
+import com.alvsia.pro.tool.ToolExecutionService
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
-import kotlin.concurrent.thread
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 
 /**
  * ALVISIA PRO 5.5.0 — RaspEngine HARDENED (Enterprise-Grade RASP)
@@ -32,8 +32,32 @@ import kotlin.concurrent.thread
 object RaspEngine {
 
     private val started      = AtomicBoolean(false)
-    private val handler      = Handler(Looper.getMainLooper())
+    /** Security scans must never run on the Compose/main thread. */
+    private val scheduler = Executors.newSingleThreadScheduledExecutor { runnable ->
+        Thread(runnable, "alvsia-rasp").apply { isDaemon = true }
+    }
     private val hardKillCount = AtomicInteger(0)
+
+    // Soft heuristic signals (for example, a bundled hook-support library) must not
+    // generate a Telegram alert on every 4-second RASP tick.
+    private const val SOFT_REPORT_COOLDOWN_MS = 15 * 60 * 1000L
+    @Volatile private var lastSoftSignature: String = ""
+    @Volatile private var lastSoftReportAt: Long = 0L
+
+    @Synchronized
+    private fun shouldReportSoft(signature: String, now: Long): Boolean {
+        if (signature.isBlank()) {
+            lastSoftSignature = ""
+            lastSoftReportAt = 0L
+            return false
+        }
+        if (signature != lastSoftSignature || now - lastSoftReportAt >= SOFT_REPORT_COOLDOWN_MS) {
+            lastSoftSignature = signature
+            lastSoftReportAt = now
+            return true
+        }
+        return false
+    }
 
     @Volatile var threatLevel: Int = 0
         private set
@@ -43,15 +67,30 @@ object RaspEngine {
     fun start(ctx: Context, license: String = "") {
         if (!started.compareAndSet(false, true)) return
         val app = ctx.applicationContext
-        // Kick first tick immediately, then schedule repeating
-        thread(name = "rasp-init", isDaemon = true) { tick(app, license) }
-        // Sprint 1: 4-second tick (down from 8s) — faster threat detection.
-        // Deep scan runs every 30s (down from 60s) to refresh DEX + cgroup checks.
-        scheduleRepeat(app, license, intervalMs = 4_000L)
-        scheduleDeepScan(app, license, intervalMs = 30_000L)
+        // All periodic security work runs on a dedicated background executor.
+        // The previous main-looper scheduling could perform /proc, DEX, maps and
+        // network checks on the UI thread while a heavy tool was running.
+        scheduler.execute { safeTick(app, license) }
+        // Keep continuous protection, but avoid competing with heavy tool work every
+        // few seconds. Tool dispatch still performs its own live SessionGate checks.
+        scheduler.scheduleAtFixedRate({ safeTick(app, license) }, 10_000L, 10_000L, TimeUnit.MILLISECONDS)
+        // Deep /proc fd scanning is substantially heavier than the lightweight tick.
+        // Retain it, but run it once per minute instead of every 30 seconds.
+        scheduler.scheduleAtFixedRate({ safeDeepTick(app, license) }, 60_000L, 60_000L, TimeUnit.MILLISECONDS)
     }
 
     fun tick(ctx: Context, license: String = "") {
+        // A real tool run already passed SessionGate/runtime checks at dispatch.
+        // Do not run the expensive periodic RASP matrix concurrently with Python/
+        // native processing: /proc/maps, APK ZIP hashing and native probes can
+        // compete for CPU/I/O/memory and were observed as a crash-risk on low-RAM
+        // devices. Security is not disabled: the next tool dispatch re-runs the
+        // complete gate, while this periodic loop resumes immediately after the run.
+        if (ToolExecutionService.isActive()) {
+            threatLevel = 0
+            return
+        }
+
         val hard = mutableListOf<String>()
         val soft = mutableListOf<String>()
 
@@ -74,7 +113,10 @@ object RaspEngine {
         // ④⑤⑥⑨ Root / emulator / clone / ADB (soft — legitimate testers may use these)
         emulatorSignals().forEach { soft += it }
 
-        // ⑧ Network MITM
+        // ⑧ Network MITM / proxy guard. Guard health is distinct from
+        // whether a proxy is currently present on a legitimate clean network.
+        if (!NetworkGuard.net_guard(ctx)) soft += "net_guard_unavailable"
+        if (NetworkGuard.detect_proxy(ctx)) soft += "proxy_detected"
         NetworkGuard.signals(ctx).forEach { soft += it }
 
         // ⑩ Hook packages (legacy — kept for back-compat with FridaProbe)
@@ -93,6 +135,11 @@ object RaspEngine {
         // failures are hard signals; root/emulator heuristics remain soft above.
         DualVmGuard.inspect(ctx).forEach { hard += it }
 
+        // Additional high-confidence runtime mapping guard. Only executable mappings
+        // from writable/suspicious locations are elevated; ordinary system/app libraries
+        // remain untouched to avoid false positives on legitimate devices.
+        RuntimeMappingGuard.signals(ctx).forEach { hard += "mapping_$it" }
+
         // Threat level = hard count * 10 + soft count
         threatLevel = hard.size * 10 + soft.size
 
@@ -101,7 +148,6 @@ object RaspEngine {
             hardKillCount.incrementAndGet()
             val detail = hard.joinToString("|")
             try { ThreatReport.emit(ctx, "THREAT", detail, license) } catch (_: Exception) {}
-            try { TelegramNotifier.notify(ctx, "THREAT", detail, license) } catch (_: Exception) {}
             try {
                 SessionGate.onThreat()
                 RamToolVault.wipeAll()
@@ -111,33 +157,34 @@ object RaspEngine {
         // Soft: degrade + report
         if (soft.isNotEmpty()) {
             Guard.degraded = true
-            val detail = soft.joinToString("|")
-            try { ThreatReport.emit(ctx, "SOFT_THREAT", detail, license) } catch (_: Exception) {}
+            // FridaProbe and AntiHook inspect the same /proc/self/maps entry.
+            // Collapse their differently-prefixed aliases into one soft signal.
+            val detail = soft.map { signal ->
+                if (signal.startsWith("antihook_hooklib:")) signal.removePrefix("antihook_")
+                else signal
+            }.distinct().sorted().joinToString("|")
+            if (shouldReportSoft(detail, System.currentTimeMillis())) {
+                try { ThreatReport.emit(ctx, "SOFT_THREAT", detail, license) } catch (_: Exception) {}
+            }
+        } else {
+            shouldReportSoft("", System.currentTimeMillis())
         }
     }
 
     // ── Private ───────────────────────────────────────────────────────────
 
-    private fun scheduleRepeat(ctx: Context, license: String, intervalMs: Long) {
-        handler.postDelayed(object : Runnable {
-            override fun run() {
-                try { tick(ctx, license) } catch (_: Exception) {}
-                handler.postDelayed(this, intervalMs)
-            }
-        }, intervalMs)
+    private fun safeTick(ctx: Context, license: String) {
+        try { tick(ctx, license) } catch (_: Throwable) { }
     }
 
-    private fun scheduleDeepScan(ctx: Context, license: String, intervalMs: Long) {
-        handler.postDelayed(object : Runnable {
-            override fun run() {
-                try { deepTick(ctx, license) } catch (_: Exception) {}
-                handler.postDelayed(this, intervalMs)
-            }
-        }, intervalMs)
+    private fun safeDeepTick(ctx: Context, license: String) {
+        try { deepTick(ctx, license) } catch (_: Throwable) { }
     }
 
     private fun deepTick(ctx: Context, license: String) {
-        // Heavy ops — memory dump scan + network MITM
+        if (ToolExecutionService.isActive()) return
+        // Heavy ops — memory dump scan + network MITM. This runs on the
+        // dedicated RASP executor, never on the Compose/main thread.
         val dump = NativeGuard.antiDump()
         if (dump > 0) {
             ThreatReport.emit(ctx, "ANTI_DUMP", "dump_attempt_$dump", license)

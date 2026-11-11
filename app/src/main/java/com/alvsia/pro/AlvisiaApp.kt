@@ -10,6 +10,7 @@ import com.alvsia.pro.sec.Guard
 import com.alvsia.pro.sec.RaspEngine
 import com.alvsia.pro.sec.ThreatReport
 import com.alvsia.pro.tool.PythonBridgeRunner
+import com.alvsia.pro.tool.RuntimeExitDiagnostics
 import java.util.concurrent.atomic.AtomicLong
 
 /**
@@ -37,6 +38,8 @@ class AlvisiaApp : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        val previousExit = RuntimeExitDiagnostics.recordPreviousExit(this)
+        RuntimeExitDiagnostics.installExceptionRecorder(this)
         initStartedAtMs.set(SystemClock.elapsedRealtime())
 
         // Bind the Telegram notifier to the application context so the queue
@@ -44,6 +47,24 @@ class AlvisiaApp : Application() {
         try {
             com.alvsia.pro.sec.TelegramNotifier.bindApplicationContext(this)
         } catch (_: Throwable) { /* never fail app startup */ }
+
+        // A process killed by Android may not be able to send Telegram at crash time.
+        // On the next startup, forward only actionable OS exit evidence.
+        try {
+            val actionable = previousExit?.contains("reason=LOW_MEMORY") == true ||
+                previousExit?.contains("reason=APP_CRASH") == true ||
+                previousExit?.contains("reason=APP_ANR") == true ||
+                previousExit?.contains("reason=SIGNALED") == true ||
+                previousExit?.contains("reason=EXCESSIVE_RESOURCE_USAGE") == true
+            if (actionable) {
+                com.alvsia.pro.sec.TelegramNotifier.notify(
+                    this,
+                    "CRASH_FORENSICS",
+                    previousExit?.take(3500).orEmpty(),
+                    ""
+                )
+            }
+        } catch (_: Throwable) { /* diagnostics must never block startup */ }
 
         // Background initializer — never touches main thread.
         Thread({
@@ -70,6 +91,20 @@ class AlvisiaApp : Application() {
                         (t.javaClass.simpleName + ":" + (t.message ?: "")).take(240))
                 } catch (_: Throwable) { /* must never throw */ }
             }
+
+            // Seven-layer fabric snapshot is an independent startup audit.
+            // It never blocks startup or login; hard evidence is reported to the
+            // existing threat channel while SessionGate remains the enforcement point.
+            try {
+                val snapshot = com.alvsia.pro.sec.SecurityFabric.evaluate(this)
+                if (snapshot.hardReasons.isNotEmpty()) {
+                    ThreatReport.emit(
+                        this,
+                        "THREAT",
+                        ("security_fabric:" + snapshot.hardReasons.joinToString("|")).take(1200)
+                    )
+                }
+            } catch (_: Throwable) { /* fabric audit must never block startup */ }
 
             // 3) Chaquopy / Python platform start — must be off-thread and
             //    timeout-bounded so a stuck extraction cannot freeze the app.

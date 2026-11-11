@@ -1,9 +1,16 @@
 package com.alvsia.pro.sec
 
 import android.content.Context
+import android.os.Build
+import android.security.keystore.KeyGenParameterSpec
+import android.security.keystore.KeyProperties
+import java.security.KeyStore
+import javax.crypto.KeyGenerator
 import javax.crypto.Mac
+import javax.crypto.SecretKey
 import javax.crypto.spec.SecretKeySpec
 import java.security.MessageDigest
+import java.security.SecureRandom
 
 /**
  * ALVISIA PRO 5.5.0 — SessionGate HARDENED v2
@@ -21,8 +28,9 @@ object SessionGate {
     private const val SESSION_TTL = 8L * 60L * 60L * 1000L       // 8 hours — UX Sprint 1: was 30 min, caused auth rejection mid-operation
     private const val MAX_STRIKES = 3
     private const val KEY_ALGORITHM_HMAC_SHA256 = "HmacSHA256"
-    // Pepper: hardcoded — not a secret key, just prevents trivial token replay
-    private const val HMAC_PEPPER = "ALVSIA_SESSION_PEPPER_V2"
+    // Per-install HMAC key. The key material stays inside Android Keystore and is
+    // never represented as plaintext in the APK or Python runtime.
+    private const val HMAC_ALIAS = "alvsia.session.hmac.v3"
 
     @Volatile private var _appCtx: Context? = null
     @Volatile private var granted   = false
@@ -31,6 +39,7 @@ object SessionGate {
     @Volatile private var license   = ""
     @Volatile private var grantedAt = 0L
     @Volatile private var strikes   = 0
+    @Volatile private var cachedMacKey: SecretKey? = null
 
     val sessionOk: Boolean
         get() = synchronized(this) {
@@ -72,11 +81,61 @@ object SessionGate {
     }
 
     // ── Token HMAC ────────────────────────────────────────────────────────
+    private fun sessionMacKey(): SecretKey? {
+        cachedMacKey?.let { return it }
+        return try {
+            val ks = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
+            val existing = ks.getKey(HMAC_ALIAS, null) as? SecretKey
+            if (existing != null) { cachedMacKey = existing; return existing }
+
+            fun generate(strongBox: Boolean): SecretKey {
+                val generator = KeyGenerator.getInstance(
+                    KeyProperties.KEY_ALGORITHM_HMAC_SHA256,
+                    "AndroidKeyStore"
+                )
+                val builder = KeyGenParameterSpec.Builder(
+                    HMAC_ALIAS,
+                    KeyProperties.PURPOSE_SIGN or KeyProperties.PURPOSE_VERIFY
+                )
+                    .setKeySize(256)
+                    .setDigests(KeyProperties.DIGEST_SHA256)
+                if (Build.VERSION.SDK_INT >= 28 && strongBox) {
+                    builder.setIsStrongBoxBacked(true)
+                }
+                generator.init(builder.build())
+                return generator.generateKey()
+            }
+
+            val generated = if (Build.VERSION.SDK_INT >= 28) {
+                try { generate(true) } catch (_: Throwable) { generate(false) }
+            } else {
+                generate(false)
+            }
+            cachedMacKey = generated
+            generated
+        } catch (_: Throwable) {
+            // Compatibility fallback: a fresh process-local key preserves the
+            // existing session semantics if a device exposes a broken Keystore.
+            // The fallback is never persisted and is not embedded in the APK.
+            try {
+                val bytes = ByteArray(32)
+                SecureRandom().nextBytes(bytes)
+                val generated = SecretKeySpec(bytes, KEY_ALGORITHM_HMAC_SHA256)
+                bytes.fill(0)
+                cachedMacKey = generated
+                generated
+            } catch (_: Throwable) {
+                null
+            }
+        }
+    }
+
     private fun computeMac(tok: String): String {
         return try {
+            val key = sessionMacKey() ?: return ""
             val mac = Mac.getInstance(KEY_ALGORITHM_HMAC_SHA256)
-            mac.init(SecretKeySpec(HMAC_PEPPER.toByteArray(), KEY_ALGORITHM_HMAC_SHA256))
-            mac.doFinal(tok.toByteArray()).joinToString("") { "%02x".format(it) }
+            mac.init(key)
+            mac.doFinal(tok.toByteArray(Charsets.UTF_8)).joinToString("") { "%02x".format(it) }
         } catch (_: Exception) { "" }
     }
 

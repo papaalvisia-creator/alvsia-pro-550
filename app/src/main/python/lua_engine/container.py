@@ -5,6 +5,7 @@ import zlib
 
 LUA_MAGIC = b"\x1bLua"
 LJ_MAGIC = b"\x1bLJ"
+_DEFLATE_INPUT_CHUNK = 64 * 1024
 
 
 @dataclass(frozen=True)
@@ -16,38 +17,61 @@ class ContainerInfo:
     notes: tuple[str, ...] = ()
 
 
-def _raw_deflate_at(data: bytes, start: int, max_output: int):
-    """Decode one raw-DEFLATE stream after a 0x78da framing marker.
+class _LuaContainerLimitError(ValueError):
+    """Raised when an inflate operation exceeds its explicit output cap."""
 
-    The PUBG-style sample supplied with ALVISIA has a 78da marker, a raw
-    DEFLATE stream, then a small CLMM/padding separator. The 78da bytes can
-    also occur inside a stream, so parsing must follow DEFLATE EOF rather
-    than splitting on every 78da occurrence.
+
+def _decompress_at(data: bytes, start: int, max_output: int, wbits: int):
+    """Decode one bounded zlib/raw-DEFLATE stream and return its exact end.
+
+    The decoder's EOF/unused_data position is authoritative. Searching for a
+    marker inside compressed bytes is unsafe because marker-like bytes can
+    occur in the DEFLATE payload itself.
     """
-    dec = zlib.decompressobj(-15)
-    out = dec.decompress(data[start:])
-    if len(out) > max_output:
-        raise ValueError("compressed Lua container exceeds output limit")
-    out += dec.flush()
+    if max_output < 0:
+        raise _LuaContainerLimitError("compressed Lua container exceeds output limit")
+    dec = zlib.decompressobj(wbits)
+    out = bytearray()
+    cursor = start
+
+    while cursor < len(data):
+        block = data[cursor:cursor + _DEFLATE_INPUT_CHUNK]
+        cursor += len(block)
+        pending = block
+        while pending:
+            before = len(pending)
+            part = dec.decompress(pending, max_output - len(out) + 1)
+            if part:
+                out.extend(part)
+                if len(out) > max_output:
+                    raise _LuaContainerLimitError(
+                        "compressed Lua container exceeds output limit"
+                    )
+            pending = dec.unconsumed_tail
+            if dec.eof:
+                consumed = cursor - len(dec.unused_data)
+                return bytes(out), consumed
+            if pending and len(pending) == before and not part:
+                raise ValueError("DEFLATE decoder made no progress")
+
     if not dec.eof:
-        raise ValueError("truncated raw-DEFLATE Lua container stream")
-    consumed = len(data[start:]) - len(dec.unused_data)
-    return out, start + consumed
+        raise ValueError("truncated DEFLATE stream")
+    return bytes(out), cursor
+
+
+def _raw_deflate_at(data: bytes, start: int, max_output: int):
+    """Decode one raw-DEFLATE stream after a 0x78da framing marker."""
+    return _decompress_at(data, start, max_output, -15)
 
 
 def unwrap_lua_container(data: bytes, max_output: int = 256 * 1024 * 1024):
     """Return (payload, ContainerInfo).
 
     Supports normal zlib data and the chunked 0x78da/raw-DEFLATE container
-    observed in the supplied CharacterBase.lua. If data is not a container,
-    the original bytes are returned unchanged.
+    observed in CharacterBase.lua. Chunk boundaries are taken from DEFLATE
+    EOF, not from every occurrence of the byte pair 78 DA. Invalid marker
+    candidates between members are skipped; output remains strictly bounded.
     """
-    # Accept any valid zlib header: CMF=0x78 (deflate, 32KB window) with any
-    # FLG byte such that (CMF*256+FLG) % 31 == 0.  Common values:
-    #   78 01 (no compression), 78 5E (fast), 78 9C (default), 78 DA (best).
-    # Previous code only matched 78 DA and silently returned the raw bytes for
-    # all other zlib levels — causing unwrap to report wrapped=False on files
-    # produced with zlib.compress(data, level=0) or level=6.
     def _is_zlib_header(d: bytes) -> bool:
         if len(d) < 2:
             return False
@@ -57,42 +81,65 @@ def unwrap_lua_container(data: bytes, max_output: int = 256 * 1024 * 1024):
     if not _is_zlib_header(data):
         return data, ContainerInfo(False, "none", 0, len(data), ())
 
-    # First try a normal zlib stream. This handles ordinary .zlib files.
+    # First try a normal RFC1950 zlib stream, but keep decompression bounded.
     try:
-        payload = zlib.decompress(data)
-        if payload and (payload.startswith(LUA_MAGIC) or payload.startswith(LJ_MAGIC)):
-            if len(payload) > max_output:
-                raise ValueError("decompressed Lua payload exceeds output limit")
+        payload, _ = _decompress_at(data, 0, max_output, 15)
+        has_lua = payload.startswith((LUA_MAGIC, LJ_MAGIC))
+        if not has_lua:
+            # Allow only a textual comment/shebang banner before Lua magic.
+            candidates = [x for x in (payload.find(LUA_MAGIC, 1, 65536),
+                                       payload.find(LJ_MAGIC, 1, 65536)) if x > 0]
+            for offset in sorted(candidates):
+                try:
+                    prefix = payload[:offset].decode("utf-8")
+                except UnicodeDecodeError:
+                    continue
+                lines = prefix.splitlines()
+                if lines and all(not line.strip() or line.lstrip().startswith(("--", "#!"))
+                                 for line in lines) and not any(
+                    ord(ch) < 32 and ch not in "\t\r\n" for ch in prefix
+                ):
+                    has_lua = True
+                    break
+        if payload and has_lua:
             return payload, ContainerInfo(True, "zlib", 1, len(payload),
                                           ("standard zlib container",))
-    except zlib.error:
+    except _LuaContainerLimitError:
+        raise
+    except (zlib.error, ValueError):
         pass
 
     chunks = []
     pos = 0
     total = 0
-    first = True
+    skipped_candidates = 0
+    marker_bytes = b"\x78\xda"
+
     while True:
-        marker = data.find(b"\x78\xda", pos)
+        marker = data.find(marker_bytes, pos)
         if marker < 0:
             break
         try:
             chunk, end = _raw_deflate_at(data, marker + 2, max_output - total)
+            if not chunk:
+                raise ValueError("empty raw-DEFLATE member")
+        except _LuaContainerLimitError:
+            raise
         except (zlib.error, ValueError):
-            if first:
-                raise ValueError("78da container found but raw-DEFLATE payload is invalid")
-            # A trailing accidental marker is ignored; a real next chunk must
-            # successfully decode, otherwise the already recovered payload is
-            # still more useful than discarding it.
-            break
-        if not chunk:
-            break
+            # A 78 DA byte pair may be embedded in a separator or unrelated
+            # bytes. Keep searching rather than aborting valid later members.
+            skipped_candidates += 1
+            pos = marker + 2
+            continue
+
         chunks.append(chunk)
         total += len(chunk)
         if total > max_output:
-            raise ValueError("decompressed Lua payload exceeds output limit")
+            raise _LuaContainerLimitError("decompressed Lua payload exceeds output limit")
+
+        # Resume at the exact end reported by the DEFLATE decoder. This skips
+        # marker-like bytes inside the member that was just decoded.
         pos = end
-        first = False
 
     payload = b"".join(chunks)
     if not payload:
@@ -101,10 +148,14 @@ def unwrap_lua_container(data: bytes, max_output: int = 256 * 1024 * 1024):
     notes = ["chunked raw-DEFLATE container"]
     if b"CLMM" in data[: min(len(data), 4096 * 1024)]:
         notes.append("CLMM/padding separators detected")
+    if skipped_candidates:
+        notes.append(f"skipped invalid 78da candidates={skipped_candidates}")
     if payload.startswith(LUA_MAGIC):
         notes.append("Lua bytecode recovered from container")
     elif payload.startswith(LJ_MAGIC):
         notes.append("LuaJIT bytecode recovered from container")
     else:
         notes.append("payload recovered but Lua magic is absent")
-    return payload, ContainerInfo(True, "chunked-raw-deflate", len(chunks), len(payload), tuple(notes))
+
+    return payload, ContainerInfo(True, "chunked-raw-deflate", len(chunks),
+                                  len(payload), tuple(notes))
