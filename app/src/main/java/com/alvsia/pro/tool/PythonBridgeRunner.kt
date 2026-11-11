@@ -103,6 +103,10 @@ object PythonBridgeRunner {
     /** Verify and install the compact JWT signed by the current Unaux panel. */
     fun installOperationProof(grantToken: String, expectedOperation: String): Boolean {
         bridgeLock.lock()
+        var core: Any? = null
+        var ultimate: Any? = null
+        var coreResult: Any? = null
+        var decoded: Any? = null
         return try {
             if (!SessionGate.isSessionAuthorized() || grantToken.split(".").size != 3) return false
             val pyClass = Class.forName("com.chaquo.python.Python")
@@ -111,46 +115,55 @@ object PythonBridgeRunner {
             val getModule = pyClass.getMethod("getModule", String::class.java)
             val pyObjectCls = Class.forName("com.chaquo.python.PyObject")
             val callAttr = pyObjectCls.getMethod("callAttr", String::class.java, Array<Any?>::class.java)
-            val core = getModule.invoke(py, "alvsia_core") ?: return false
-            val coreResult = callAttr.invoke(core, "_alvsia_install_operation_grant_token",
+
+            core = getModule.invoke(py, "alvsia_core") ?: return false
+            coreResult = callAttr.invoke(core, "_alvsia_install_operation_grant_token",
                 arrayOf<Any?>(grantToken, expectedOperation))
             val coreOk = when {
                 coreResult is Boolean -> coreResult
                 else -> coreResult?.toString()?.trim()?.equals("True", ignoreCase = true) ?: false
             }
-            closePyObjectQuietly(coreResult)
-            closePyObjectQuietly(core)
             if (!coreOk) return false
-            val ultimate = getModule.invoke(py, "alvsia_ultimate") ?: return false
-            val decoded = callAttr.invoke(ultimate, "_alv_install_operation_grant_token",
+
+            ultimate = getModule.invoke(py, "alvsia_ultimate") ?: return false
+            decoded = callAttr.invoke(ultimate, "_alv_install_operation_grant_token",
                 arrayOf<Any?>(grantToken, expectedOperation))
-            val decodedOk = when {
+            when {
                 decoded is Boolean -> decoded
                 else -> decoded?.toString()?.trim()?.equals("True", ignoreCase = true) ?: false
             }
+        } catch (_: Throwable) {
+            false
+        } finally {
             closePyObjectQuietly(decoded)
+            closePyObjectQuietly(coreResult)
             closePyObjectQuietly(ultimate)
-            decodedOk
-        } catch (_: Throwable) { false }
-        finally { bridgeLock.unlock() }
+            closePyObjectQuietly(core)
+            bridgeLock.unlock()
+        }
     }
 
     fun proofStatus(): String {
         bridgeLock.lock()
+        var core: Any? = null
+        var result: Any? = null
         return try {
             val pyClass = Class.forName("com.chaquo.python.Python")
             if (!(pyClass.getMethod("isStarted").invoke(null) as Boolean)) return ""
             val py = pyClass.getMethod("getInstance").invoke(null) ?: return ""
-            val core = pyClass.getMethod("getModule", String::class.java).invoke(py, "alvsia_core") ?: return ""
+            val getModule = pyClass.getMethod("getModule", String::class.java)
+            core = getModule.invoke(py, "alvsia_core") ?: return ""
             val pyObjectCls = Class.forName("com.chaquo.python.PyObject")
             val callAttr = pyObjectCls.getMethod("callAttr", String::class.java, Array<Any?>::class.java)
-            val result = callAttr.invoke(core, "_alvsia_core_active_proof_status", emptyArray<Any?>())
-            val status = result?.toString() ?: ""
+            result = callAttr.invoke(core, "_alvsia_core_active_proof_status", emptyArray<Any?>())
+            result?.toString() ?: ""
+        } catch (_: Throwable) {
+            ""
+        } finally {
             closePyObjectQuietly(result)
             closePyObjectQuietly(core)
-            status
-        } catch (_: Throwable) { "" }
-        finally { bridgeLock.unlock() }
+            bridgeLock.unlock()
+        }
     }
 
     fun runBridge(
