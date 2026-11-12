@@ -252,7 +252,15 @@ fun HomeScreen(
             }
             Spacer(Modifier.height(4.dp))
 
-            Text("SMART ENGINES", color = AlvisiaSilver.copy(alpha = 0.45f), fontSize = 9.sp, fontWeight = FontWeight.Bold)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text("SMART ENGINES", color = AlvisiaSilver.copy(alpha = 0.45f),
+                    fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                QuickAction("OUTPUTS", AlvisiaBlue) { onWorkspace() }
+            }
             Spacer(Modifier.height(6.dp))
             LazyVerticalGrid(
                 columns = GridCells.Fixed(2),
@@ -261,14 +269,10 @@ fun HomeScreen(
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
                 modifier = Modifier.fillMaxSize()
             ) {
-                item { SmartEngineCard("◈", "SMART LUA", "Unified analyze • recover • compile • protect • inject", AlvisiaCyan) { onTool(ToolItem(5, "SMART LUA", "Unified Lua intelligence workflow")) } }
-                item { SmartEngineCard("◇", "SMART APK", "Android artifact intelligence and validation", AlvisiaBlue) { onTool(ToolItem(9, "SMART APK", "Unified APK intelligence workflow")) } }
-                item { SmartEngineCard("▣", "SMART PAK", "Detect • transform • rebuild • verify", AlvisiaCyan) { onTool(ToolItem(1, "SMART PAK", "Unified PAK intelligence workflow")) } }
-                item { SmartEngineCard("□", "SMART OBB", "Archive intelligence and integrity", AlvisiaBlue) { onTool(ToolItem(4, "SMART OBB", "Unified OBB intelligence workflow")) } }
-                item { SmartEngineCard("∆", "SMART NATIVE", "SO / ELF evidence and analysis", AlvisiaCyan) { onTool(ToolItem(10, "SMART NATIVE", "Unified native intelligence workflow")) } }
-                item { SmartEngineCard("⌁", "SMART TRANSFORM", "XOR • AES • SM4 • strings • layers", AlvisiaBlue) { onTool(ToolItem(13, "SMART TRANSFORM", "Unified transform intelligence workflow")) } }
-                item { SmartEngineCard("⬡", "SMART SECURITY", "Seven-layer runtime and artifact defense", AlvisiaRed) { onTool(ToolItem(17, "SMART SECURITY", "Unified security intelligence workflow")) } }
-                item { SmartEngineCard("◫", "SMART WORKSPACE", "Missions • provenance • outputs • recovery", AlvisiaCyan) { onWorkspace() } }
+                items(tools, key = { it.id }) { tool ->
+                    val palette = chipColors[(tool.id - 1).coerceIn(0, chipColors.lastIndex)]
+                    NeonModuleChip(tool.id, tool.title, palette) { onTool(tool) }
+                }
             }
         }
     }
