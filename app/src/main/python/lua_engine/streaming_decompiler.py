@@ -291,6 +291,13 @@ def stream_decompile_lua53(input_path: Path, out_path: Path) -> Tuple[bool, str]
     failures = []
     seen = set()
 
+    def _looks_like_hybrid_lua53(blob: bytes) -> bool:
+        if len(blob) < 16 or not blob.startswith(b"\x1bLua\x53"):
+            return False
+        if blob[5] != 0:
+            return False
+        return sum(32 <= b < 127 or b in (9, 10, 13) for b in blob[12:min(len(blob), 512)]) >= 8
+
     def _try_candidate(variant: str, candidate: bytes):
         if __import__("time").monotonic() >= deadline:
             return False, f"lua53_total_budget_exceeded_after_{budget_seconds:g}s"
@@ -299,9 +306,17 @@ def stream_decompile_lua53(input_path: Path, out_path: Path) -> Tuple[bool, str]
             return False, "duplicate candidate"
         seen.add(digest)
         try:
-            # decompile_bytes already performs strict chunk parsing; the old
-            # extra load_chunk call parsed the complete bytecode twice.
-            source_text = decompile_bytes(memoryview(candidate), deadline=deadline)
+            # decompile_bytes already performs strict chunk parsing.
+            hybrid = _looks_like_hybrid_lua53(candidate)
+            decode_kwargs = {"deadline": deadline}
+            if hybrid:
+                decode_kwargs["hybrid_long_string_size"] = True
+            try:
+                source_text = decompile_bytes(memoryview(candidate), **decode_kwargs)
+            except TypeError as exc:
+                if "unexpected keyword argument 'hybrid_long_string_size'" not in str(exc):
+                    raise
+                source_text = decompile_bytes(memoryview(candidate), deadline=deadline)
             if not source_text or not source_text.strip():
                 raise ValueError("decompiler returned empty source")
             ok, msg = validate_lua_source(source_text, expected_version="Lua 5.3")

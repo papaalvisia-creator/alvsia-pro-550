@@ -110,7 +110,7 @@ class ForeignBrandingScrubTests(unittest.TestCase):
 
     def test_workspace_readme_uses_current_owner_identity(self):
         work_paths = (ROOT / "app" / "src" / "main" / "java" / "com" / "alvsia" / "pro" / "tool" / "WorkPaths.kt").read_text(encoding="utf-8")
-        self.assertIn("ALVSIA PRO 5.5.2", work_paths)
+        self.assertIn("ALVSIA PRO 6.0.0", work_paths)
         self.assertIn("Owner: @ALVSIA_PRO", work_paths)
         self.assertNotIn("Original" + "OnwerALV", work_paths)
 

@@ -1516,7 +1516,10 @@ class SM4KeyFinder:
 
     @staticmethod
     def is_sm4_new_candidate(s: str) -> bool:
-        """Return True iff *s* matches the aA0-repeating 20-char pattern."""
+        """Match the exact 4.7-modders registry plus compatible legacy aA0 keys."""
+        from sm4_secret_registry import SM4_SECRET_NEW_SET
+        if s in SM4_SECRET_NEW_SET:
+            return True
         if len(s) != 20:
             return False
         for i, c in enumerate(s):
@@ -1528,43 +1531,37 @@ class SM4KeyFinder:
 
     @staticmethod
     def scan_file(filepath, progress_cb=None) -> list:
-        """Scan one binary file for SM4_SECRET_NEW candidates.
-
-        Returns ``list[tuple[int, str]]`` — (absolute_byte_offset, candidate_string).
-        *progress_cb*, if supplied, is called as ``progress_cb(bytes_done, bytes_total)``.
-        """
+        """Stream a binary for SM4 candidates with bounded memory usage."""
         results: list = []
         seen: set = set()
-        data = Path(filepath).read_bytes()
-        total = len(data)
+        total = Path(filepath).stat().st_size
         offset = 0
-        while offset < total:
-            end   = min(offset + SM4KeyFinder._CHUNK_SIZE + 40, total)
-            chunk = data[offset:end]
-
-            # UTF-8 run
-            for m in SM4KeyFinder._CANDIDATE_RE_UTF8.finditer(chunk):
-                abs_off = offset + m.start()
-                if abs_off in seen: continue
-                seen.add(abs_off)
-                s = m.group(0).decode('ascii', errors='ignore')
-                if SM4KeyFinder.is_sm4_new_candidate(s):
-                    results.append((abs_off, s))
-
-            # UTF-16-LE run
-            for m in SM4KeyFinder._CANDIDATE_RE_UTF16.finditer(chunk):
-                abs_off = offset + m.start()
-                if abs_off in seen: continue
-                seen.add(abs_off)
-                s = m.group(0)[::2].decode('ascii', errors='ignore')
-                if len(s) == 20 and ' ' not in s and SM4KeyFinder.is_sm4_new_candidate(s):
-                    results.append((abs_off, s))
-
-            if progress_cb:
-                progress_cb(min(end, total), total)
-            offset += SM4KeyFinder._CHUNK_SIZE
-
-        return results
+        carry = b""
+        with Path(filepath).open("rb") as handle:
+            while True:
+                block = handle.read(SM4KeyFinder._CHUNK_SIZE)
+                if not block:
+                    break
+                chunk = carry + block
+                base = offset - len(carry)
+                for matcher in (SM4KeyFinder._CANDIDATE_RE_UTF8,
+                                SM4KeyFinder._CANDIDATE_RE_UTF16):
+                    for match in matcher.finditer(chunk):
+                        absolute = base + match.start()
+                        if absolute in seen:
+                            continue
+                        seen.add(absolute)
+                        raw = match.group(0)
+                        candidate = (raw[::2].decode("ascii", errors="ignore")
+                                     if matcher is SM4KeyFinder._CANDIDATE_RE_UTF16
+                                     else raw.decode("ascii", errors="ignore"))
+                        if SM4KeyFinder.is_sm4_new_candidate(candidate):
+                            results.append((absolute, candidate))
+                offset += len(block)
+                carry = chunk[-40:]
+                if progress_cb:
+                    progress_cb(min(offset, total), total)
+        return sorted(results)
 
     def __init__(self, so_folder: str = '.'):
         self.so_folder  = Path(so_folder)
@@ -1576,7 +1573,7 @@ class SM4KeyFinder:
         Returns deduplicated ``list[tuple[int, str]]`` sorted by offset.
         """
         all_results: list = []
-        for so_path in sorted(self.so_folder.rglob('*.so')):
+        for so_path in sorted(p for p in self.so_folder.rglob('*') if p.is_file() and p.suffix.lower() in ('.so', '.bin')):
             try:
                 hits = SM4KeyFinder.scan_file(so_path)
                 for off, key in hits:
@@ -1635,58 +1632,54 @@ class SM4AllKeyFinder(SM4KeyFinder):
         return has_special and u >= 5 and l >= 3 and d >= 1
 
     def find_all_keys(self) -> dict:
-        """Scan all ``.so`` files under *so_folder* for all three SM4 secret types.
-
-        Returns ``{'SM4_SECRET_NEW': [...], 'SM4_SECRET_4': [...], 'SM4_SECRET_2': [...]}``.
-        Each list contains ``(offset, key_string)`` tuples, deduplicated.
-        """
+        """Stream all .so files and classify the three supported SM4 families."""
         results: dict = {'SM4_SECRET_NEW': [], 'SM4_SECRET_4': [], 'SM4_SECRET_2': []}
         seen_new: set = set()
-        seen_4:   set = set()
-        seen_2:   set = set()
+        seen_4: set = set()
+        seen_2: set = set()
+        chunk_size = 8 * 1024 * 1024
+        utf16_re = _re.compile(rb'(?:[\x20-\x7e]\x00){20}')
+        utf8_re = _re.compile(rb'[\x21-\x7e]{20}')
 
-        _CHUNK   = 8 * 1024 * 1024
-        _UTF16RE = _re.compile(rb'(?:[\x20-\x7e]\x00){20}')
-        _UTF8RE  = _re.compile(rb'[\x21-\x7e]{20}')  # any 20 printable ASCII (no space)
-
-        for so_path in sorted(Path(self.so_folder).rglob('*.so')):
+        for so_path in sorted(p for p in Path(self.so_folder).rglob('*') if p.is_file() and p.suffix.lower() in ('.so', '.bin')):
             try:
-                data  = so_path.read_bytes()
-                total = len(data)
-                off   = 0
-                while off < total:
-                    end   = min(off + _CHUNK + 40, total)
-                    chunk = data[off:end]
-
-                    # UTF-8 run
-                    for m in _UTF8RE.finditer(chunk):
-                        s = m.group(0).decode('ascii', errors='ignore')
-                        abs_off = off + m.start()
-                        if SM4KeyFinder.is_sm4_new_candidate(s) and s not in seen_new:
-                            seen_new.add(s); results['SM4_SECRET_NEW'].append((abs_off, s))
-                        elif SM4AllKeyFinder.is_sm4_4_candidate(s) and s not in seen_4:
-                            seen_4.add(s);   results['SM4_SECRET_4'].append((abs_off, s))
-                        elif SM4AllKeyFinder.is_sm4_2_candidate(s) and s not in seen_2:
-                            seen_2.add(s);   results['SM4_SECRET_2'].append((abs_off, s))
-
-                    # UTF-16-LE run
-                    for m in _UTF16RE.finditer(chunk):
-                        s = m.group(0)[::2].decode('ascii', errors='ignore')
-                        if len(s) != 20 or ' ' in s:
-                            continue
-                        abs_off = off + m.start()
-                        if SM4KeyFinder.is_sm4_new_candidate(s) and s not in seen_new:
-                            seen_new.add(s); results['SM4_SECRET_NEW'].append((abs_off, s))
-                        elif SM4AllKeyFinder.is_sm4_4_candidate(s) and s not in seen_4:
-                            seen_4.add(s);   results['SM4_SECRET_4'].append((abs_off, s))
-                        elif SM4AllKeyFinder.is_sm4_2_candidate(s) and s not in seen_2:
-                            seen_2.add(s);   results['SM4_SECRET_2'].append((abs_off, s))
-
-                    off += _CHUNK
-            except Exception:
-                pass
-
+                offset = 0
+                carry = b""
+                with so_path.open("rb") as handle:
+                    while True:
+                        block = handle.read(chunk_size)
+                        if not block:
+                            break
+                        chunk = carry + block
+                        base = offset - len(carry)
+                        candidates = []
+                        for match in utf8_re.finditer(chunk):
+                            candidates.append((base + match.start(),
+                                               match.group(0).decode("ascii", errors="ignore")))
+                        for match in utf16_re.finditer(chunk):
+                            candidates.append((base + match.start(),
+                                               match.group(0)[::2].decode("ascii", errors="ignore")))
+                        for absolute, value in candidates:
+                            if SM4KeyFinder.is_sm4_new_candidate(value):
+                                if value not in seen_new:
+                                    seen_new.add(value)
+                                    results['SM4_SECRET_NEW'].append((absolute, value))
+                            elif SM4AllKeyFinder.is_sm4_4_candidate(value):
+                                if value not in seen_4:
+                                    seen_4.add(value)
+                                    results['SM4_SECRET_4'].append((absolute, value))
+                            elif SM4AllKeyFinder.is_sm4_2_candidate(value):
+                                if value not in seen_2:
+                                    seen_2.add(value)
+                                    results['SM4_SECRET_2'].append((absolute, value))
+                        offset += len(block)
+                        carry = chunk[-40:]
+            except OSError:
+                continue
+        for values in results.values():
+            values.sort(key=lambda item: item[0])
         return results
+
 
 
 # ──────────────────────────────────────────────────────────────────────────────

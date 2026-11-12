@@ -123,9 +123,12 @@ class Reader:
     def string(self):
         size = self.uint8()
         if size == 0xFF:
-            if self.hybrid_long_string_size and self.sizet_size == 4:
-                raw = self._read(8)
-                size = struct.unpack("<Q" if self.little else ">Q", raw)[0]
+            if self.hybrid_long_string_size:
+                # Explicit compatibility mode for protected Lua 5.3 producers
+                # that serialize long-string lengths as uint32 despite an
+                # 8-byte size_t declaration in the header.
+                raw = self._read(4)
+                size = struct.unpack("<I" if self.little else ">I", raw)[0]
             else:
                 size = self.sizet_()
         if size == 0:
@@ -997,13 +1000,23 @@ class Decompiler:
 
 
 # ── Top-level entry ───────────────────────────────────────────────────────────
-def decompile_bytes(data: bytes, *, deadline: float | None = None) -> str:
+def decompile_bytes(
+    data: bytes,
+    *,
+    deadline: float | None = None,
+    hybrid_long_string_size: bool = False,
+) -> str:
     global INVALID_CONSTANT_REF_COUNT
     INVALID_CONSTANT_REF_COUNT = 0
     errors = []
     for variant in ("standard", "pubgm"):
         try:
-            proto = load_chunk(data, pubgm=(variant == "pubgm"), deadline=deadline)
+            proto = load_chunk(
+                data,
+                pubgm=(variant == "pubgm"),
+                hybrid_long_string_size=hybrid_long_string_size,
+                deadline=deadline,
+            )
             break
         except TimeoutError:
             raise

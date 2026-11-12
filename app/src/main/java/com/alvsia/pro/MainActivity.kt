@@ -37,6 +37,7 @@ import com.alvsia.pro.sec.Tamper
 import com.alvsia.pro.sec.ThreatReport
 import com.alvsia.pro.sec.TelegramNotifier
 import com.alvsia.pro.sec.TacticalNotifier
+import com.alvsia.pro.tool.SmartModuleRouter
 import com.alvsia.pro.tool.SubMenus
 import com.alvsia.pro.tool.SubTool
 import com.alvsia.pro.tool.ToolCatalog
@@ -62,6 +63,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 
 class MainActivity : ComponentActivity() {
     private val panel = PanelClient()
@@ -383,7 +385,11 @@ class MainActivity : ComponentActivity() {
                                 running = task?.status == TaskStatus.RUNNING, logs = task?.logs ?: emptyList(),
                                 onBack = { activeTaskId = null; screen = "submenu" },
                                 onRun = { uri, extra ->
-                                    val taskId = TaskCenter.start(moduleId, sub.id, sub.title, uri?.lastPathSegment?.substringAfterLast("/") ?: "", null)
+                                                                        // Visible UI uses only Smart engines. Provider IDs are internal
+// and selected centrally so legacy implementations never become menus.
+val dispatchModuleId = SmartModuleRouter.backendModule(moduleId, sub.id)
+val dispatchSubId = SmartModuleRouter.normalizedSubId(moduleId, sub.id)
+val taskId = TaskCenter.start(moduleId, sub.id, sub.title, uri?.lastPathSegment?.substringAfterLast("/") ?: "", null)
                                     activeTaskId = taskId
                                     // Raise process importance for the lifetime of this real tool run.
                                     // This does not replace or disable any engine; it protects long
@@ -395,25 +401,33 @@ class MainActivity : ComponentActivity() {
                                     lifecycleScope.launch {
                                         try {
                                             val result = withContext(Dispatchers.IO) {
-                                                try { engine.runSub(moduleId, sub.id, uri, extra, onProgress = { stage, progress ->
-                                                    TaskCenter.update(
-                                                        taskId,
-                                                        stage = stage,
-                                                        progress = progress,
-                                                        clearProgress = progress == null
+                                                try {
+                                                    withTimeoutOrNull(20 * 60 * 1000L) {
+                                                        engine.runSub(dispatchModuleId, dispatchSubId, uri, extra, onProgress = { stage, progress ->
+                                                            TaskCenter.update(
+                                                                taskId,
+                                                                stage = stage,
+                                                                progress = progress,
+                                                                clearProgress = progress == null
+                                                            )
+                                                            RuntimeExitDiagnostics.checkpoint(
+                                                                this@MainActivity,
+                                                                dispatchModuleId,
+                                                                sub.id,
+                                                                taskId,
+                                                                stage,
+                                                                progress
+                                                            )
+                                                        }, taskId = taskId)
+                                                    } ?: listOf(
+                                                        "X TOOL EXECUTION TIMEOUT: 20-minute watchdog expired",
+                                                        "diagnostic: menu_module=${moduleId}; dispatch_module=${dispatchModuleId}; subtool=${dispatchSubId}",
+                                                        "The selected input is preserved; retry is safe."
                                                     )
-                                                    RuntimeExitDiagnostics.checkpoint(
-                                                        this@MainActivity,
-                                                        moduleId,
-                                                        sub.id,
-                                                        taskId,
-                                                        stage,
-                                                        progress
-                                                    )
-                                                }, taskId = taskId) }
+                                                }
                                                 catch (t: Throwable) {
                                                     val root = t.cause ?: t
-                                                    listOf("X TOOL EXECUTION FAILED: ${root.javaClass.simpleName}: ${root.message ?: "no detail"}", "diagnostic: module=${moduleId}; subtool=${sub.id}", "Input file is preserved; no successful output is claimed.")
+                                                    listOf("X TOOL EXECUTION FAILED: ${root.javaClass.simpleName}: ${root.message ?: "no detail"}", "diagnostic: module=${dispatchModuleId}; subtool=${dispatchSubId}", "Input file is preserved; no successful output is claimed.")
                                                 }
                                             }
                                             val success = result.any { it.startsWith("OK ") } && result.none { it.startsWith("X ") }

@@ -1,7 +1,7 @@
 name: Android Security Validation
 on:
   push:
-    branches: [ main, feat/alvsia-smart-premium-security-final-20261111, fix/task-output-routing-20261111, feat/combined-smart-lua-xop-release-20261110, feat/lua-intelligence-orchestrator-20261107, fix/chaquopy-python312-ci, fix/lua-normalization-fallback-20261103, release/5.5.2-19-module-redesign ]
+    branches: [ main, feat/alvsia-smart-premium-v1-20261112, feat/alvsia-smart-premium-security-final-20261111, fix/task-output-routing-20261111, feat/combined-smart-lua-xop-release-20261110, feat/lua-intelligence-orchestrator-20261107, fix/chaquopy-python312-ci, fix/lua-normalization-fallback-20261103, release/5.5.2-19-module-redesign ]
   pull_request:
     branches: [ main, feat/full-reference-source-registry-20261106 ]
   workflow_dispatch:
@@ -19,6 +19,11 @@ jobs:
 
       # Chaquopy 15 host-side pip imports cgi, removed in Python 3.13+.
       # Pin the CI host interpreter; embedded app Python remains set in app/build.gradle.kts.
+      - name: Set up Chaquopy build Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.8'
+
       - name: Set up compatible host Python for Chaquopy
         uses: actions/setup-python@v5
         with:
@@ -35,7 +40,10 @@ jobs:
           echo "Seal seed generated (32 bytes); value is masked."
 
       - name: Run source-level security checks
-        run: python3 tools/security_release_check.py
+        run: |
+          python3 tools/security_release_check.py
+          python3 tests/test_release_pipeline_consistency.py
+          python3 tests/test_release_apk_audit_policy.py
 
       - name: Verify security protections are wired into runtime
         run: python3 -m unittest tests.test_security_wiring tests.test_security_fabric
@@ -56,6 +64,10 @@ jobs:
               "app/src/main/python/alvsia_ultimate.py",
               "app/src/main/python/alvsia_vm_protect.py",
               "app/src/main/python/archive_engine.py",
+              "app/src/main/python/smart_lua_engine.py",
+              "app/src/main/python/sm4_secret_registry.py",
+              "app/src/main/python/smart_archive_engine.py",
+              "app/src/main/python/smart_data_engine.py",
               "app/src/main/python/alvsia_private.py",
               "app/src/main/python/sealed_loader.py",
           )
@@ -64,7 +76,10 @@ jobs:
           print("PYTHON SYNTAX CHECK: PASS")
           PY
           python3 tests/test_tool_dispatch.py
+          python3 tests/test_sm4_streaming.py
+          python3 tests/test_smart_data_engine.py
           python3 tests/test_archive_engine.py
+          python3 tests/test_smart_archive_engine.py
           python3 tests/test_studio_catalog.py
           python3 tests/test_process_page.py
           python3 tests/test_workspace_handoff.py
@@ -103,11 +118,17 @@ jobs:
           python3 -m pip install --disable-pip-version-check pycryptodome pytest
           python3 -m unittest discover -s tests -p 'test_reference_source_parity.py'
           python3 -m unittest discover -s tests -p 'test_so_patch_url_parity.py'
+          python3 tests/test_smart_lua_streaming.py
           python3 tests/test_lua_engine.py
           python3 -m pytest -q tests/test_lua_orchestrator.py
           python3 -m pytest -q tests/test_module_adapters.py tests/test_lua_processing_watchdog.py
           python3 -m unittest discover -s tests -p 'test_lua*.py'
           python3 -m unittest discover -s tests -p 'test_streaming_decompiler.py'
+
+      - name: Run Tencent PAK extraction regressions
+        run: |
+          python3 -m pip install --disable-pip-version-check pycryptodome pytest zstandard
+          python3 -m pytest -q tests/test_pak_extraction_contract.py
 
       - name: Run Lua Protector round-trip tests
         run: python3 tests/test_vm_protect_roundtrip.py
@@ -144,6 +165,8 @@ jobs:
           test -s app/src/main/assets/engine_licenses/luau-decompiler-MIT.txt
 
       - name: Build and test Android debug variant
+        env:
+          CHAQUOPY_BUILD_PYTHON: python3.8
         run: |
           chmod +x ./gradlew
           bash tools/run_gradle_with_retry.sh ./gradlew testDebugUnitTest assembleDebug --no-daemon --stacktrace
@@ -175,6 +198,7 @@ jobs:
 
       - name: Build release APK
         env:
+          CHAQUOPY_BUILD_PYTHON: python3.8
           # This job audits the unsigned baseline before XopProtector runs.
           # Final XOP provenance is mandatory in the post-packaging audit.
           ALVSIA_REQUIRE_XOP_PROVENANCE: "0"
@@ -189,12 +213,33 @@ jobs:
           AAPT="$(find "$ANDROID_HOME/build-tools" -type f -name aapt | sort -V | tail -n 1)"
           test -x "$AAPT" || { echo "FAIL: aapt not found"; exit 1; }
           BADGING="$("$AAPT" dump badging "$APK")"
-          printf '%s\n' "$BADGING" | grep -Fq "package: name='com.alvsia.pro' versionCode='98' versionName='5.5.2-hardened'" || {
-            echo "FAIL: APK package/version does not match release source"
-            printf '%s\n' "$BADGING" | grep -E "^package:|^application-label:" || true
-            exit 1
-          }
-          echo "PASS: APK package/version verified"
+          python3 - "$AAPT" "$APK" <<'PY'
+          import pathlib
+          import re
+          import subprocess
+          import sys
+          aapt, apk = sys.argv[1:3]
+          gradle = pathlib.Path("app/build.gradle.kts").read_text(encoding="utf-8")
+          patterns = (
+              r'applicationId\s*=\s*"([^"]+)"',
+              r'versionCode\s*=\s*(\d+)',
+              r'versionName\s*=\s*"([^"]+)"',
+          )
+          matches = [re.search(pattern, gradle) for pattern in patterns]
+          if not all(matches):
+              raise SystemExit("FAIL: could not parse Gradle applicationId/versionCode/versionName")
+          expected = tuple(match.group(1) for match in matches)
+          badging = subprocess.check_output([aapt, "dump", "badging", apk], text=True)
+          package_line = next((line for line in badging.splitlines() if line.startswith("package: ")), "")
+          actual_match = re.search(r"^package: name='([^']+)' versionCode='([^']+)' versionName='([^']+)'", package_line)
+          if not actual_match:
+              raise SystemExit("FAIL: cannot parse APK package metadata: " + package_line)
+          actual = actual_match.groups()
+          if actual != expected:
+              raise SystemExit(f"FAIL: APK identity mismatch; expected={expected!r}, actual={actual!r}")
+          print(f"PASS: APK identity matches Gradle: {actual!r}")
+          PY
+          echo "PASS: APK package/version matches active Gradle release configuration"
           mkdir -p validation-artifacts
           cp "$APK" validation-artifacts/ALVISIA_PRO_5.5.2-hardened_release_unsigned.apk
           cp release_security_audit.txt validation-artifacts/
@@ -271,6 +316,22 @@ jobs:
           rm -rf "$XOP_DIR"
           git clone --filter=blob:none https://github.com/xopJack/XopProtector.git "$XOP_DIR"
           git -C "$XOP_DIR" checkout --detach 5990c31
+          # ALVSIA Chaquopy compatibility: keep assets/chaquopy and runtime license files plaintext.
+          # Business payloads (including nx/* sealed JARs) are encrypted by Xop PAS1 and
+          # loaded through the injected ProtectorAssets bridge. Chaquopy's app.imy is
+          # intentionally excluded because the Chaquopy runtime reads it directly.
+          python3 - "$XOP_DIR/packer/src/main/java/com/yqsh/protector/packer/AssetsEncryptor.java" <<'PY'
+          import pathlib, sys
+          p = pathlib.Path(sys.argv[1])
+          s = p.read_text()
+          anchor = '            if (rel.startsWith("dexopt/") || rel.equals("dexopt")) {\n'
+          inject = '''            // ALVSIA runtime exclusions: Chaquopy loads app.imy directly; engine notices are audited runtime metadata.\n            if (rel.startsWith("chaquopy/") || rel.startsWith("engine_licenses/")) {\n                skipped++;\n                prog.tick();\n                continue;\n            }\n'''
+          if s.count(anchor) != 1:
+              raise SystemExit("unexpected Xop AssetsEncryptor layout; refusing blind patch")
+          s = s.replace(anchor, inject + anchor, 1)
+          p.write_text(s)
+          print("PASS: Xop asset encryptor patched for Chaquopy-safe exclusions")
+          PY
           # Prevent an upstream/local.properties Windows SDK path from overriding the hosted runner SDK.
           rm -f "$XOP_DIR/local.properties"
           test -d "$ANDROID_HOME/build-tools" || { echo "ERROR: Android build-tools missing from hosted SDK"; exit 1; }
@@ -319,7 +380,7 @@ jobs:
             -o "$CANDIDATE" \
             --shell-dir "$XOP_DIR/executable/shell-files" \
             --profile industry \
-            --protect-so
+            --protect-so --encrypt-assets --detect-proxy --so-decrypt-mode lazy
           test -s "$CANDIDATE"
           # These standalone CLI executables must remain byte-identical and executable;
           # XopProtector may rewrite ordinary .so payloads, so restore only these
@@ -396,7 +457,7 @@ jobs:
           print("PASS: native Smart Lua executables restored byte-identically from immutable baseline")
           PY
           python3 - "$BASELINE_SNAPSHOT" "$CANDIDATE" <<'PY'
-          import sys, zipfile
+          import json, sys, zipfile
           base, candidate = sys.argv[1:3]
           base_required = {
               "lib/arm64-v8a/librasp_guard.so",
@@ -407,7 +468,14 @@ jobs:
               "assets/chaquopy/app.imy",
               "assets/nx/i.dat",
           }
-          candidate_required = base_required | {"lib/arm64-v8a/libprotector.so", "assets/protector/dexes.zip"}
+          encrypted_index = "assets/protector/aenc/nx/i.dat"
+          candidate_required = (base_required - {"assets/nx/i.dat"}) | {
+              "lib/arm64-v8a/libprotector.so",
+              "assets/protector/dexes.zip",
+              "assets/protector/config.json",
+              "assets/protector/assets.map",
+              encrypted_index,
+          }
           with zipfile.ZipFile(base) as a, zipfile.ZipFile(candidate) as b:
               for label, z, required in (("baseline", a, base_required), ("Xop candidate", b, candidate_required)):
                   missing = sorted(required - set(z.namelist()))
@@ -415,7 +483,18 @@ jobs:
                       raise SystemExit(f"{label} missing required entries: {missing}")
                   if z.testzip() is not None:
                       raise SystemExit(f"{label} ZIP integrity check failed")
-          print("PASS: ZIP integrity, Chaquopy payload, RASP library and Xop DEX container")
+              if not b.read(encrypted_index).startswith(b"PAS1"):
+                  raise SystemExit("Xop encrypted sealed-JAR index is missing its PAS1 header")
+              config = json.loads(b.read("assets/protector/config.json").decode("utf-8"))
+              required_flags = {
+                  "protect_so": True, "detect_proxy": True, "net_guard": True,
+                  "so_decrypt_mode": "lazy", "rasp_action": 2, "encrypt_assets": True,
+              }
+              mismatches = {key: (wanted, config.get(key)) for key, wanted in required_flags.items()
+                            if config.get(key) != wanted}
+              if mismatches:
+                  raise SystemExit(f"Xop security configuration mismatch: {mismatches}")
+          print("PASS: ZIP integrity, PAS1 asset encryption, Chaquopy payload, RASP and Xop security configuration")
           PY
           AAPT="$(find "$ANDROID_HOME/build-tools" -type f -name aapt | sort -V | tail -n 1)"
           test -x "$AAPT"

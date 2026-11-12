@@ -65,53 +65,92 @@ def run_tool(module_id, sub_id, input_path, out_root, engine_dir, jars_dir):
             return "X AUTH: module/subtool has no Unaux grant mapping"
         core._alvsia_require_operation((grant_operation,))
 
-        # Unified adapter facade: route the production Smart Lua/protection,
-        # string-recovery, and bounded OBB operations through one fail-closed
-        # dispatcher after the existing authentication/grant gates pass.
-        if sid in ("lua_decompile", "lua_smart_protect", "lua_smart_protect_strong", "str_recover", "obb_info", "obb_unzip"):
+        # Unified adapter facade: Smart Lua, Smart PAK/OBB, and Smart Data providers
+        # share one fail-closed dispatcher after existing authentication/grant gates.
+        if sid in (
+            "lua_decompile", "lua_analyze",
+            "lua_smart_protect", "lua_smart_protect_strong",
+            "lua_compile", "lua_patch_byte", "lua_inject_hook", "lua_mod_repack",
+            "lua_protect_encrypt", "lua_protect_decrypt", "lua_vm_protect",
+            "str_recover", "pak_info", "pak_full_unpack", "pak_repack_full",
+            "pak_integrity_audit", "obb_info", "obb_unzip", "obb_rezip",
+            "obb_integrity_audit", "dec_auto", "sm4_find_all",
+            "xor_single_byte", "metadata_v39_decode"
+        ):
             try:
                 from module_adapters import dispatch as _adapter_dispatch
-                if sid == "lua_decompile":
+                lua_ids = {
+                    "lua_decompile": ("decompile", "LUA"),
+                    "lua_analyze": ("analyze", "LUA"),
+                    "lua_smart_protect": ("protect", "LPROTECT"),
+                    "lua_smart_protect_strong": ("protect", "LPROTECT"),
+                    "lua_compile": ("compile", "LUA"),
+                    "lua_patch_byte": ("inject", "LINJ"),
+                    "lua_inject_hook": ("inject", "LINJ"),
+                    "lua_mod_repack": ("inject", "LINJ"),
+                    "lua_protect_encrypt": ("encrypt", "LPROTECT"),
+                    "lua_protect_decrypt": ("restore", "LPROTECT"),
+                    "lua_vm_protect": ("vm-protect", "LPROTECT"),
+                }
+                if sid in lua_ids:
+                    operation, folder = lua_ids[sid]
                     _adapter = _adapter_dispatch(
-                        "lua", "decompile", input_path=ip,
-                        output_path=out / "OUT" / "LUA" / (Path(ip).stem + "_smart.lua"),
+                        "lua", operation,
+                        input_path=ip,
+                        output_dir=out / "OUT" / folder,
                         jars_dir=jars,
-                    )
-                elif sid in ("lua_smart_protect", "lua_smart_protect_strong"):
-                    _adapter = _adapter_dispatch(
-                        "lua", "protect", input_path=ip,
-                        output_path=out / "OUT" / "LPROTECT" / (Path(ip).stem + "_protected.lua"),
-                        profile="strong" if sid.endswith("_strong") else "balanced",
+                        work_dir=out / "WORK",
+                        sub_id=sid,
+                        profile="strong" if sid == "lua_smart_protect_strong" else "balanced",
                     )
                 elif sid == "str_recover":
                     _adapter = _adapter_dispatch(
                         "string-recovery", "recover", input_path=ip,
                         output_dir=out / "OUT" / "STR",
                     )
-                elif sid == "obb_info":
+                elif sid in ("dec_auto", "sm4_find_all", "xor_single_byte", "metadata_v39_decode"):
+                    data_ids = {
+                        "dec_auto": ("recover", "DEC"),
+                        "sm4_find_all": ("sm4", "SM4"),
+                        "xor_single_byte": ("xor", "XOR"),
+                        "metadata_v39_decode": ("metadata", "SCAN"),
+                    }
+                    data_op, folder = data_ids[sid]
                     _adapter = _adapter_dispatch(
-                        "archive", "inspect", input_path=ip,
-                        output_file=out / "OUT" / "OBB" / "info.json",
+                        "data", data_op, input_path=ip,
+                        output_dir=out / "OUT" / folder,
+                        work_dir=out / "WORK",
                     )
                 else:
+                    archive_ids = {
+                        "pak_info": ("inspect", "PAK", "pak"),
+                        "pak_full_unpack": ("extract", "PAK", "pak"),
+                        "pak_repack_full": ("rebuild", "PAK", "pak"),
+                        "pak_integrity_audit": ("integrity", "PAK", "pak"),
+                        "obb_info": ("inspect", "OBB", "obb"),
+                        "obb_unzip": ("extract", "OBB", "obb"),
+                        "obb_rezip": ("rebuild", "OBB", "obb"),
+                        "obb_integrity_audit": ("integrity", "OBB", "obb"),
+                    }
+                    archive_op, folder, archive_kind = archive_ids[sid]
                     _adapter = _adapter_dispatch(
-                        "archive", "extract", input_path=ip,
-                        output_dir=out / "OUT" / "OBB" / Path(ip).stem,
+                        "archive", archive_op, input_path=ip,
+                        output_dir=out / "OUT" / folder,
+                        work_dir=out / "WORK",
+                        archive_kind=archive_kind,
                     )
                 if not isinstance(_adapter, dict) or not _adapter.get("ok"):
-                    return "\\n".join(lines + ["X UNIFIED ADAPTER: " + str((_adapter or {}).get("error", "operation failed"))[:700]])
-                lines.append("OK UNIFIED ADAPTER module=%s operation=%s" % (
+                    return "\\n".join(lines + ["X UNIFIED ADAPTER: " + str((_adapter or {}).get("error", "operation failed"))[:900]])
+                lines.append("OK SMART ENGINE module=%s operation=%s" % (
                     _adapter.get("module", "?"), _adapter.get("operation", "?")))
                 if _adapter.get("out"):
                     lines.append("OUT -> %s" % _adapter.get("out"))
                 elif _adapter.get("report"):
                     lines.append("REPORT -> %s" % _adapter.get("report"))
-                elif _adapter.get("candidate_count") is not None:
-                    lines.append("candidates=%s" % _adapter.get("candidate_count"))
-                lines.append("ADAPTER RESULT -> %s" % str(_adapter)[:1600])
+                lines.append("SMART RESULT -> %s" % str(_adapter)[:1800])
                 return "\\n".join(lines)
             except Exception as _adapter_exc:
-                return "\\n".join(lines + ["X UNIFIED ADAPTER exception: %s" % (str(_adapter_exc)[:700] or type(_adapter_exc).__name__)])
+                return "\\n".join(lines + ["X SMART ENGINE exception: %s" % (str(_adapter_exc)[:900] or type(_adapter_exc).__name__)])
 
         def need_file():
             if not ip or not Path(ip).exists():
@@ -256,6 +295,38 @@ def run_tool(module_id, sub_id, input_path, out_root, engine_dir, jars_dir):
             except Exception as exc:
                 lines.append("X PAK UNPACK FAILED: %s" % (str(exc)[:1200] or type(exc).__name__))
                 return "\n".join(lines)
+            if isinstance(r, dict):
+                stats = r.get("stats") or {}
+                if stats:
+                    lines.append(
+                        "PAK VERIFY expected=%s written=%s skipped=%s skipped_dirs=%s bytes=%s"
+                        % (
+                            stats.get("expected_files", "?"),
+                            stats.get("written_files", "?"),
+                            stats.get("skipped_files", "?"),
+                            stats.get("skipped_directories", "?"),
+                            stats.get("written_bytes", "?"),
+                        )
+                    )
+                    index_stats = stats.get("index_parse") or {}
+                    if index_stats:
+                        lines.append(
+                            "PAK INDEX entries=%s dirs=%s loaded_dirs=%s bad_refs=%s bad_paths=%s cursor=%s/%s"
+                            % (
+                                index_stats.get("file_entries", "?"),
+                                index_stats.get("directory_records", "?"),
+                                index_stats.get("loaded_directories", "?"),
+                                index_stats.get("skipped_bad_refs", "?"),
+                                index_stats.get("skipped_bad_paths", "?"),
+                                index_stats.get("reader_cursor", "?"),
+                                index_stats.get("index_length", "?"),
+                            )
+                        )
+                    for failure in (stats.get("failures") or [])[:8]:
+                        lines.append(
+                            "PAK ENTRY ERROR %s -> %s"
+                            % (failure.get("path", "?"), failure.get("error", "?"))
+                        )
             if not isinstance(r, dict) or not r.get("ok"):
                 lines.append("X PAK UNPACK FAILED: %s" % (
                     r.get("error", r) if isinstance(r, dict) else str(r)

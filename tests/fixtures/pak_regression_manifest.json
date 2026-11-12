@@ -1,0 +1,14 @@
+{
+  "game_patch_4.7.0.21756.pak": {
+    "sha256": "dc6a229d388889b599e154a1354eb48a0ecd0c2e762f68a4837be598f70bd578",
+    "size": 713299,
+    "source": "papaalvisia-creator/kumpulan-source-tool:samples/pak/game_patch_4.7.0.21756.pak",
+    "expected_issue": "ZSTD frames without declared content size must decode with a bounded output limit"
+  },
+  "game_patch_4.7.0.21752.pak": {
+    "sha256": "e47e93bd934ec830b2b908c5806ce1779354237e1825c7b73a8c2b37d8880968",
+    "size": 2704793,
+    "source": "papaalvisia-creator/kumpulan-source-tool:samples/pak/game_patch_4.7.0.21752.pak",
+    "expected_issue": "extraction must report exact file counts and fail closed on missing or skipped payloads"
+  }
+}

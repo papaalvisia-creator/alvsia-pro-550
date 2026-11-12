@@ -13,14 +13,16 @@ data class StudioItem(
 )
 
 object StudioCatalog {
+    // Output Browser handoff targets the same seven public Smart modules.
+    // Legacy provider IDs are resolved later by SmartModuleRouter.
     val all: List<StudioItem> = listOf(
-        StudioItem("pak", "PAK Studio", "Unpack, rebuild, compact and inspect PAK archives", "📦", listOf(1, 2, 3, 14)),
-        StudioItem("obb", "OBB Studio", "Extract, rebuild and validate OBB packages", "💾", listOf(4)),
-        StudioItem("lua", "Lua Studio", "Analyze, decompile, recover, inject and protect Lua", "🌙", listOf(5, 15, 16, 18)),
-        StudioItem("file", "File Studio", "Scan files and manage the shared work area", "🗂️", listOf(6, 7)),
-        StudioItem("security", "Security Studio", "Inspect native libraries, runtime traces and anti-RE posture", "🛡️", listOf(10, 11, 17)),
-        StudioItem("crypto", "Crypto Studio", "XOR, decryption and private cryptographic utilities", "🔐", listOf(12, 13, 19)),
-        StudioItem("project", "Project Studio", "Rebrand assets and export project reports", "🧩", listOf(8, 9))
+        StudioItem("lua", "SMART LUA", "Decompiler, Protect, Compiler/Recompiler and Inject", "🌙", listOf(1)),
+        StudioItem("pak", "SMART PAK", "Inspect, unpack, modify, rebuild and verify PAK archives", "📦", listOf(2)),
+        StudioItem("obb", "SMART OBB", "Inspect, extract, rebuild and verify OBB packages", "💾", listOf(3)),
+        StudioItem("data", "SMART DATA", "XOR, AES, SM4, strings and data recovery", "🔑", listOf(4)),
+        StudioItem("analysis", "SMART ANALYSIS", "Native, SO, APK and runtime analysis", "🔬", listOf(5)),
+        StudioItem("workspace", "WORKSPACE & REPORT", "Hash, provenance, reports and shared outputs", "📊", listOf(6)),
+        StudioItem("private", "ALVSIA PRIVATE", "Sealed private providers and owner-only workflows", "⚙️", listOf(7))
     )
 
     fun moduleIds(studio: StudioItem): List<Int> = studio.moduleIds
@@ -29,6 +31,6 @@ object StudioCatalog {
 
     fun hasCompleteUniqueCoverage(): Boolean {
         val ids = all.flatMap { it.moduleIds }
-        return ids.size == 19 && ids.toSet().size == 19 && ids.toSet() == (1..19).toSet()
+        return ids.size == 7 && ids.toSet().size == 7 && ids.toSet() == (1..7).toSet()
     }
 }

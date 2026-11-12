@@ -18,6 +18,14 @@ object AssetVault {
             '\u0000' !in name &&
             '/' !in name && '\\' !in name
 
+    private fun isSafeAssetPath(path: String): Boolean =
+        path.isNotBlank() &&
+            !path.startsWith("/") &&
+            !path.contains("..") &&
+            '\u0000' !in path &&
+            '\\' !in path &&
+            path.split('/').all { it.isNotBlank() && it != "." }
+
     private fun safeJarTarget(root: File, name: String): File? {
         if (!isSafeAssetName(name) || !name.endsWith(".jar")) return null
         return try {
@@ -43,7 +51,64 @@ object AssetVault {
         }
     }
 
+    private fun loadXopSealedMap(ctx: Context): Map<String, ByteArray>? {
+        return try {
+            // XopProtector injects ProtectorAssets only into the protected APK.
+            // Reflection keeps normal/debug builds independent of the injected shell.
+            val clazz = Class.forName("com.yqsh.protector.shell.ProtectorAssets")
+            val readBytes = clazz.getMethod("readBytes", Context::class.java, String::class.java)
+            val index = (readBytes.invoke(null, ctx, "nx/i.dat") as ByteArray)
+                .toString(Charsets.UTF_8)
+            val out = mutableMapOf<String, ByteArray>()
+            for (line in index.lines()) {
+                val parts = line.split("=", limit = 2)
+                if (parts.size != 2) continue
+                val logical = parts[0].trim()
+                val file = parts[1].trim()
+                if (logical.isEmpty() || !isSafeAssetName(file)) continue
+                val plain = readBytes.invoke(null, ctx, "nx/$file") as ByteArray
+                out[logical] = plain
+            }
+            out
+        } catch (_: Throwable) {
+            null
+        }
+    }
+
+    /**
+     * Read an ordinary bundled asset through Xop ProtectorAssets when present.
+     * Debug/unprotected APKs retain the Android AssetManager fallback.
+     */
+    fun readAssetBytes(ctx: Context, assetPath: String): ByteArray? {
+        if (!isSafeAssetPath(assetPath)) return null
+        val protectorAssets = try {
+            Class.forName("com.yqsh.protector.shell.ProtectorAssets")
+        } catch (_: Throwable) {
+            null
+        }
+        if (protectorAssets != null) {
+            // Protected APK: fail closed if PAS1 decryption fails; never fall back to plaintext.
+            return try {
+                val readBytes = protectorAssets.getMethod("readBytes", Context::class.java, String::class.java)
+                readBytes.invoke(null, ctx, assetPath) as? ByteArray
+            } catch (_: Throwable) {
+                null
+            }
+        }
+        // Debug/unprotected APK: the original asset is intentionally plaintext.
+        return try {
+            ctx.assets.open(assetPath).use { it.readBytes() }
+        } catch (_: Throwable) {
+            null
+        }
+    }
+
     fun loadSealedMap(ctx: Context): Map<String, ByteArray> {
+        // Final Xop APK: assets/nx/* is PAS1 encrypted and must be read through
+        // ProtectorAssets. Keep the existing ALVSA1 path as a compatibility fallback
+        // for debug/validation builds before Xop packaging.
+        loadXopSealedMap(ctx)?.let { return it }
+
         val k = NativeGuard.assetSealKey() ?: return emptyMap()
         val out = mutableMapOf<String, ByteArray>()
         return try {
@@ -72,32 +137,34 @@ object AssetVault {
         jarsDir.mkdirs()
         var n = 0
         for ((name, bytes) in loadSealedMap(ctx)) {
-            val dest = safeJarTarget(jarsDir, name) ?: continue
-            // Length alone is not integrity: an attacker could alter a JAR without changing its size.
-            val alreadyValid = try {
-                dest.isFile && dest.length() == bytes.size.toLong() &&
-                    dest.readBytes().contentEquals(bytes)
-            } catch (_: Exception) {
-                false
-            }
-            if (alreadyValid) {
-                n++
-                continue
-            }
             try {
-                dest.writeBytes(bytes)
-            } catch (_: Exception) {
-                continue
+                val dest = safeJarTarget(jarsDir, name) ?: continue
+                // Length alone is not integrity: an attacker could alter a JAR without changing its size.
+                val alreadyValid = try {
+                    dest.isFile && dest.length() == bytes.size.toLong() &&
+                        dest.readBytes().contentEquals(bytes)
+                } catch (_: Exception) {
+                    false
+                }
+                if (alreadyValid) {
+                    n++
+                    continue
+                }
+                try {
+                    dest.writeBytes(bytes)
+                } catch (_: Exception) {
+                    continue
+                }
+                try {
+                    dest.setReadable(true, true)
+                    dest.setWritable(true, true)
+                } catch (_: Exception) {
+                }
+                n++
             } finally {
-                // Do not keep decrypted JAR plaintext resident after materialization.
+                // Clear every decrypted payload, including rejected names and cache hits.
                 bytes.fill(0)
             }
-            try {
-                dest.setReadable(true, true)
-                dest.setWritable(true, true)
-            } catch (_: Exception) {
-            }
-            n++
         }
         return n
     }

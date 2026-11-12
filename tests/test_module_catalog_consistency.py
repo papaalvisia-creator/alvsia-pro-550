@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Guard that the home, profile, submenu, and engine catalogs stay aligned at 19 modules."""
+"""Guard that the compact seven-module Smart catalog stays aligned."""
 from pathlib import Path
 import re
 
@@ -10,11 +10,11 @@ home = (ROOT / "app/src/main/java/com/alvsia/pro/ui/home/HomeScreen.kt").read_te
 submenus = (ROOT / "app/src/main/java/com/alvsia/pro/tool/SubMenus.kt").read_text(encoding="utf-8")
 
 catalog_items = [(int(i), name) for i, name in re.findall(r'ToolItem\(\s*(\d+)\s*,\s*"([^"]+)"', catalog)]
-expected_ids = list(range(1, 20))
+expected_ids = list(range(1, 8))
 assert [i for i, _ in catalog_items] == expected_ids, (
-    f"ToolCatalog IDs must be exactly 1..19 in order; got {[i for i, _ in catalog_items]}"
+    f"ToolCatalog IDs must be exactly 1..7 in order; got {[i for i, _ in catalog_items]}"
 )
-assert len(catalog_items) == 19, f"expected 19 catalog entries, got {len(catalog_items)}"
+assert len(catalog_items) == 7, f"expected 7 catalog entries, got {len(catalog_items)}"
 
 profile_names = re.findall(r'ModuleChip\(\s*"[^"]*"\s*,\s*"([^"]+)"\s*\)', profile)
 catalog_names = [name for _, name in catalog_items]
@@ -32,17 +32,17 @@ for module_id, name in catalog_items:
 
 icon_section = home.split("private fun moduleIcon(id: Int)", 1)[1].split("@Composable", 1)[0]
 icon_ids = [int(i) for i in re.findall(r'(?m)^\s*(\d+)\s*->\s*"[^"]+"', icon_section)]
-assert icon_ids == expected_ids, f"HomeScreen must map icon IDs 1..19 in order; got {icon_ids}"
+assert icon_ids == expected_ids, f"HomeScreen must map icon IDs 1..7 in order; got {icon_ids}"
 
 
 # The private module must be fully wired from its UI submenu into the sealed bridge.
-private_submenu = submenus.split("19 -> listOf(", 1)[1].split("\n    )", 1)[0]
+private_submenu = submenus.split("7 -> listOf(", 1)[1].split("\n    )", 1)[0]
 private_ids = re.findall(r'SubTool\(\s*"([^"]+)"', private_submenu)
-assert len(private_ids) == 12, f"expected 12 private subtools, got {len(private_ids)}"
+assert len(private_ids) == 3, f"expected 3 private providers, got {len(private_ids)}"
 bridge_private = (ROOT / "app/src/main/python/alvsia_bridge_impl.py").read_text(encoding="utf-8")
 dispatch_section = bridge_private.split("ALVSIA PRIVATE TOOL — sealed runtime required", 1)[1].split("# ── ZUC-128 decrypt", 1)[0]
 for sub_id in private_ids:
     assert f'"{sub_id}"' in dispatch_section, f"private subtool is not registered in sealed bridge: {sub_id}"
 assert 'ALVSIA_SEALED_RUNTIME' in dispatch_section, "private module must retain its sealed-runtime gate"
 
-print("MODULE CATALOG CONSISTENCY: PASS (19/19 modules, profile/home/submenu parity, 12 private subtools wired to sealed bridge)")
+print("MODULE CATALOG CONSISTENCY: PASS (7/7 Smart modules, profile/home/submenu parity, 3 private providers wired to sealed bridge)")

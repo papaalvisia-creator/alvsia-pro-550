@@ -1013,36 +1013,74 @@ class PakCrypto:
 class PakCompression:
 
     @staticmethod
+    @lru_cache(maxsize=1)
+    def _zstd_decompressor_without_dict() -> ZstdDecompressor:
+        """Create a plain Zstandard decoder without passing a null dictionary."""
+        if ZstdDecompressor is None:
+            raise RuntimeError("zstandard module is unavailable")
+        return ZstdDecompressor()
+
+    @staticmethod
     @lru_cache(maxsize=33)
-    def _zstd_decompressor(dict: ZstdCompressionDict) -> ZstdDecompressor:
+    def _zstd_decompressor_with_dict(dict: ZstdCompressionDict) -> ZstdDecompressor:
+        if ZstdDecompressor is None:
+            raise RuntimeError("zstandard module is unavailable")
+        if dict is None:
+            raise ValueError("ZSTD dictionary is required for dictionary-compressed block")
         return ZstdDecompressor(dict)
 
     @staticmethod
+    def _zstd_decompressor(dict: Optional[ZstdCompressionDict]) -> ZstdDecompressor:
+        """Select the correct decoder constructor for plain vs dictionary ZSTD."""
+        if dict is None:
+            return PakCompression._zstd_decompressor_without_dict()
+        return PakCompression._zstd_decompressor_with_dict(dict)
+
+    @staticmethod
     def zstd_dictionary(dict_data) -> ZstdCompressionDict:
+        if ZstdCompressionDict is None or DICT_TYPE_AUTO is None:
+            raise RuntimeError("zstandard module is unavailable")
+        if not dict_data:
+            raise ValueError("empty ZSTD dictionary")
         return ZstdCompressionDict(dict_data, DICT_TYPE_AUTO)
 
     @staticmethod
-    def decompress_block(block, dict: Optional[ZstdCompressionDict], compression_method: int) -> bytes:
+    def decompress_block(
+        block,
+        dict: Optional[ZstdCompressionDict],
+        compression_method: int,
+        max_output_size: Optional[int] = None,
+    ) -> bytes:
         if compression_method == CM_ZLIB:
             # Try standard zlib (with header) first.
             try:
-                return zlib.decompress(block)
+                result = zlib.decompress(block)
             except zlib.error:
-                pass
-            # Fallback: raw DEFLATE (no zlib/gzip header, negative wbits).
-            # Tencent PAK files often store raw-deflate blocks without the
-            # two-byte zlib header; a silent "return block" was masking these
-            # as successful extraction while producing corrupt output.
-            try:
-                return zlib.decompress(block, wbits=-zlib.MAX_WBITS)
-            except zlib.error:
-                raise ValueError(
-                    "decompression failed: block is neither valid zlib nor raw DEFLATE"
-                )
+                # Fallback: raw DEFLATE (no zlib/gzip header, negative wbits).
+                try:
+                    result = zlib.decompress(block, wbits=-zlib.MAX_WBITS)
+                except zlib.error as exc:
+                    raise ValueError(
+                        "decompression failed: block is neither valid zlib nor raw DEFLATE"
+                    ) from exc
+            if max_output_size and len(result) > int(max_output_size):
+                raise ValueError("decompressed block exceeds declared output limit")
+            return result
         elif compression_method == CM_ZSTD or compression_method == CM_ZSTD_DICT:
             if compression_method != CM_ZSTD_DICT:
                 dict = None
-            return PakCompression._zstd_decompressor(dict).decompress(block)
+            # Tencent PAK ZSTD frames may omit the content-size field. The
+            # default decompress() then raises "error determining content size
+            # from frame header". Supply a strict per-block output bound.
+            limit = int(max_output_size or (64 * 1024 * 1024))
+            if limit <= 0 or limit > 512 * 1024 * 1024:
+                raise ValueError("invalid ZSTD output limit")
+            result = PakCompression._zstd_decompressor(dict).decompress(
+                block, max_output_size=limit
+            )
+            if len(result) > limit:
+                raise ValueError("ZSTD block exceeds declared output limit")
+            return result
         else:
             raise ValueError(f'Unknown compression method: {compression_method}')
 
@@ -1583,7 +1621,19 @@ class TencentPakFile:
         # This ensures the original file (if any) is preserved when decompression
         # or decryption fails — previously a "wb" open truncated the file before
         # any error could be detected.
-        tmp_path = Path(str(file_path) + ".alvsia-tmp")
+        # Create an unpredictable, exclusive temporary file in the destination
+        # directory. A predictable sibling name can be pre-created as a symlink
+        # and make open(..., "wb") write outside the extraction root.
+        file_path = Path(file_path)
+        file_path.parent.mkdir(parents=True, exist_ok=True)
+        with tempfile.NamedTemporaryFile(
+            mode="wb",
+            dir=str(file_path.parent),
+            prefix="." + file_path.name + ".",
+            suffix=".alvsia-tmp",
+            delete=False,
+        ) as temp_handle:
+            tmp_path = Path(temp_handle.name)
         try:
             if _se33e912f7767 == 17:
                 with open(tmp_path, 'wb') as _sbb61cc6b3e63:
@@ -1604,7 +1654,16 @@ class TencentPakFile:
                     _sb96393f68f4d = self._peek_block_content(entry.compressed_blocks[_s1f6d01ab75cb], _se33e912f7767)
                     if entry.encrypted:
                         _sb96393f68f4d = PakCrypto.decrypt_block(bytes(_sb96393f68f4d), file_path, _se33e912f7767)
-                    _sb96393f68f4d = PakCompression.decompress_block(_sb96393f68f4d, self._zstd_dict, _s5206fe150a33)
+                    remaining_size = max(0, int(getattr(entry, 'uncompressed_size', 0)) - _sbb61cc6b3e63.tell())
+                    block_limit = None
+                    if entry.compression_block_size > 0 and remaining_size > 0:
+                        block_limit = min(int(entry.compression_block_size), remaining_size)
+                    _sb96393f68f4d = PakCompression.decompress_block(
+                        _sb96393f68f4d, self._zstd_dict, _s5206fe150a33,
+                        max_output_size=block_limit,
+                    )
+                    if block_limit and len(_sb96393f68f4d) > block_limit:
+                        raise ValueError("decompressed block exceeds PAK compression block size")
                     _sbb61cc6b3e63.write(_sb96393f68f4d)
             # Validate decompressed size before committing the rename.
             actual_size = tmp_path.stat().st_size
@@ -1622,84 +1681,113 @@ class TencentPakFile:
                 pass
             raise
 
-    def dump(self, out_path: PurePath) -> None:
+    def dump(self, out_path: PurePath) -> dict:
+        """Extract every indexed file and return verifiable per-file statistics."""
         debug_path = BASE_DIR / 'index_debug.txt'
 
         def _log_path_debug(title, **values):
             try:
                 BASE_DIR.mkdir(parents=True, exist_ok=True)
-                _se78e1dce92b0 = ['', f'=== {title} ===']
-                for _s07c75bc1b558, _s0c49bd2ad1c0 in values.items():
-                    _se78e1dce92b0.append(f'{_s07c75bc1b558:<20}: {_s0c49bd2ad1c0!r}')
-                _se78e1dce92b0.append('=' * (8 + len(title)))
-                _scb74e83bd4bb = '\n'.join(_se78e1dce92b0) + '\n'
-                print(_scb74e83bd4bb, flush=True)
-                with open(debug_path, 'a', encoding='utf-8') as _s17c5d36b0ad1:
-                    _s17c5d36b0ad1.write(_scb74e83bd4bb)
+                lines = ['', f'=== {title} ===']
+                for key, value in values.items():
+                    lines.append(f'{key:<20}: {value!r}')
+                lines.append('=' * (8 + len(title)))
+                rendered = '\n'.join(lines) + '\n'
+                print(rendered, flush=True)
+                with open(debug_path, 'a', encoding='utf-8') as handle:
+                    handle.write(rendered)
             except Exception:
                 pass
+
+        expected_files = sum(len(items) for items in self._index.values())
+        stats = {
+            'ok': False,
+            'expected_files': expected_files,
+            'written_files': 0,
+            'skipped_files': 0,
+            'skipped_directories': 0,
+            'written_bytes': 0,
+            'failures': [],
+            'index_parse': getattr(self, '_index_parse_stats', {}),
+        }
+
+        def _failure(path, exc):
+            item = {'path': str(path), 'error': f'{type(exc).__name__}: {exc}'[:500]}
+            if len(stats['failures']) < 100:
+                stats['failures'].append(item)
+            _log_path_debug('EXTRACTION ENTRY FAILED', **item)
+
         mount_text = str(self._mount_point)
         if '\x00' in mount_text:
-            _log_path_debug('INVALID MOUNT POINT', mount_point=mount_text, output_root=str(out_path))
             raise ValueError('PAK mount point contains an embedded NUL character.')
         base_root = Path(out_path).resolve()
-        out_path = (base_root / mount_text).resolve()
+        safe_root = (base_root / mount_text).resolve()
         try:
-            out_path.relative_to(base_root)
-        except ValueError:
-            _log_path_debug('UNSAFE MOUNT POINT', mount_point=mount_text, output_root=str(base_root))
-            raise ValueError('PAK mount point escapes the extraction directory.')
-        safe_root = out_path
-        skipped_dirs = 0
-        skipped_files = 0
-        for dir_path, dir in self._index.items():
+            safe_root.relative_to(base_root)
+        except ValueError as exc:
+            raise ValueError('PAK mount point escapes the extraction directory.') from exc
+
+        for dir_path, entries in self._index.items():
             dir_text = str(dir_path)
             if '\x00' in dir_text:
-                skipped_dirs += 1
-                _log_path_debug('INVALID DIRECTORY PATH', directory=dir_text, output_root=str(out_path), reason='embedded NUL character')
+                stats['skipped_directories'] += 1
+                stats['skipped_files'] += len(entries)
+                _failure(dir_text, ValueError('directory contains an embedded NUL'))
                 continue
             current_out_path = (safe_root / dir_text).resolve()
             try:
                 current_out_path.relative_to(safe_root)
-            except ValueError:
-                skipped_dirs += 1
-                _log_path_debug('UNSAFE DIRECTORY PATH', directory=dir_text, output_path=str(current_out_path), reason='path escapes extraction root')
+                current_out_path.mkdir(parents=True, exist_ok=True)
+            except Exception as exc:
+                stats['skipped_directories'] += 1
+                stats['skipped_files'] += len(entries)
+                _failure(dir_text, exc)
                 continue
-            if '\x00' in str(current_out_path):
-                skipped_dirs += 1
-                _log_path_debug('INVALID OUTPUT DIRECTORY', directory=dir_text, output_path=str(current_out_path), reason='embedded NUL character')
-                continue
-            try:
-                if not current_out_path.exists():
-                    current_out_path.mkdir(parents=True, exist_ok=True)
-            except (ValueError, OSError) as e:
-                skipped_dirs += 1
-                _log_path_debug('DIRECTORY CREATE ERROR', directory=dir_text, output_path=str(current_out_path), error=f'{type(e).__name__}: {e}')
-                continue
-            for file_name, entry in dir.items():
+
+            for file_name, entry in entries.items():
                 file_text = str(file_name)
-                if '\x00' in file_text:
-                    skipped_files += 1
-                    _log_path_debug('INVALID FILE NAME', directory=dir_text, file_name=file_text, reason='embedded NUL character')
+                relative_name = str(PurePath(dir_path) / file_text).replace('\\', '/')
+                if not file_text or '\x00' in file_text or file_text in ('.', '..') or '/' in file_text or '\\' in file_text:
+                    stats['skipped_files'] += 1
+                    _failure(relative_name, ValueError('unsafe PAK filename'))
                     continue
-                file_out_path = (current_out_path / file_text).resolve()
+                target = (current_out_path / file_text).resolve()
                 try:
-                    file_out_path.relative_to(safe_root)
-                except ValueError:
-                    skipped_files += 1
-                    _log_path_debug('UNSAFE FILE PATH', directory=dir_text, file_name=file_text, output_path=str(file_out_path), reason='path escapes extraction root')
-                    continue
-                if '\x00' in str(file_out_path):
-                    skipped_files += 1
-                    _log_path_debug('INVALID FILE OUTPUT PATH', directory=dir_text, file_name=file_text, output_path=str(file_out_path), reason='embedded NUL character')
-                    continue
-                try:
-                    self._write_to_disk(file_out_path, entry)
-                except (ValueError, OSError) as e:
-                    skipped_files += 1
-                    _log_path_debug('FILE WRITE ERROR', directory=dir_text, file_name=file_text, output_path=str(file_out_path), error=f'{type(e).__name__}: {e}')
-                    continue
-        _log_path_debug('DUMP PATH SUMMARY', skipped_directories=skipped_dirs, skipped_files=skipped_files)
+                    target.relative_to(safe_root)
+                    self._write_to_disk(target, entry)
+                    if not target.is_file():
+                        raise OSError('extractor returned without creating a regular file')
+                    actual_size = target.stat().st_size
+                    expected_size = int(getattr(entry, 'uncompressed_size', 0) or 0)
+                    if expected_size > 0 and actual_size != expected_size:
+                        try:
+                            target.unlink()
+                        except OSError:
+                            pass
+                        raise ValueError(
+                            f'output size mismatch: expected {expected_size}, got {actual_size}'
+                        )
+                    stats['written_files'] += 1
+                    stats['written_bytes'] += actual_size
+                except Exception as exc:
+                    stats['skipped_files'] += 1
+                    _failure(relative_name, exc)
+
+        stats['ok'] = (
+            stats['expected_files'] > 0
+            and stats['written_files'] == stats['expected_files']
+            and stats['skipped_files'] == 0
+            and stats['skipped_directories'] == 0
+        )
+        _log_path_debug(
+            'DUMP PATH SUMMARY',
+            expected_files=stats['expected_files'],
+            written_files=stats['written_files'],
+            skipped_files=stats['skipped_files'],
+            skipped_directories=stats['skipped_directories'],
+            written_bytes=stats['written_bytes'],
+        )
+        return stats
 
     def dump_filtered(self, out_path: PurePath, extensions) -> dict:
         """
@@ -2780,55 +2868,90 @@ def run_pak_unpack(pak_path, out_dir, authorization_operation='pak.unpack'):
     # Prefer dump if available
     if hasattr(pak, 'dump'):
         stats = pak.dump(out_dir)
-        # Validate extraction integrity: any skipped files are a hard failure.
-        # A mismatch between expected_files and actual on-disk count is also fatal —
-        # it means entries were silently dropped (corrupt block, missing decrypt key, …).
-        if isinstance(stats, dict):
-            skipped = int(stats.get('skipped_files', 0))
-            expected = int(stats.get('expected_files', 0))
-            written = int(stats.get('written_files', 0))
-            if skipped > 0:
-                return {
-                    'ok': False,
-                    'error': f'incomplete PAK extraction: {skipped} file(s) skipped out of {expected}',
-                    'stats': stats,
-                    'out': str(out_dir),
-                }
-            if expected > 0:
-                # Always count on-disk — dump()'s self-reported written_files may lie
-                # (e.g. a tool that increments the counter before confirming the write).
-                actual_on_disk = sum(1 for p in out_dir.rglob('*') if p.is_file())
-                if actual_on_disk != expected:
-                    return {
-                        'ok': False,
-                        'error': (
-                            f'output file count mismatch: expected {expected}, '
-                            f'written={written}, on-disk={actual_on_disk}'
-                        ),
-                        'stats': stats,
-                        'out': str(out_dir),
-                    }
-        n = sum(1 for p in out_dir.rglob('*') if p.is_file())
-        return {'ok': True, 'files': n, 'out': str(out_dir)}
+        if not isinstance(stats, dict):
+            return {
+                'ok': False,
+                'error': 'PAK extractor did not return verifiable extraction statistics',
+                'out': str(out_dir),
+            }
+        expected = int(stats.get('expected_files', 0))
+        written = int(stats.get('written_files', 0))
+        skipped = int(stats.get('skipped_files', 0))
+        actual_on_disk = sum(1 for p in out_dir.rglob('*') if p.is_file())
+        if expected <= 0:
+            return {
+                'ok': False,
+                'error': 'PAK index contains no extractable file entries',
+                'stats': stats,
+                'out': str(out_dir),
+            }
+        if (
+            not stats.get('ok')
+            or skipped > 0
+            or written != expected
+            or actual_on_disk != expected
+        ):
+            return {
+                'ok': False,
+                'error': (
+                    f'incomplete PAK extraction: expected={expected}, '
+                    f'written={written}, on_disk={actual_on_disk}, skipped={skipped}'
+                ),
+                'stats': stats,
+                'out': str(out_dir),
+            }
+        return {
+            'ok': True,
+            'files': actual_on_disk,
+            'stats': stats,
+            'out': str(out_dir),
+        }
     elif hasattr(pak, 'extract_all'):
-        pak.extract_all(out_dir)
-    else:
-        # manual index walk
-        n = 0
+        # Legacy providers may not return statistics. Do not report success
+        # unless a non-empty index and exact on-disk file count can be verified.
         index = getattr(pak, '_index', {}) or {}
+        expected = sum(len(items) for items in index.values())
+        if expected <= 0:
+            return {'ok': False, 'error': 'PAK index contains no extractable file entries', 'out': str(out_dir)}
+        pak.extract_all(out_dir)
+        actual = sum(1 for p in out_dir.rglob('*') if p.is_file())
+        if actual != expected:
+            return {
+                'ok': False,
+                'error': f'incomplete legacy PAK extraction: expected={expected}, on_disk={actual}',
+                'out': str(out_dir),
+            }
+        return {'ok': True, 'files': actual, 'out': str(out_dir)}
+    else:
+        # Manual compatibility path: any failed entry or count mismatch is fatal.
+        n = 0
+        failures = []
+        index = getattr(pak, '_index', {}) or {}
+        expected = sum(len(items) for items in index.values())
+        if expected <= 0:
+            return {'ok': False, 'error': 'PAK index contains no extractable file entries', 'out': str(out_dir)}
         for dir_path, files in index.items():
             cur = out_dir / str(dir_path)
-            cur.mkdir(parents=True, exist_ok=True)
+            try:
+                cur.mkdir(parents=True, exist_ok=True)
+            except Exception as e:
+                failures.append({'path': str(dir_path), 'error': str(e)[:300]})
+                continue
             for name, entry in files.items():
                 try:
                     pak._write_to_disk(cur / name, entry)
                     n += 1
                 except Exception as e:
-                    console.print(f'write fail {name}: {e}')
-        return {'ok': True, 'files': n, 'out': str(out_dir)}
-    # count files
-    n = sum(1 for p in out_dir.rglob('*') if p.is_file())
-    return {'ok': True, 'files': n, 'out': str(out_dir)}
+                    failures.append({'path': str(PurePath(dir_path) / name), 'error': str(e)[:300]})
+        actual = sum(1 for p in out_dir.rglob('*') if p.is_file())
+        if failures or n != expected or actual != expected:
+            return {
+                'ok': False,
+                'error': f'incomplete manual PAK extraction: expected={expected}, written={n}, on_disk={actual}, failures={len(failures)}',
+                'failures': failures[:100],
+                'out': str(out_dir),
+            }
+        return {'ok': True, 'files': actual, 'out': str(out_dir)}
 
 
 def run_pak_repack(pak_path, modified_dir, output_pak, authorization_operation='pak.repack'):

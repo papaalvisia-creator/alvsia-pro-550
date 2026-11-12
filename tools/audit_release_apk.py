@@ -3,6 +3,7 @@
 from __future__ import annotations
 import hashlib
 import io
+import json
 import os
 import re
 import sys
@@ -19,6 +20,7 @@ EXPECTED_SEALED = {
     "alvsia_ultimate.alv",
     "alvsia_ultimate_compat.alv",
     "alvsia_features.alv",
+    "sm4_secret_registry.alv",
     "pinned_http.alv",
     "lua_engine_lua_decompiler_final.alv",
     "lua_engine_lua_protector.alv",
@@ -40,7 +42,7 @@ EXPECTED_SEALED = {
 }
 PROTECTED_MODULES = {
     "alvsia_bridge_impl", "alvsia_metadata", "alvsia_private", "alvsia_vm_protect", "alvsia_core", "alvsia_ultimate", "alvsia_ultimate_compat",
-    "alvsia_features", "pinned_http", "lua_engine/lua_decompiler_final",
+    "alvsia_features", "sm4_secret_registry", "pinned_http", "lua_engine/lua_decompiler_final",
     "lua_engine/lua_protector", "lua_engine/pattern_registry",
     "lua_output_validator", "lua_string_recover",
     "lua_engine/engine", "lua_engine/decompiler53", "lua_engine/bgmi", "lua_engine/t24",
@@ -129,6 +131,37 @@ def _manifest_declares_permission(data: bytes, permission: str) -> bool:
     return False
 
 
+def _audit_xop_config(config_bytes: bytes | None, required: bool, check, report: list[str]) -> None:
+    """Validate Xop settings only after packaging; baseline absence is informational."""
+    if config_bytes is None:
+        if required:
+            check(False, "Xop protector config packaged")
+        else:
+            report.append("INFO Xop protector config deferred to final XOP packaging")
+        return
+
+    try:
+        xop_config = json.loads(config_bytes.decode("utf-8"))
+    except (ValueError, UnicodeError):
+        xop_config = None
+    check(isinstance(xop_config, dict), "Xop protector config is valid JSON")
+    if not isinstance(xop_config, dict):
+        return
+    check(xop_config.get("protect_so") is True, "Xop native SO protection enabled")
+    check(xop_config.get("detect_proxy") is True and xop_config.get("net_guard") is True,
+          "Xop proxy detection and NetGuard enabled")
+    check(xop_config.get("so_decrypt_mode") == "lazy", "Xop SO decryption uses lazy mode")
+    check(xop_config.get("rasp_action") == 2, "Xop RASP enforce action enabled")
+    for hmac_name in ("dex_hmac", "code_hmac", "code_methods_hmac"):
+        check(bool(re.fullmatch(r"[0-9a-f]{64}", str(xop_config.get(hmac_name, "")))),
+              f"Xop {hmac_name} is a populated SHA-256 HMAC")
+    check(bool(re.fullmatch(r"[0-9a-f]{64}", str(xop_config.get("app_sign_sha256", "")))),
+          "Xop application signing certificate fingerprint is populated")
+    report.append("INFO insns_xor_key is a legacy field; native instruction protection is AES-GCM")
+    check(xop_config.get("encrypt_assets") is True, "Xop asset encryption enabled")
+    report.append("INFO Xop asset encryption excludes Chaquopy app.imy and engine license metadata by CI policy")
+
+
 def main() -> int:
     if len(sys.argv) != 2:
         print("usage: audit_release_apk.py <release.apk>", file=sys.stderr)
@@ -148,6 +181,16 @@ def main() -> int:
         with zipfile.ZipFile(io.BytesIO(data)) as outer:
             check(outer.testzip() is None, "APK ZIP integrity")
             names = set(outer.namelist())
+            xop_config_name = "assets/protector/config.json"
+            config_bytes = outer.read(xop_config_name) if xop_config_name in names else None
+            _audit_xop_config(config_bytes, REQUIRE_XOP_PROVENANCE, check, report)
+            version_metadata = sorted(
+                n for n in names
+                if n.startswith("META-INF/") and n.lower().endswith(".version")
+            )
+            check(not version_metadata,
+                  "dependency version metadata absent from APK" if not version_metadata
+                  else "dependency version metadata remains: " + ", ".join(version_metadata))
             forbidden_package_names = {"rebrand_config.txt", "app-metadata.properties"}
             packaged_forbidden = sorted(n for n in names if Path(n).name.lower() in forbidden_package_names)
             check(not packaged_forbidden,
@@ -222,9 +265,15 @@ def main() -> int:
                     check(expected_hash == hashlib.sha256(luau_native).hexdigest(),
                           "PumbaaDev Android executable checksum verified")
             check("assets/chaquopy/app.imy" in names, "Chaquopy app bundle packaged")
-            check("assets/nx/i.dat" in names, "sealed JAR index packaged")
+            nx_index_plain = "assets/nx/i.dat" in names
+            nx_index_xop = "assets/protector/aenc/nx/i.dat" in names
+            check(nx_index_plain or nx_index_xop,
+                  "sealed JAR index packaged" if (nx_index_plain or nx_index_xop) else "sealed JAR index missing")
             check(not any(n.startswith("assets/unluac/") and n.lower().endswith(".jar") for n in names),
                   "plaintext unluac JAR assets absent")
+            if nx_index_xop:
+                check("assets/protector/assets.map" in names, "Xop encrypted asset index packaged")
+                check("assets/protector/aenc/nx/i.dat" in names, "Xop PAS1 encrypted sealed JAR index packaged")
             vcs_entries = sorted(n for n in names if n.endswith("version-control-info.textproto"))
             check(not vcs_entries, "VCS revision metadata absent" if not vcs_entries else "VCS revision metadata absent; found: " + ", ".join(vcs_entries))
             dex_names = sorted(n for n in names if re.fullmatch(r"classes(?:[0-9]+)?\.dex", n))
@@ -256,12 +305,19 @@ def main() -> int:
             # Do not fail the release audit merely because that declared permission is present;
             # any future permission removal must be verified against PermissionHelper/tool usage.
             report.append("INFO compiled manifest READ_PHONE_STATE presence recorded; permission policy is source-reviewed")
-            blobs = sorted(n for n in names if n.startswith("assets/nx/") and n.endswith(".bin"))
+            blobs_plain = sorted(n for n in names if n.startswith("assets/nx/") and n.endswith(".bin"))
+            blobs_xop = sorted(n for n in names if n.startswith("assets/protector/aenc/nx/") and n.endswith(".bin"))
+            blobs = blobs_xop if blobs_xop else blobs_plain
             check(len(blobs) >= 3, f"sealed JAR asset count >= 3 (found {len(blobs)})")
-            for n in blobs:
-                check(outer.read(n).startswith(ASSET_MAGIC), f"sealed JAR header: {n}")
+            if blobs_xop:
+                for n in blobs_xop:
+                    check(outer.read(n).startswith(b"PAS1"), f"Xop PAS1 sealed JAR header: {n}")
+            else:
+                for n in blobs_plain:
+                    check(outer.read(n).startswith(ASSET_MAGIC), f"sealed JAR header: {n}")
             index = outer.read("assets/nx/i.dat") if "assets/nx/i.dat" in names else b""
-            check(index.startswith(ASSET_MAGIC), "sealed JAR index header")
+            if index:
+                check(index.startswith(ASSET_MAGIC), "sealed JAR index header")
             imy = outer.read("assets/chaquopy/app.imy") if "assets/chaquopy/app.imy" in names else b""
             try:
                 with zipfile.ZipFile(io.BytesIO(imy)) as inner:

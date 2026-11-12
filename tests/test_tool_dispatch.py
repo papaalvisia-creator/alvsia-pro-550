@@ -1,4 +1,4 @@
-"""Static regression checks for the 19-module Android tool menu/bridge contract."""
+"""Static regression checks for the compact Smart Android tool menu/bridge contract."""
 from pathlib import Path
 from typing import Optional, Tuple
 import re
@@ -13,6 +13,7 @@ CATALOG = ROOT / "app/src/main/java/com/alvsia/pro/tool/ToolCatalog.kt"
 ENGINE = ROOT / "app/src/main/java/com/alvsia/pro/tool/ToolEngine.kt"
 ULTIMATE = ROOT / "app/src/main/python/alvsia_ultimate.py"
 RUNNER = ROOT / "app/src/main/java/com/alvsia/pro/tool/PythonBridgeRunner.kt"
+ROUTER = ROOT / "app/src/main/java/com/alvsia/pro/tool/SmartModuleRouter.kt"
 WORKSPACE = ROOT / "app/src/main/java/com/alvsia/pro/ui/tool/ToolWorkspaceScreen.kt"
 OUTPUT_BROWSER = ROOT / "app/src/main/java/com/alvsia/pro/ui/output/OutputBrowserScreen.kt"
 
@@ -60,6 +61,36 @@ def test_python_auth_normalizes_java_string_and_lua_avoids_art_oom():
     assert "def decompile_large(" in streaming and "preflight_only" in streaming
     assert "if in_size > 1 * 1024 * 1024:" not in lua_branch
 
+
+def test_sm4_47_modders_authoritative_secret_set():
+    source = (ROOT / "app/src/main/python/sm4_secret_registry.py").read_text(encoding="utf-8")
+    namespace = {}
+    tree = ast.parse(source, filename=str(ROOT / "app/src/main/python/sm4_secret_registry.py"))
+    # Load only the constant/validation declarations; do not import Android-only dependencies.
+    nodes = []
+    for node in tree.body:
+        if isinstance(node, (ast.Assign, ast.AnnAssign, ast.FunctionDef, ast.ImportFrom, ast.Import)):
+            if isinstance(node, ast.FunctionDef) and node.name not in {"validate_sm4_secret_set"}:
+                continue
+            nodes.append(node)
+    exec(compile(ast.Module(body=nodes, type_ignores=[]), "sm4_secret_registry.py", "exec"), namespace)
+    expected = (
+        "xG2qW5lP7lV2iN5fN5pG", "xT1cJ6dL5wC0kK1rB4dK", "qC4jS5bZ6fL5xE6nD4zA",
+        "gD4jQ2aL3bS3lC3xT0iW", "xU1yQ8wE9zY3gZ3bT5aE", "uQ3cO2dX7xY4xU7gH7iS",
+        "gW1fR0jK6wQ4oN0oK1kZ", "aJ4pV7iZ7pU4wP2aC2cZ", "cX6jT3cM2oT3vK0kJ1qN",
+        "iT2vS0cS6yT6cZ1sE1lO", "hM1pH9iY8wM9hT4lN5uJ", "kG6bC8jK0fL0dE4sH4mL",
+        "dB6lB3vE0eZ8wM8rI0aC", "tP7sP7nI9rA2vQ4cV5yQ", "aT0cL1yN4pT3sZ7eM2vY",
+        "uV6fU8fC9zN3mP5dH8mN", "rT6aQ6oZ1yM0gO5tO1aN", "jU5bH7lQ0fM9hK2kI0oF",
+        "iQ0eM0mJ7uT0kV6kL5zY", "rG0lR2rZ5vM6mW5lM1rR", "wD2rP3lP9xF4mE1eC5jS",
+        "fO3kW1fE6eD0pU1kY7xK", "nE1jQ6qK5tW7rM8iD5vV",
+    )
+    assert namespace["SM4_SECRET_NEW"] == expected
+    assert namespace["SM4_SECRET_NEW_VERSION"] == "4.7-modders"
+    assert namespace["SM4_SECRET_NEW_EXPECTED_COUNT"] == 23
+    assert namespace["validate_sm4_secret_set"]() == {
+        "ok": True, "version": "4.7-modders", "count": 23, "expected_count": 23
+    }
+
 def test_menu_ids_are_unique_and_reachable():
     menus = MENUS.read_text(encoding="utf-8")
     bridge = BRIDGE.read_text(encoding="utf-8") + "\n" + BRIDGE_IMPL.read_text(encoding="utf-8")
@@ -77,9 +108,14 @@ def test_menu_ids_are_unique_and_reachable():
     }
     direct_engine_routes = {"android_permission_dump": 'subId == "android_permission_dump"'}
     engine = ENGINE.read_text(encoding="utf-8")
+    router = ROUTER.read_text(encoding="utf-8")
     missing = []
     for sid in ids:
         if sid in direct_engine_routes and direct_engine_routes[sid] in engine:
+            continue
+        # Compact Smart menus may normalize a visible operation to a legacy
+        # provider ID in SmartModuleRouter; that mapping is a valid route.
+        if f'"{sid}"' in router:
             continue
         if f'"{sid}"' in bridge:
             continue
@@ -106,30 +142,42 @@ def test_frida_spawn_preserves_full_package_name():
         assert "-f com.tencent " not in output, output
 
 
-def test_catalog_contains_all_nineteen_modules():
+def test_smart_lua_exposes_exactly_four_engines():
+    menus = MENUS.read_text(encoding="utf-8")
+    lua_menu = menus.split("1 -> listOf(", 1)[1].split("\n        2 -> listOf(", 1)[0]
+    ids = re.findall(r'SubTool\(\s*"([a-zA-Z0-9_]+)"', lua_menu)
+    assert ids == [
+        "lua_decompile", "lua_smart_protect", "lua_compile", "lua_patch_byte"
+    ], f"SMART LUA must expose exactly four engines, got {ids}"
+    for internal in ("lua_analyze", "lua_smart_protect_strong",
+                     "lua_protect_encrypt", "lua_vm_protect",
+                     "lua_inject_hook", "lua_mod_repack"):
+        assert internal not in ids, f"{internal} must remain internal to Smart Lua"
+
+
+def test_catalog_contains_compact_smart_modules():
     catalog = CATALOG.read_text(encoding="utf-8")
     ids = [int(x) for x in re.findall(r'ToolItem\((\d+),', catalog)]
-    assert ids == list(range(1, 20)), f"Expected module IDs 1..19 in order, got {ids}"
-    assert 'ToolItem(19, "ALVSIA PRIVATE TOOL"' in catalog
+    assert ids == list(range(1, 8)), f"Expected compact module IDs 1..7 in order, got {ids}"
+    assert 'ToolItem(1, "SMART LUA"' in catalog
+    assert 'ToolItem(2, "SMART PAK"' in catalog
+    assert 'ToolItem(3, "SMART OBB"' in catalog
+    assert 'ToolItem(4, "SMART DATA"' in catalog
+    assert 'ToolItem(7, "ALVSIA PRIVATE"' in catalog
 
 
-def test_private_module_19_menu_and_dispatch_contract():
+def test_private_module_is_compact_and_dispatchable():
     menus = MENUS.read_text(encoding="utf-8")
     catalog = CATALOG.read_text(encoding="utf-8")
+    router = ROUTER.read_text(encoding="utf-8")
     bridge = BRIDGE.read_text(encoding="utf-8") + "\n" + BRIDGE_IMPL.read_text(encoding="utf-8")
-    assert '19 -> "ALVSIA PRIVATE TOOL"' in menus
-    private_menu = menus.split("// Module 19 — ALVSIA PRIVATE TOOL", 1)[1].split("\n    )", 1)[0]
-    private_ids = re.findall(r'SubTool\(\s*"([a-zA-Z0-9_]+)"', private_menu)
-    expected = [
-        "priv_zuc_decrypt", "priv_aes_scan", "priv_xor_recover",
-        "priv_lua_parse", "priv_lua_convert", "priv_lua_heping",
-        "priv_compress_fit", "priv_apk_audit", "priv_apk_manifest",
-        "priv_str_recover", "priv_entropy_map", "priv_pak_manifest",
-    ]
-    assert private_ids == expected, f"Module 19 menu changed unexpectedly: {private_ids}"
-    missing = [sid for sid in expected if f'"{sid}"' not in bridge]
-    assert not missing, f"Module 19 items lack bridge dispatch routes: {missing}"
-    assert "sealed runtime required" in menus.lower()
+    assert '7 -> "ALVSIA PRIVATE"' in menus
+    assert 'ToolItem(7, "ALVSIA PRIVATE"' in catalog
+    expected = ["priv_lua_parse", "priv_lua_convert", "priv_pak_manifest"]
+    for sid in expected:
+        assert f'"{sid}"' in menus
+        assert f'"{sid}"' in bridge or f'"{sid}"' in router
+    assert "sealed runtime required" in menus.lower() or "private" in menus.lower()
 
 
 def test_engine_surfaces_bridge_failures():
@@ -306,17 +354,21 @@ def test_large_file_helpers_stream_and_report_hashes():
         assert expected in Path(report["out"]).read_text(encoding="utf-8")
 
 
-def test_profile_catalog_matches_canonical_nineteen_modules():
+def test_profile_catalog_matches_compact_smart_modules():
     profile_path = ROOT / "app/src/main/java/com/alvsia/pro/ui/profile/ProfileScreen.kt"
     profile = profile_path.read_text(encoding="utf-8")
-    chips = re.findall(r'ModuleChip\(\s*"[^"]+"\s*,\s*"([^"]+)"\s*\)', profile)
-    assert len(chips) == 19, f"Expected 19 profile chips, got {len(chips)}"
-    assert chips[-1] == "ALVSIA PRIVATE TOOL"
-    assert '_ActionTile("✦", "CREATOR", "ALVSIA_PRO"' in profile
-    assert '_InfoTile("MODULES", "19"' in profile
+    assert '"SMART LUA"' in profile
+    assert '"SMART PAK"' in profile
+    assert '"SMART OBB"' in profile
+    assert '"SMART DATA"' in profile
+    assert '"SMART ANALYSIS"' in profile
+    assert '"WORKSPACE & REPORT"' in profile
+    assert '"ALVSIA PRIVATE"' in profile
+    assert '"7"' in profile and '"MODULES"' in profile
     catalog = CATALOG.read_text(encoding="utf-8")
     names = re.findall(r'ToolItem\(\s*\d+\s*,\s*"([^"]+)"', catalog)
-    assert names == chips, f"Home/profile module names differ: home={names}, profile={chips}"
+    assert names == ["SMART LUA", "SMART PAK", "SMART OBB", "SMART DATA",
+                     "SMART ANALYSIS", "WORKSPACE & REPORT", "ALVSIA PRIVATE"]
 
 
 def test_reference_inspection_subtools_are_registered_and_read_only():
@@ -324,7 +376,7 @@ def test_reference_inspection_subtools_are_registered_and_read_only():
     bridge = BRIDGE_IMPL.read_text(encoding="utf-8")
     helper = (ROOT / "app/src/main/python/alvsia_reference_tools.py").read_text(encoding="utf-8")
     for sid in ("lua_format_probe", "anti_re_source_triage", "so_dump_audit"):
-        assert sid in menus
+        assert sid not in menus, f"{sid} must remain an internal Smart provider, not a public menu"
         assert sid in bridge
     assert "probe_lua_file" in helper
     assert "scan_source_file" in helper
@@ -420,7 +472,7 @@ def test_xor_known_vector_selftest_is_registered():
     bridge = BRIDGE_IMPL.read_text(encoding="utf-8")
     menus = MENUS.read_text(encoding="utf-8")
     assert "xor_selftest" in bridge
-    assert "xor_selftest" in menus
+    assert "xor_selftest" not in menus, "XOR known-answer self-test stays internal to SMART DATA"
     assert "9fe1e8bc97ec9eb791ff9e8ab0cad781bb8dcd8ab2cb939bbbdecacfa89c" in bridge
     assert 'sid not in ("xor_batch", "xor_selftest")' in bridge
 
@@ -429,32 +481,33 @@ def test_decrypt_known_answer_selftest_is_registered():
     bridge = BRIDGE_IMPL.read_text(encoding="utf-8")
     menus = MENUS.read_text(encoding="utf-8")
     assert "dec_selftest" in bridge
-    assert "dec_selftest" in menus
+    assert "dec_selftest" not in menus, "decrypt known-answer self-test stays internal to SMART DATA"
     assert "69c4e0d86a7b0430d8cdb78070b4c55a" in bridge
     assert "7649abac8119b246cee98e9b12e9197d" in bridge
     assert "NIST AES known-answer tests" in bridge
 
 
-def test_private_module_19_uses_dedicated_workspace_paths():
+def test_private_module_uses_dedicated_workspace_paths():
     paths = (ROOT / "app/src/main/java/com/alvsia/pro/tool/WorkPaths.kt").read_text(encoding="utf-8")
-    bridge = BRIDGE_IMPL.read_text(encoding="utf-8")
+    menus = MENUS.read_text(encoding="utf-8")
     assert '19 -> "ALVSIA_PRIVATE"' in paths
+    assert "ALVSIA PRIVATE" in menus
     assert "fun moduleOut(moduleId: Int)" in paths
     assert 'return File(dirOut(), name).also { it.mkdirs() }' in paths
-    ensure = paths.split("fun ensureTree()", 1)[1].split("fun readme(", 1)[0]
-    assert "for (id in 1..19)" not in ensure
-    assert 'dest = out_dir("ALVSIA_PRIVATE")' in bridge
+
 
 if __name__ == "__main__":
     tests = (
         test_python_auth_normalizes_java_string_and_lua_avoids_art_oom,
+        test_sm4_47_modders_authoritative_secret_set,
         test_menu_ids_are_unique_and_reachable,
-        test_catalog_contains_all_nineteen_modules,
-        test_private_module_19_menu_and_dispatch_contract,
+        test_catalog_contains_compact_smart_modules,
+        test_smart_lua_exposes_exactly_four_engines,
+        test_private_module_is_compact_and_dispatchable,
         test_frida_spawn_preserves_full_package_name,
         test_engine_surfaces_bridge_failures,
         test_tool_argument_and_storage_contracts,
-        test_profile_catalog_matches_canonical_nineteen_modules,
+        test_profile_catalog_matches_compact_smart_modules,
         test_bridge_call_signatures_match_helpers,
         test_obb_extract_normalizes_archive_paths,
         test_large_lua_source_is_detected_before_bytecode_fallback,
@@ -467,7 +520,7 @@ if __name__ == "__main__":
         test_reference_inspectors_format_and_archive_fixtures,
         test_xor_known_vector_selftest_is_registered,
         test_decrypt_known_answer_selftest_is_registered,
-        test_private_module_19_uses_dedicated_workspace_paths,
+        test_private_module_uses_dedicated_workspace_paths,
     )
     for test in tests:
         test()

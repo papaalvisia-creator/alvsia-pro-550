@@ -38,7 +38,7 @@ profile = read(ROOT / "app/src/main/java/com/alvsia/pro/ui/profile/ProfileScreen
 required_modules = {
     "alvsia_bridge_impl.py", "alvsia_metadata.py", "alvsia_private.py", "alvsia_vm_protect.py", "lua_engine/pattern_registry.py",
     "alvsia_core.py", "alvsia_ultimate.py",
-    "alvsia_ultimate_compat.py", "alvsia_features.py", "pinned_http.py",
+    "alvsia_ultimate_compat.py", "alvsia_features.py", "sm4_secret_registry.py", "pinned_http.py",
     "lua_engine/lua_decompiler_final.py", "lua_engine/lua_protector.py",
     "lua_engine/t24.py",
     "lua_output_validator.py", "lua_string_recover.py",
@@ -103,8 +103,16 @@ if "tools/audit_release_apk.py" not in codemagic or "tools/audit_release_apk.py"
     fail.append("actual APK audit is not wired into both release pipelines")
 if 'python3 tools/audit_release_apk.py "$SIGNED_APK"' not in codemagic:
     fail.append("CodeMagic must audit the exact final signed APK selected for signing after signing")
-if 'aapt" dump badging "$SIGNED_APK"' not in codemagic or "versionCode='98' versionName='5.5.2-hardened'" not in codemagic:
-    fail.append("CodeMagic must verify final APK package, versionCode, and versionName")
+release_code = re.search(r"versionCode\s*=\s*(\d+)", gradle)
+release_name = re.search(r'versionName\s*=\s*"([^"]+)"', gradle)
+expected_release_identity = (
+    f"versionCode='{release_code.group(1)}' versionName='{release_name.group(1)}'"
+    if release_code and release_name else ""
+)
+if ('aapt" dump badging "$SIGNED_APK"' not in codemagic
+        or not expected_release_identity
+        or expected_release_identity not in codemagic):
+    fail.append("CodeMagic must verify final APK package, versionCode, and versionName against Gradle")
 if 'zipalign" -c -v 4 "$SIGNED_APK"' not in codemagic or 'sha256sum "$SIGNED_APK"' not in codemagic:
     fail.append("CodeMagic must verify final APK alignment and emit its SHA-256 fingerprint")
 if "BuildConfig.VERSION_NAME" not in profile:
