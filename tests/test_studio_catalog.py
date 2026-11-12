@@ -37,11 +37,11 @@ class SmartCatalogTests(unittest.TestCase):
     def test_output_handoff_catalog_targets_the_same_seven_smart_modules(self):
         source = (ROOT / "app/src/main/java/com/alvsia/pro/ui/home/StudioCatalog.kt").read_text(encoding="utf-8")
         entries = re.findall(
-            r'StudioItem\\("([^"]+)",\\s*"([^"]+)",.*?listOf\\(([^)]*)\\)\\)',
+            r'StudioItem\("([^"]+)",\s*"([^"]+)",.*?listOf\(([^)]*)\)\)',
             source,
         )
         self.assertEqual(len(entries), 7)
-        ids = [int(value) for _, _, raw in entries for value in re.findall(r"\\d+", raw)]
+        ids = [int(value) for _, _, raw in entries for value in re.findall(r"\d+", raw)]
         self.assertEqual(ids, list(range(1, 8)))
 
     def test_legacy_provider_dispatch_is_internal_and_reachable(self):
