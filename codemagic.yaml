@@ -210,7 +210,10 @@ workflows:
             -o "$CM_BUILD_DIR/ALVISIA_PRO_6.0.0-smart-premium-xop_candidate_work.apk" \
             --shell-dir "$XOP_DIR/executable/shell-files" \
             --profile industry \
-            --protect-so
+            --protect-so \
+            --encrypt-assets \
+            --detect-proxy \
+            --so-decrypt-mode lazy
           CANDIDATE="$CM_BUILD_DIR/ALVISIA_PRO_6.0.0-smart-premium-xop_candidate_work.apk"
           test -s "$CANDIDATE"
           # Structural regression gates: required runtime payloads, package/version,
