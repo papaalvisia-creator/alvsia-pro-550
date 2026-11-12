@@ -22,7 +22,7 @@ object AssetVault {
         path.isNotBlank() &&
             !path.startsWith("/") &&
             '\u0000' !in path &&
-            '\\\\' !in path &&
+            '\\' !in path &&
             path.split('/').all { it.isNotBlank() && it != "." && it != ".." }
 
     private fun safeJarTarget(root: File, name: String): File? {
