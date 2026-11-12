@@ -1638,8 +1638,8 @@ class SM4AllKeyFinder(SM4KeyFinder):
         seen_4: set = set()
         seen_2: set = set()
         chunk_size = 8 * 1024 * 1024
-        utf16_re = _re.compile(rb'(?:[\\x20-\\x7e]\\x00){20}')
-        utf8_re = _re.compile(rb'[\\x21-\\x7e]{20}')
+        utf16_re = _re.compile(rb'(?:[\x20-\x7e]\x00){20}')
+        utf8_re = _re.compile(rb'[\x21-\x7e]{20}')
 
         for so_path in sorted(Path(self.so_folder).rglob('*.so')):
             try:
