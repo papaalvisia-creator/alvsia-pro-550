@@ -15,12 +15,6 @@ from pathlib import Path
 from typing import Any
 
 
-from sm4_secret_registry import (
-    SM4_SECRET_NEW,
-    SM4_SECRET_NEW_VERSION,
-    SM4_SECRET_NEW_EXPECTED_COUNT,
-    validate_sm4_secret_set,
-)
 
 
 def _sha256_file(path: Path, chunk_size: int = 1024 * 1024) -> str:
@@ -343,9 +337,6 @@ def vm_protect(input_path, output_dir) -> dict:
 
 
 def execute(operation, input_path, output_dir, **kwargs) -> dict:
-    sm4 = validate_sm4_secret_set()
-    if not sm4["ok"]:
-        return _result(False, str(operation), error="authoritative SM4 4.7 key-set validation failed", sm4=sm4)
     op = str(operation).strip().lower()
     if op == "decompile":
         return decompile(input_path, output_dir, jars_dir=kwargs.get("jars_dir"))
