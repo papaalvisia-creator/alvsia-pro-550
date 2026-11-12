@@ -94,7 +94,7 @@ jobs:
           python3 -m unittest tests.test_security_wiring tests.test_security_fabric
           python3 -m pip install --disable-pip-version-check pytest && python3 -m pytest -q tests/test_tool_dispatch.py
           python3 -m unittest tests.test_live_workspace_and_file_limits
-          python3 -m py_compile app/src/main/python/smart_lua_engine.py app/src/main/python/module_adapters.py app/src/main/python/alvsia_bridge_impl.py
+          python3 -m py_compile app/src/main/python/smart_lua_engine.py app/src/main/python/sm4_secret_registry.py app/src/main/python/module_adapters.py app/src/main/python/alvsia_bridge_impl.py
           python3 tests/test_lua_engine.py
           python3 -m pytest -q tests/test_lua_orchestrator.py
           python3 tests/test_vm_protect_roundtrip.py
