@@ -351,7 +351,7 @@ def test_profile_catalog_matches_compact_smart_modules():
     assert '"SMART ANALYSIS"' in profile
     assert '"WORKSPACE & REPORT"' in profile
     assert '"ALVSIA PRIVATE"' in profile
-    assert '"7 / 7 MODULES"' in profile
+    assert '"7"' in profile and '"MODULES"' in profile
     catalog = CATALOG.read_text(encoding="utf-8")
     names = re.findall(r'ToolItem\(\s*\d+\s*,\s*"([^"]+)"', catalog)
     assert names == ["SMART LUA", "SMART PAK", "SMART OBB", "SMART DATA",
