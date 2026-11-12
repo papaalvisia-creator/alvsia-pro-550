@@ -103,8 +103,8 @@ if "tools/audit_release_apk.py" not in codemagic or "tools/audit_release_apk.py"
     fail.append("actual APK audit is not wired into both release pipelines")
 if 'python3 tools/audit_release_apk.py "$SIGNED_APK"' not in codemagic:
     fail.append("CodeMagic must audit the exact final signed APK selected for signing after signing")
-release_code = re.search(r"versionCode\\s*=\\s*(\\d+)", gradle)
-release_name = re.search(r'versionName\\s*=\\s*"([^"]+)"', gradle)
+release_code = re.search(r"versionCode\s*=\s*(\d+)", gradle)
+release_name = re.search(r'versionName\s*=\s*"([^"]+)"', gradle)
 expected_release_identity = (
     f"versionCode='{release_code.group(1)}' versionName='{release_name.group(1)}'"
     if release_code and release_name else ""
