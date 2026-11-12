@@ -98,6 +98,8 @@ android {
             excludes += setOf(
                 "META-INF/version-control-info.textproto",
                 "**/version-control-info.textproto",
+                "META-INF/*.version",
+                "**/META-INF/*.version",
                 "META-INF/*.kotlin_module",
                 "META-INF/DEPENDENCIES",
                 "META-INF/LICENSE.md",
