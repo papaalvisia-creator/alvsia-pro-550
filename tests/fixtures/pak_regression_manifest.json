@@ -4,5 +4,11 @@
     "size": 713299,
     "source": "papaalvisia-creator/kumpulan-source-tool:samples/pak/game_patch_4.7.0.21756.pak",
     "expected_issue": "plain ZSTD blocks must not construct ZstdDecompressor(None)"
+  },
+  "game_patch_4.7.0.21752.pak": {
+    "sha256": "e47e93bd934ec830b2b908c5806ce1779354237e1825c7b73a8c2b37d8880968",
+    "size": 2704793,
+    "source": "papaalvisia-creator/kumpulan-source-tool:samples/pak/game_patch_4.7.0.21752.pak",
+    "expected_issue": "full Smart PAK extraction plus Lua candidate routing/decompile regression corpus"
   }
 }
