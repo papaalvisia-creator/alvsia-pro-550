@@ -1,0 +1,239 @@
+"""Unified Smart Lua engine.
+
+One mechanism for Lua decompile, analysis, protection, compile/recompile and
+injection. Existing engines are providers behind this router, never separate
+user-facing tools.
+"""
+from __future__ import annotations
+
+import hashlib
+import os
+import shutil
+import subprocess
+from pathlib import Path
+from typing import Any
+
+
+# The repository currently contains 22 verified SM4_SECRET_NEW values. Do not
+# invent a 23rd value when the source does not contain it.
+SM4_SECRET_NEW = (
+    "xG2qW5lP7lV2iN5fN5pG",
+    "xT1cJ6dL5wC0kK1rB4dK",
+    "qC4jS5bZ6fL5xE6nD4zA",
+    "gD4jQ2aL3bS3lC3xT0iW",
+    "xU1yQ8wE9zY3gZ3bT5aE",
+    "uQ3cO2dX7xY4xU7gH7iS",
+    "gW1fR0jK6wQ4oN0oK1kZ",
+    "aJ4pV7iZ7pU4wP2aC2cZ",
+    "cX6jT3cM2oT3vK0kJ1qN",
+    "iT2vS0cS6yT6cZ1sE1lO",
+    "hM1pH9iY8wM9hT4lN5uJ",
+    "kG6bC8jK0fL0dE4sH4mL",
+    "dB6lB3vE0eZ8wM8rI0aC",
+    "tP7sP7nI9rA2vQ4cV5yQ",
+    "aT0cL1yN4pT3sZ7eM2vY",
+    "uV6fU8fC9zN3mP5dH8mN",
+    "rT6aQ6oZ1yM0gO5tO1aN",
+    "jU5bH7lQ0fM9hK2kI0oF",
+    "iQ0eM0mJ7uT0kV6kL5zY",
+    "wD2rP3lP9xF4mE1eC5jS",
+    "rG0lR2rZ5vM6mW5lM1rR",
+    "fO3kW1fE6eD0pU1kY7xK",
+)
+
+
+def _result(ok: bool, operation: str, **extra: Any) -> dict:
+    out = {"ok": bool(ok), "module": "lua", "operation": operation}
+    out.update(extra)
+    return out
+
+
+def detect(input_path: str | Path) -> dict:
+    p = Path(input_path)
+    if not p.is_file():
+        return _result(False, "detect", error="input file not found")
+    with p.open("rb") as fh:
+        head = fh.read(64)
+    if head.startswith(b"\x1bLua"):
+        version = head[4] if len(head) > 4 else None
+        return _result(True, "detect", format="lua-bytecode", version=hex(version) if version else None)
+    if head.startswith(b"\x1bLJ"):
+        return _result(True, "detect", format="luajit-bytecode")
+    try:
+        p.read_text(encoding="utf-8")
+        return _result(True, "detect", format="lua-source")
+    except UnicodeDecodeError:
+        return _result(True, "detect", format="binary/unknown")
+
+
+def decompile(input_path, output_dir, jars_dir=None) -> dict:
+    from alvsia_features import run_lua_smart
+    p = Path(input_path)
+    out = Path(output_dir)
+    out.mkdir(parents=True, exist_ok=True)
+    result = dict(run_lua_smart(p, out, jars_dir=jars_dir) or {})
+    result.update({"module": "lua", "operation": "decompile"})
+    if result.get("ok") and not result.get("out"):
+        return _result(False, "decompile", error="decompiler reported success without a source artifact", diagnostics=result)
+    return result
+
+
+def analyze(input_path, output_dir) -> dict:
+    from alvsia_features import run_lua_analyze
+    p = Path(input_path)
+    out = Path(output_dir)
+    out.mkdir(parents=True, exist_ok=True)
+    report = run_lua_analyze(str(p), out)
+    return _result(bool(isinstance(report, dict) and report.get("ok", True)), "analyze", report=report)
+
+
+def protect(input_path, output_path, profile="balanced") -> dict:
+    from lua_engine.protection_pipeline import protect_file
+    return dict(protect_file(input_path, output_path, profile))
+
+
+def _find_luac(jars_dir=None, work_dir=None) -> Path | None:
+    candidates = []
+    env = os.environ.get("ALVSIA_LUAC", "").strip()
+    if env:
+        candidates.append(Path(env))
+    for root in (jars_dir, work_dir):
+        if root:
+            r = Path(root)
+            candidates.extend([r / "luac", r / "EXES" / "luac"])
+    candidates.extend([
+        Path("/data/data/com.alvsia.pro/files/EXES/luac"),
+        Path("/data/data/com.alvsia.pro/files/chaquopy/AssetFinder/EXES/luac"),
+    ])
+    for p in candidates:
+        if p.is_file() and os.access(p, os.X_OK):
+            return p
+    for name in ("luac", "luac5.3", "luac53", "luac5.1"):
+        found = shutil.which(name)
+        if found:
+            return Path(found)
+    return None
+
+
+def compile_source(input_path, output_dir, jars_dir=None, work_dir=None) -> dict:
+    src = Path(input_path)
+    if not src.is_file():
+        return _result(False, "compile", error="input Lua source not found")
+    out = Path(output_dir)
+    out.mkdir(parents=True, exist_ok=True)
+    compiler = _find_luac(jars_dir, work_dir)
+    if compiler is None:
+        return _result(False, "compile", error="compatible luac compiler is not packaged or executable; no fake bytecode was generated")
+    dest = out / (src.stem + ".luac")
+    try:
+        proc = subprocess.run(
+            [str(compiler), "-o", str(dest), str(src)],
+            capture_output=True, timeout=120,
+        )
+        if proc.returncode != 0 or not dest.is_file() or dest.stat().st_size == 0:
+            dest.unlink(missing_ok=True)
+            err = (proc.stderr or proc.stdout or b"").decode("utf-8", "replace").strip()
+            return _result(False, "compile", error=err[:1200] or "luac compilation failed", compiler=str(compiler))
+        raw = dest.read_bytes()
+        if not raw.startswith(b"\x1bLua"):
+            dest.unlink(missing_ok=True)
+            return _result(False, "compile", error="compiler output failed Lua bytecode validation", compiler=str(compiler))
+        return _result(True, "compile", out=str(dest), bytes=dest.stat().st_size,
+                       sha256=hashlib.sha256(raw).hexdigest(), compiler=str(compiler))
+    except subprocess.TimeoutExpired:
+        dest.unlink(missing_ok=True)
+        return _result(False, "compile", error="compiler timeout; output discarded", compiler=str(compiler))
+
+
+def inject(input_path, output_dir, sub_id, work_dir) -> dict:
+    import alvsia_ultimate as ult
+    src = Path(input_path)
+    out = Path(output_dir)
+    out.mkdir(parents=True, exist_ok=True)
+    if sub_id == "lua_patch_byte":
+        cfg = Path(work_dir) / "lua_patch.json"
+        if not cfg.is_file():
+            return _result(False, "inject", error="WORK/lua_patch.json is required")
+        import json
+        data = json.loads(cfg.read_text(encoding="utf-8"))
+        return _result(True, "inject", mode="patch", result=ult.lua_patch_bytecode(
+            src, out, data.get("offset", ""), data.get("patch_hex", data.get("bytes", ""))))
+    if sub_id == "lua_inject_hook":
+        hook = Path(work_dir) / "lua_hook.lua"
+        return _result(True, "inject", mode="hook", result=ult.lua_inject_hook(src, out, str(hook)))
+    if sub_id == "lua_mod_repack":
+        mod_dir = Path(work_dir) / "MOD"
+        if not mod_dir.is_dir():
+            return _result(False, "inject", error="WORK/MOD is required for PAK repack")
+        dest = out / (src.stem + "_modded.pak")
+        import alvsia_core as core
+        result = core.run_pak_smart_repack(src, mod_dir, dest)
+        if not result.get("ok"):
+            result = core.run_pak_repack(src, mod_dir, dest)
+        return _result(bool(result.get("ok")), "inject", mode="pak-repack", result=result)
+    return _result(False, "inject", error="unknown Smart Lua inject mode")
+
+
+def protect_encrypt(input_path, output_dir, work_dir, restore=False) -> dict:
+    # Keep the existing ALVLUA1 authenticated format for compatibility.
+    from Crypto.Cipher import AES
+    from Crypto.Random import get_random_bytes
+    src = Path(input_path)
+    key_file = Path(work_dir) / "lua_protect_key.txt"
+    if not key_file.is_file():
+        return _result(False, "protect", error="WORK/lua_protect_key.txt is required")
+    key_hex = key_file.read_text(encoding="utf-8").strip()
+    if len(key_hex) != 64:
+        return _result(False, "protect", error="Lua protection key must be 64 hex characters")
+    key = bytes.fromhex(key_hex)
+    out = Path(output_dir)
+    out.mkdir(parents=True, exist_ok=True)
+    raw = src.read_bytes()
+    if not restore:
+        nonce = get_random_bytes(12)
+        cipher = AES.new(key, AES.MODE_GCM, nonce=nonce, mac_len=16)
+        cipher.update(b"ALVLUA1")
+        ciphertext, tag = cipher.encrypt_and_digest(raw)
+        dest = out / (src.stem + ".alvlua")
+        dest.write_bytes(b"ALVLUA1" + nonce + tag + ciphertext)
+        return _result(True, "protect", mode="encrypt", out=str(dest), bytes=dest.stat().st_size)
+    if len(raw) < 35 or raw[:7] != b"ALVLUA1":
+        return _result(False, "protect", error="invalid ALVLUA1 payload")
+    nonce, tag, ciphertext = raw[7:19], raw[19:35], raw[35:]
+    cipher = AES.new(key, AES.MODE_GCM, nonce=nonce, mac_len=16)
+    cipher.update(b"ALVLUA1")
+    try:
+        plain = cipher.decrypt_and_verify(ciphertext, tag)
+    except ValueError:
+        return _result(False, "protect", error="authentication failed")
+    dest = out / (src.stem + ".lua")
+    dest.write_bytes(plain)
+    return _result(True, "protect", mode="restore", out=str(dest), bytes=len(plain))
+
+
+def vm_protect(input_path, output_dir) -> dict:
+    from alvsia_vm_protect import vm_protect
+    src = Path(input_path)
+    dest = Path(output_dir) / (src.stem + ".alvlua3.lua")
+    return dict(vm_protect(src, dest, output_format="lua", num_decoys=1024))
+
+
+def execute(operation, input_path, output_dir, **kwargs) -> dict:
+    op = str(operation).strip().lower()
+    if op == "decompile":
+        return decompile(input_path, output_dir, jars_dir=kwargs.get("jars_dir"))
+    if op == "analyze":
+        return analyze(input_path, output_dir)
+    if op == "protect":
+        return protect(input_path, output_dir, kwargs.get("profile", "balanced"))
+    if op == "compile":
+        return compile_source(input_path, output_dir, jars_dir=kwargs.get("jars_dir"), work_dir=kwargs.get("work_dir"))
+    if op == "inject":
+        return inject(input_path, output_dir, kwargs.get("sub_id", ""), kwargs.get("work_dir"))
+    if op == "encrypt":
+        return protect_encrypt(input_path, output_dir, kwargs.get("work_dir"), restore=False)
+    if op == "restore":
+        return protect_encrypt(input_path, output_dir, kwargs.get("work_dir"), restore=True)
+    if op == "vm-protect":
+        return vm_protect(input_path, output_dir)
+    return _result(False, op, error="unsupported Smart Lua operation")
