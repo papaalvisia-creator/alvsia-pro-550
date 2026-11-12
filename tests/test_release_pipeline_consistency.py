@@ -59,6 +59,9 @@ if "assetBytes.fill(0)" not in bridge:
     raise SystemExit("FAIL: decrypted Unluac asset bytes are not cleared after materialization")
 if "Protected APK: fail closed" not in asset_vault:
     raise SystemExit("FAIL: protected asset read can fall back to plaintext")
+materializer = asset_vault.split("fun materializeJars", 1)[1]
+if "finally" not in materializer or "bytes.fill(0)" not in materializer:
+    raise SystemExit("FAIL: decrypted JAR buffers are not cleared on every materialization path")
 if "ignore_failure: true" in codemagic:
     raise SystemExit("FAIL: a CodeMagic step can silently ignore a release failure")
 if "ERROR: XopProtector is required for this release" not in codemagic:
