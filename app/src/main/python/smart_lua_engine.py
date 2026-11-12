@@ -90,14 +90,29 @@ def detect(input_path: str | Path) -> dict:
 
 
 def decompile(input_path, output_dir, jars_dir=None) -> dict:
-    from alvsia_features import run_lua_smart
+    from alvsia_features import run_lua_smart, run_lua_analyze
     p = Path(input_path)
     out = Path(output_dir)
     out.mkdir(parents=True, exist_ok=True)
+    # Analysis is an internal preflight stage of the Decompiler, not a separate
+    # user-facing tool. A diagnostic failure must not suppress real recovery.
+    analysis = None
+    try:
+        analysis_dir = out / "_smart_analysis"
+        analysis = run_lua_analyze(str(p), analysis_dir)
+    except Exception as exc:
+        analysis = {"ok": False, "error": type(exc).__name__}
     result = dict(run_lua_smart(p, out, jars_dir=jars_dir) or {})
+    result["analysis"] = analysis
     result.update({"module": "lua", "operation": "decompile"})
     if result.get("ok") and not result.get("out"):
         return _result(False, "decompile", error="decompiler reported success without a source artifact", diagnostics=result)
+    if result.get("ok"):
+        artifact = Path(str(result["out"]))
+        if not artifact.is_file() or artifact.stat().st_size <= 0 or artifact.suffix.lower() != ".lua":
+            return _result(False, "decompile", error="decompiler output failed source-artifact validation", diagnostics=result)
+        result["output_bytes"] = artifact.stat().st_size
+        result["sha256"] = hashlib.sha256(artifact.read_bytes()).hexdigest()
     return result
 
 
@@ -170,22 +185,41 @@ def compile_source(input_path, output_dir, jars_dir=None, work_dir=None) -> dict
 
 def inject(input_path, output_dir, sub_id, work_dir) -> dict:
     import alvsia_ultimate as ult
+    import json
     src = Path(input_path)
     out = Path(output_dir)
     out.mkdir(parents=True, exist_ok=True)
-    if sub_id == "lua_patch_byte":
-        cfg = Path(work_dir) / "lua_patch.json"
-        if not cfg.is_file():
-            return _result(False, "inject", error="WORK/lua_patch.json is required")
-        import json
-        data = json.loads(cfg.read_text(encoding="utf-8"))
-        return _result(True, "inject", mode="patch", result=ult.lua_patch_bytecode(
-            src, out, data.get("offset", ""), data.get("patch_hex", data.get("bytes", ""))))
-    if sub_id == "lua_inject_hook":
-        hook = Path(work_dir) / "lua_hook.lua"
-        return _result(True, "inject", mode="hook", result=ult.lua_inject_hook(src, out, str(hook)))
-    if sub_id == "lua_mod_repack":
-        mod_dir = Path(work_dir) / "MOD"
+    work = Path(work_dir) if work_dir else out / "WORK"
+    config = work / "lua_inject_config.json"
+    data = {}
+    if config.is_file():
+        try:
+            data = json.loads(config.read_text(encoding="utf-8"))
+        except Exception as exc:
+            return _result(False, "inject", error="invalid WORK/lua_inject_config.json: " + str(exc)[:240])
+    mode = str(data.get("mode") or "").strip().lower()
+    if sub_id == "lua_patch_byte" or mode == "patch":
+        cfg = work / "lua_patch.json"
+        if cfg.is_file() and not data:
+            try:
+                data = json.loads(cfg.read_text(encoding="utf-8"))
+            except Exception as exc:
+                return _result(False, "inject", error="invalid WORK/lua_patch.json: " + str(exc)[:240])
+        result = ult.lua_patch_bytecode(
+            src, out, str(data.get("offset", "")),
+            str(data.get("patch_hex", data.get("bytes", ""))),
+        )
+        return _result(bool(isinstance(result, dict) and result.get("ok")), "inject",
+                       mode="patch", out=result.get("out") if isinstance(result, dict) else None,
+                       result=result)
+    if sub_id == "lua_inject_hook" or mode == "hook":
+        hook = Path(data.get("hook_path", work / "lua_hook.lua"))
+        result = ult.lua_inject_hook(src, out, str(hook))
+        return _result(bool(isinstance(result, dict) and result.get("ok")), "inject",
+                       mode="hook", out=result.get("out") if isinstance(result, dict) else None,
+                       result=result)
+    if sub_id == "lua_mod_repack" or mode == "repack":
+        mod_dir = Path(data.get("mod_dir", work / "MOD"))
         if not mod_dir.is_dir():
             return _result(False, "inject", error="WORK/MOD is required for PAK repack")
         dest = out / (src.stem + "_modded.pak")
@@ -193,8 +227,10 @@ def inject(input_path, output_dir, sub_id, work_dir) -> dict:
         result = core.run_pak_smart_repack(src, mod_dir, dest)
         if not result.get("ok"):
             result = core.run_pak_repack(src, mod_dir, dest)
-        return _result(bool(result.get("ok")), "inject", mode="pak-repack", result=result)
-    return _result(False, "inject", error="unknown Smart Lua inject mode")
+        return _result(bool(result.get("ok")), "inject", mode="pak-repack",
+                       out=result.get("out") or str(dest) if result.get("ok") else None,
+                       result=result)
+    return _result(False, "inject", error="no valid injection plan; configure WORK/lua_inject_config.json")
 
 
 def protect_encrypt(input_path, output_dir, work_dir, restore=False) -> dict:
@@ -251,7 +287,26 @@ def execute(operation, input_path, output_dir, **kwargs) -> dict:
     if op == "analyze":
         return analyze(input_path, output_dir)
     if op == "protect":
-        return protect(input_path, output_dir, kwargs.get("profile", "balanced"))
+        import json
+        work = Path(kwargs.get("work_dir") or Path(output_dir) / "WORK")
+        cfg = work / "lua_protect_config.json"
+        config = {}
+        if cfg.is_file():
+            try:
+                config = json.loads(cfg.read_text(encoding="utf-8"))
+            except Exception as exc:
+                return _result(False, "protect", error="invalid WORK/lua_protect_config.json: " + str(exc)[:240])
+        mode = str(config.get("mode") or "profile").strip().lower()
+        if mode == "encrypt":
+            return protect_encrypt(input_path, output_dir, work, restore=False)
+        if mode == "restore":
+            return protect_encrypt(input_path, output_dir, work, restore=True)
+        if mode == "vm":
+            return vm_protect(input_path, output_dir)
+        profile = str(config.get("profile") or kwargs.get("profile", "balanced")).lower()
+        if profile not in ("balanced", "strong"):
+            return _result(False, "protect", error="profile must be balanced or strong")
+        return protect(input_path, output_dir, profile)
     if op == "compile":
         return compile_source(input_path, output_dir, jars_dir=kwargs.get("jars_dir"), work_dir=kwargs.get("work_dir"))
     if op == "inject":
