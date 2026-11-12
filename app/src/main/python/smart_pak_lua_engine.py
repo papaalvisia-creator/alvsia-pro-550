@@ -168,7 +168,7 @@ def execute(input_path, output_dir, work_dir=None, archive_kind="pak") -> dict[s
         lua_out = out / "SMART_LUA"
         lua_out.mkdir(parents=True, exist_ok=True)
 
-        from smart_lua_engine import detect, decompile
+        from smart_lua_engine import detect, decompile, deep_recover
 
         successes = []
         failures = []
@@ -187,7 +187,7 @@ def execute(input_path, output_dir, work_dir=None, archive_kind="pak") -> dict[s
                 "probe": probes[str(src)],
             }
             try:
-                result = decompile(src, dest_dir)
+                result = deep_recover(src, dest_dir)
                 # If a wrapper precedes a real Lua chunk, retry against an
                 # immutable embedded view. This makes wrapped/hybrid payloads
                 # recoverable without altering the original corpus file.
@@ -195,7 +195,7 @@ def execute(input_path, output_dir, work_dir=None, archive_kind="pak") -> dict[s
                     view = _make_lua_view(src, probes[str(src)], work / "LUA_VIEWS")
                     retry_dir = dest_dir / "embedded"
                     retry_dir.mkdir(parents=True, exist_ok=True)
-                    retry = decompile(view, retry_dir)
+                    retry = deep_recover(view, retry_dir)
                     result = dict(retry)
                     result["recovery"] = "embedded-lua-view"
                     result["embedded_offset"] = probes[str(src)].get("magic_offset")
