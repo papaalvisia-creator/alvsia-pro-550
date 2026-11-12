@@ -12,7 +12,8 @@ BRIDGE_IMPL = ROOT / "app/src/main/python/alvsia_bridge_impl.py"
 CATALOG = ROOT / "app/src/main/java/com/alvsia/pro/tool/ToolCatalog.kt"
 ENGINE = ROOT / "app/src/main/java/com/alvsia/pro/tool/ToolEngine.kt"
 ULTIMATE = ROOT / "app/src/main/python/alvsia_ultimate.py"
-RUNNER = ROOT / "app/src/main/java/com/alvsia/pro/tool/PythonBridgeRunner.kt"\nROUTER = ROOT / "app/src/main/java/com/alvsia/pro/tool/SmartModuleRouter.kt"
+RUNNER = ROOT / "app/src/main/java/com/alvsia/pro/tool/PythonBridgeRunner.kt"
+ROUTER = ROOT / "app/src/main/java/com/alvsia/pro/tool/SmartModuleRouter.kt"
 WORKSPACE = ROOT / "app/src/main/java/com/alvsia/pro/ui/tool/ToolWorkspaceScreen.kt"
 OUTPUT_BROWSER = ROOT / "app/src/main/java/com/alvsia/pro/ui/output/OutputBrowserScreen.kt"
 
@@ -106,7 +107,8 @@ def test_menu_ids_are_unique_and_reachable():
         "lua_mod_repack": 'sid.startswith("lua_patch_") or sid in ("lua_inject_hook","lua_mod_repack")',
     }
     direct_engine_routes = {"android_permission_dump": 'subId == "android_permission_dump"'}
-    engine = ENGINE.read_text(encoding="utf-8")\n    router = ROUTER.read_text(encoding="utf-8")
+    engine = ENGINE.read_text(encoding="utf-8")
+    router = ROUTER.read_text(encoding="utf-8")
     missing = []
     for sid in ids:
         if sid in direct_engine_routes and direct_engine_routes[sid] in engine:
@@ -471,7 +473,7 @@ def test_decrypt_known_answer_selftest_is_registered():
 def test_private_module_uses_dedicated_workspace_paths():
     paths = (ROOT / "app/src/main/java/com/alvsia/pro/tool/WorkPaths.kt").read_text(encoding="utf-8")
     menus = MENUS.read_text(encoding="utf-8")
-    assert '19 -> "ALVSIA_PRIVATE"' in paths
+    assert '7 -> "ALVSIA_PRIVATE"' in paths
     assert "ALVSIA_PRIVATE" in menus
     assert "fun moduleOut(moduleId: Int)" in paths
     assert 'return File(dirOut(), name).also { it.mkdirs() }' in paths
