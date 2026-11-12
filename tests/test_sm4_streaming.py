@@ -35,7 +35,7 @@ with tempfile.TemporaryDirectory() as td:
     key = registry.SM4_SECRET_NEW[0]
     offset = SM4KeyFinder._CHUNK_SIZE - 5
     with sample.open("wb") as handle:
-        handle.write(b"\\x00" * offset)
+        handle.write(b"\x00" * offset)
         handle.write(key.encode("ascii"))
         handle.write(b"\\x00" * 128)
 
