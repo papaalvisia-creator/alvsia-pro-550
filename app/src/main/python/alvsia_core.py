@@ -1621,7 +1621,19 @@ class TencentPakFile:
         # This ensures the original file (if any) is preserved when decompression
         # or decryption fails — previously a "wb" open truncated the file before
         # any error could be detected.
-        tmp_path = Path(str(file_path) + ".alvsia-tmp")
+        # Create an unpredictable, exclusive temporary file in the destination
+        # directory. A predictable sibling name can be pre-created as a symlink
+        # and make open(..., "wb") write outside the extraction root.
+        file_path = Path(file_path)
+        file_path.parent.mkdir(parents=True, exist_ok=True)
+        with tempfile.NamedTemporaryFile(
+            mode="wb",
+            dir=str(file_path.parent),
+            prefix="." + file_path.name + ".",
+            suffix=".alvsia-tmp",
+            delete=False,
+        ) as temp_handle:
+            tmp_path = Path(temp_handle.name)
         try:
             if _se33e912f7767 == 17:
                 with open(tmp_path, 'wb') as _sbb61cc6b3e63:
@@ -2895,24 +2907,51 @@ def run_pak_unpack(pak_path, out_dir, authorization_operation='pak.unpack'):
             'out': str(out_dir),
         }
     elif hasattr(pak, 'extract_all'):
-        pak.extract_all(out_dir)
-    else:
-        # manual index walk
-        n = 0
+        # Legacy providers may not return statistics. Do not report success
+        # unless a non-empty index and exact on-disk file count can be verified.
         index = getattr(pak, '_index', {}) or {}
+        expected = sum(len(items) for items in index.values())
+        if expected <= 0:
+            return {'ok': False, 'error': 'PAK index contains no extractable file entries', 'out': str(out_dir)}
+        pak.extract_all(out_dir)
+        actual = sum(1 for p in out_dir.rglob('*') if p.is_file())
+        if actual != expected:
+            return {
+                'ok': False,
+                'error': f'incomplete legacy PAK extraction: expected={expected}, on_disk={actual}',
+                'out': str(out_dir),
+            }
+        return {'ok': True, 'files': actual, 'out': str(out_dir)}
+    else:
+        # Manual compatibility path: any failed entry or count mismatch is fatal.
+        n = 0
+        failures = []
+        index = getattr(pak, '_index', {}) or {}
+        expected = sum(len(items) for items in index.values())
+        if expected <= 0:
+            return {'ok': False, 'error': 'PAK index contains no extractable file entries', 'out': str(out_dir)}
         for dir_path, files in index.items():
             cur = out_dir / str(dir_path)
-            cur.mkdir(parents=True, exist_ok=True)
+            try:
+                cur.mkdir(parents=True, exist_ok=True)
+            except Exception as e:
+                failures.append({'path': str(dir_path), 'error': str(e)[:300]})
+                continue
             for name, entry in files.items():
                 try:
                     pak._write_to_disk(cur / name, entry)
                     n += 1
                 except Exception as e:
-                    console.print(f'write fail {name}: {e}')
-        return {'ok': True, 'files': n, 'out': str(out_dir)}
-    # count files
-    n = sum(1 for p in out_dir.rglob('*') if p.is_file())
-    return {'ok': True, 'files': n, 'out': str(out_dir)}
+                    failures.append({'path': str(PurePath(dir_path) / name), 'error': str(e)[:300]})
+        actual = sum(1 for p in out_dir.rglob('*') if p.is_file())
+        if failures or n != expected or actual != expected:
+            return {
+                'ok': False,
+                'error': f'incomplete manual PAK extraction: expected={expected}, written={n}, on_disk={actual}, failures={len(failures)}',
+                'failures': failures[:100],
+                'out': str(out_dir),
+            }
+        return {'ok': True, 'files': actual, 'out': str(out_dir)}
 
 
 def run_pak_repack(pak_path, modified_dir, output_pak, authorization_operation='pak.repack'):
