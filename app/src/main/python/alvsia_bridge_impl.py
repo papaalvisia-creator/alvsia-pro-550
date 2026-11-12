@@ -107,11 +107,6 @@ def run_tool(module_id, sub_id, input_path, out_root, engine_dir, jars_dir):
                         "string-recovery", "recover", input_path=ip,
                         output_dir=out / "OUT" / "STR",
                     )
-                elif sid == "str_recover":
-                    _adapter = _adapter_dispatch(
-                        "string-recovery", "recover", input_path=ip,
-                        output_dir=out / "OUT" / "STR",
-                    )
                 else:
                     archive_ids = {
                         "pak_info": ("inspect", "PAK", "pak"),
