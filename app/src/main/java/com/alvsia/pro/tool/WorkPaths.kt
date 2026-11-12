@@ -125,7 +125,7 @@ object WorkPaths {
         try {
             f.writeText(
                 """
-                ALVSIA PRO 5.5.2 - Smart workspace
+                ALVSIA PRO 6.0.0 - Smart workspace
                 ====================================
                 Root: Download/ALVSIA/
 
