@@ -3,6 +3,7 @@
 from __future__ import annotations
 import hashlib
 import io
+import json
 import os
 import re
 import sys
@@ -149,6 +150,28 @@ def main() -> int:
         with zipfile.ZipFile(io.BytesIO(data)) as outer:
             check(outer.testzip() is None, "APK ZIP integrity")
             names = set(outer.namelist())
+            xop_config_name = "assets/protector/config.json"
+            if xop_config_name not in names:
+                check(False, "Xop protector config packaged")
+            else:
+                try:
+                    xop_config = json.loads(outer.read(xop_config_name).decode("utf-8"))
+                except (ValueError, UnicodeError, KeyError):
+                    xop_config = None
+                check(isinstance(xop_config, dict), "Xop protector config is valid JSON")
+                if isinstance(xop_config, dict):
+                    check(xop_config.get("protect_so") is True, "Xop native SO protection enabled")
+                    check(xop_config.get("detect_proxy") is True and xop_config.get("net_guard") is True,
+                          "Xop proxy detection and NetGuard enabled")
+                    check(xop_config.get("so_decrypt_mode") == "lazy", "Xop SO decryption uses lazy mode")
+                    check(xop_config.get("rasp_action") == 2, "Xop RASP enforce action enabled")
+                    for hmac_name in ("dex_hmac", "code_hmac", "code_methods_hmac"):
+                        check(bool(re.fullmatch(r"[0-9a-f]{64}", str(xop_config.get(hmac_name, "")))),
+                              f"Xop {hmac_name} is a populated SHA-256 HMAC")
+                    check(bool(re.fullmatch(r"[0-9a-f]{64}", str(xop_config.get("app_sign_sha256", "")))),
+                          "Xop application signing certificate fingerprint is populated")
+                    report.append("INFO insns_xor_key is a legacy field; native instruction protection is AES-GCM")
+                    report.append("INFO Xop encrypt_assets is disabled until every asset reader is migrated to ProtectorAssets")
             forbidden_package_names = {"rebrand_config.txt", "app-metadata.properties"}
             packaged_forbidden = sorted(n for n in names if Path(n).name.lower() in forbidden_package_names)
             check(not packaged_forbidden,
