@@ -131,6 +131,37 @@ def _manifest_declares_permission(data: bytes, permission: str) -> bool:
     return False
 
 
+def _audit_xop_config(config_bytes: bytes | None, required: bool, check, report: list[str]) -> None:
+    """Validate Xop settings only after packaging; baseline absence is informational."""
+    if config_bytes is None:
+        if required:
+            check(False, "Xop protector config packaged")
+        else:
+            report.append("INFO Xop protector config deferred to final XOP packaging")
+        return
+
+    try:
+        xop_config = json.loads(config_bytes.decode("utf-8"))
+    except (ValueError, UnicodeError):
+        xop_config = None
+    check(isinstance(xop_config, dict), "Xop protector config is valid JSON")
+    if not isinstance(xop_config, dict):
+        return
+    check(xop_config.get("protect_so") is True, "Xop native SO protection enabled")
+    check(xop_config.get("detect_proxy") is True and xop_config.get("net_guard") is True,
+          "Xop proxy detection and NetGuard enabled")
+    check(xop_config.get("so_decrypt_mode") == "lazy", "Xop SO decryption uses lazy mode")
+    check(xop_config.get("rasp_action") == 2, "Xop RASP enforce action enabled")
+    for hmac_name in ("dex_hmac", "code_hmac", "code_methods_hmac"):
+        check(bool(re.fullmatch(r"[0-9a-f]{64}", str(xop_config.get(hmac_name, "")))),
+              f"Xop {hmac_name} is a populated SHA-256 HMAC")
+    check(bool(re.fullmatch(r"[0-9a-f]{64}", str(xop_config.get("app_sign_sha256", "")))),
+          "Xop application signing certificate fingerprint is populated")
+    report.append("INFO insns_xor_key is a legacy field; native instruction protection is AES-GCM")
+    check(xop_config.get("encrypt_assets") is True, "Xop asset encryption enabled")
+    report.append("INFO Xop asset encryption excludes Chaquopy app.imy and engine license metadata by CI policy")
+
+
 def main() -> int:
     if len(sys.argv) != 2:
         print("usage: audit_release_apk.py <release.apk>", file=sys.stderr)
@@ -151,33 +182,8 @@ def main() -> int:
             check(outer.testzip() is None, "APK ZIP integrity")
             names = set(outer.namelist())
             xop_config_name = "assets/protector/config.json"
-            if xop_config_name not in names:
-                # The unsigned baseline is audited before XopProtector runs, so
-                # its config cannot exist yet. Require it only for the final/XOP
-                # audit; this keeps the baseline gate meaningful without
-                # weakening the post-XOP gate.
-                check(False, "Xop protector config packaged" if REQUIRE_XOP_PROVENANCE
-                      else "Xop protector config deferred to final XOP packaging")
-            else:
-                try:
-                    xop_config = json.loads(outer.read(xop_config_name).decode("utf-8"))
-                except (ValueError, UnicodeError, KeyError):
-                    xop_config = None
-                check(isinstance(xop_config, dict), "Xop protector config is valid JSON")
-                if isinstance(xop_config, dict):
-                    check(xop_config.get("protect_so") is True, "Xop native SO protection enabled")
-                    check(xop_config.get("detect_proxy") is True and xop_config.get("net_guard") is True,
-                          "Xop proxy detection and NetGuard enabled")
-                    check(xop_config.get("so_decrypt_mode") == "lazy", "Xop SO decryption uses lazy mode")
-                    check(xop_config.get("rasp_action") == 2, "Xop RASP enforce action enabled")
-                    for hmac_name in ("dex_hmac", "code_hmac", "code_methods_hmac"):
-                        check(bool(re.fullmatch(r"[0-9a-f]{64}", str(xop_config.get(hmac_name, "")))),
-                              f"Xop {hmac_name} is a populated SHA-256 HMAC")
-                    check(bool(re.fullmatch(r"[0-9a-f]{64}", str(xop_config.get("app_sign_sha256", "")))),
-                          "Xop application signing certificate fingerprint is populated")
-                    report.append("INFO insns_xor_key is a legacy field; native instruction protection is AES-GCM")
-                    check(xop_config.get("encrypt_assets") is True, "Xop asset encryption enabled")
-                    report.append("INFO Xop asset encryption excludes Chaquopy app.imy and engine license metadata by CI policy")
+            config_bytes = outer.read(xop_config_name) if xop_config_name in names else None
+            _audit_xop_config(config_bytes, REQUIRE_XOP_PROVENANCE, check, report)
             version_metadata = sorted(
                 n for n in names
                 if n.startswith("META-INF/") and n.lower().endswith(".version")
