@@ -161,7 +161,22 @@ jobs:
           XOP="$RUNNER_TEMP/xopprotector-src"
           git clone --filter=blob:none https://github.com/xopJack/XopProtector.git "$XOP"
           git -C "$XOP" checkout --detach 5990c31
-          rm -f "$XOP/local.properties"
+          # ALVSIA Chaquopy compatibility: keep assets/chaquopy and runtime license files plaintext.
+          # Business payloads (including nx/* sealed JARs) are encrypted by Xop PAS1 and
+          # loaded through the injected ProtectorAssets bridge. Chaquopy's app.imy is
+          # intentionally excluded because the Chaquopy runtime reads it directly.
+          python3 - "$XOP/packer/src/main/java/com/yqsh/protector/packer/AssetsEncryptor.java" <<'PY'
+          import pathlib, sys
+          p = pathlib.Path(sys.argv[1])
+          s = p.read_text()
+          anchor = '            if (rel.startsWith("dexopt/") || rel.equals("dexopt")) {\n'
+          inject = '''            // ALVSIA runtime exclusions: Chaquopy loads app.imy directly; engine notices are audited runtime metadata.\n            if (rel.startsWith("chaquopy/") || rel.startsWith("engine_licenses/")) {\n                skipped++;\n                prog.tick();\n                continue;\n            }\n'''
+          if s.count(anchor) != 1:
+              raise SystemExit("unexpected Xop AssetsEncryptor layout; refusing blind patch")
+          s = s.replace(anchor, inject + anchor, 1)
+          p.write_text(s)
+          print("PASS: Xop asset encryptor patched for Chaquopy-safe exclusions")
+          PY          rm -f "$XOP/local.properties"
           python3 - "$XOP/settings.gradle.kts" "$XOP/gradle.properties" <<'PY'
           import pathlib, re, sys
           settings = pathlib.Path(sys.argv[1])
@@ -192,7 +207,7 @@ jobs:
           PACKER=$(find "$XOP/packer/build/libs" -maxdepth 1 -type f -name 'protector-packer-*.jar' ! -name '*-sources.jar' | head -n 1)
           test -s "$PACKER"
           # Optional asset encryption stays off until ALVSIA readers are migrated to Xop ProtectorAssets.
-          java -jar "$PACKER" "$RUNNER_TEMP/alvsia-xop-input.apk" -o "$RUNNER_TEMP/alvsia-xop-candidate.apk" --shell-dir "$XOP/executable/shell-files" --profile industry --protect-so --detect-proxy --so-decrypt-mode lazy
+          java -jar "$PACKER" "$RUNNER_TEMP/alvsia-xop-input.apk" -o "$RUNNER_TEMP/alvsia-xop-candidate.apk" --shell-dir "$XOP/executable/shell-files" --profile industry --protect-so --encrypt-assets --detect-proxy --so-decrypt-mode lazy
           test -s "$RUNNER_TEMP/alvsia-xop-candidate.apk"
           python3 tools/prepare_xop_final.py "$RUNNER_TEMP/alvsia-xop-input.apk" "$RUNNER_TEMP/alvsia-xop-candidate.apk"
 
