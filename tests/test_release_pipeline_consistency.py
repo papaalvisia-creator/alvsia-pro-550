@@ -37,13 +37,16 @@ pack_gate = 'if [ "${ALVSIA_XOPPROTECTOR_ENABLED:-true}" != "true" ]; then'
 sign_gate = 'if [ "${ALVSIA_XOPPROTECTOR_ENABLED:-true}" = "true" ]; then'
 if pack_gate not in codemagic or sign_gate not in codemagic:
     raise SystemExit("FAIL: XopProtector default differs between pack and sign stages")
+xop_command = next((line for line in final_workflow.splitlines() if 'java -jar "$PACKER"' in line), "")
+if "--encrypt-assets" in xop_command or re.search(r"^\\s*--encrypt-assets(?:\\s|$)", codemagic, re.MULTILINE):
+    raise SystemExit("FAIL: Xop asset encryption is unsafe until runtime readers use ProtectorAssets")
 if "ignore_failure: true" in codemagic:
     raise SystemExit("FAIL: a CodeMagic step can silently ignore a release failure")
 if "ERROR: XopProtector is required for this release" not in codemagic:
     raise SystemExit("FAIL: missing Xop candidate does not fail the release")
-if any(flag not in codemagic for flag in ("--profile industry", "--protect-so", "--encrypt-assets", "--detect-proxy", "--so-decrypt-mode lazy")):
+if any(flag not in codemagic for flag in ("--profile industry", "--protect-so", "--detect-proxy", "--so-decrypt-mode lazy")):
     raise SystemExit("FAIL: CodeMagic Xop security options are incomplete")
-if any(flag not in final_workflow for flag in ("--profile industry", "--protect-so", "--encrypt-assets", "--detect-proxy", "--so-decrypt-mode lazy")):
+if any(flag not in final_workflow for flag in ("--profile industry", "--protect-so", "--detect-proxy", "--so-decrypt-mode lazy")):
     raise SystemExit("FAIL: GitHub Xop security options are incomplete")
 if "--profile industry" not in codemagic or "--protect-so" not in codemagic:
     raise SystemExit("FAIL: expected XopProtector profile/SO protection is not configured")
