@@ -27,6 +27,17 @@ def _read_probe(path: Path, limit: int = 1_048_576) -> bytes:
         return fh.read(limit)
 
 
+def _sha256_file(path: Path, chunk_size: int = 1024 * 1024) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        while True:
+            chunk = handle.read(chunk_size)
+            if not chunk:
+                break
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
 def detect(path: str | Path) -> dict:
     p = Path(path)
     if not p.is_file():
@@ -61,7 +72,7 @@ def detect(path: str | Path) -> dict:
         "kind": routes[0],
         "routes": routes,
         "size": p.stat().st_size,
-        "sha256": hashlib.sha256(p.read_bytes()).hexdigest(),
+        "sha256": _sha256_file(p),
         "confidence": 0.95 if routes[0] in ("lua53", "luajit", "lua-source") else 0.55,
     }
 
@@ -72,7 +83,7 @@ def _validate_output(path: Path, suffixes: tuple[str, ...] = ()) -> dict:
     if suffixes and path.suffix.lower() not in suffixes:
         return {"ok": False, "error": "unexpected output type"}
     return {"ok": True, "out": str(path), "bytes": path.stat().st_size,
-            "sha256": hashlib.sha256(path.read_bytes()).hexdigest()}
+            "sha256": _sha256_file(path)}
 
 
 def decompile(input_path, output_dir, jars_dir=None):
@@ -232,7 +243,7 @@ def inject(input_path, output_dir, mode="auto"):
         import alvsia_ultimate as ultimate
         # Auto mode selects the least destructive real injector available.
         # A config file can request hook/patch/repack without adding UI tools.
-        config = out.parent / "WORK" / "lua_inject_config.txt"
+        config = out.parent.parent / "WORK" / "lua_inject_config.txt"
         cfg = {}
         if config.is_file():
             for line in config.read_text(encoding="utf-8", errors="replace").splitlines():
@@ -245,7 +256,7 @@ def inject(input_path, output_dir, mode="auto"):
         elif selected == "hook":
             result = ultimate.lua_inject_hook(str(src), out, cfg.get("hook_path"))
         elif selected == "repack":
-            result = ultimate.lua_mod_repack(str(src), out)
+            result = {"ok": False, "error": "repack requires a modified directory and base archive; use mode=patch or mode=hook for a single Lua file"}
         else:
             # Default is validated hook/patch engine selection based on config.
             if cfg.get("offset") and cfg.get("patch_hex"):
