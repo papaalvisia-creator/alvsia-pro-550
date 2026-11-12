@@ -182,6 +182,15 @@ def _archive_smart(operation: str, input_path: str | Path | None,
     return result
 
 
+
+def _pak_lua_smart(input_path: str | Path, output_dir: str | Path,
+                   work_dir: str | Path | None = None) -> dict:
+    from smart_pak_lua_engine import execute
+    result = execute(input_path, output_dir, work_dir=work_dir, archive_kind="pak")
+    result = dict(result or {})
+    result.update({"module": "archive", "operation": "smart-lua-scan"})
+    return result
+
 def _intelligence_analyze(input_path: str | Path, output_dir: str | Path,
                           max_depth: int = 12, max_artifacts: int = 128) -> dict:
     from lua_intelligence.core import IntelligenceConfig, analyze_file
@@ -209,6 +218,7 @@ _ADAPTERS: dict[tuple[str, str], Callable[..., dict]] = {
     ("archive", "extract"): lambda **kw: _archive_smart("extract", **kw),
     ("archive", "rebuild"): lambda **kw: _archive_smart("rebuild", **kw),
     ("archive", "integrity"): lambda **kw: _archive_smart("integrity", **kw),
+    ("archive", "smart-lua-scan"): _pak_lua_smart,
     ("data", "recover"): lambda **kw: _data_smart("recover", **kw),
     ("data", "xor"): lambda **kw: _data_smart("xor", **kw),
     ("data", "sm4"): lambda **kw: _data_smart("sm4", **kw),
