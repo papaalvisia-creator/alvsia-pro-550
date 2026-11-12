@@ -156,6 +156,19 @@ def _archive_extract(input_path: str | Path, output_dir: str | Path) -> dict:
     return result
 
 
+def _archive_smart(operation: str, input_path: str | Path | None,
+                  output_dir: str | Path, work_dir: str | Path | None = None,
+                  archive_kind: str = "auto") -> dict:
+    from smart_archive_engine import execute
+    result = execute(
+        operation, input_path, output_dir,
+        work_dir=work_dir, archive_kind=archive_kind,
+    )
+    result = dict(result or {})
+    result.update({"module": "archive", "operation": operation})
+    return result
+
+
 def _intelligence_analyze(input_path: str | Path, output_dir: str | Path,
                           max_depth: int = 12, max_artifacts: int = 128) -> dict:
     from lua_intelligence.core import IntelligenceConfig, analyze_file
@@ -179,8 +192,10 @@ _ADAPTERS: dict[tuple[str, str], Callable[..., dict]] = {
     ("lua", "restore"): lambda **kw: _lua_unified("restore", **kw),
     ("lua", "vm-protect"): lambda **kw: _lua_unified("vm-protect", **kw),
     ("string-recovery", "recover"): _string_recover,
-    ("archive", "inspect"): _archive_inspect,
-    ("archive", "extract"): _archive_extract,
+    ("archive", "inspect"): lambda **kw: _archive_smart("inspect", **kw),
+    ("archive", "extract"): lambda **kw: _archive_smart("extract", **kw),
+    ("archive", "rebuild"): lambda **kw: _archive_smart("rebuild", **kw),
+    ("archive", "integrity"): lambda **kw: _archive_smart("integrity", **kw),
     ("program-intelligence", "analyze"): _intelligence_analyze,
 }
 
