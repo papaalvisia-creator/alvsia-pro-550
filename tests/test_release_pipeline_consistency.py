@@ -41,6 +41,10 @@ if "ignore_failure: true" in codemagic:
     raise SystemExit("FAIL: a CodeMagic step can silently ignore a release failure")
 if "ERROR: XopProtector is required for this release" not in codemagic:
     raise SystemExit("FAIL: missing Xop candidate does not fail the release")
+if any(flag not in codemagic for flag in ("--profile industry", "--protect-so", "--encrypt-assets", "--detect-proxy", "--so-decrypt-mode lazy")):
+    raise SystemExit("FAIL: CodeMagic Xop security options are incomplete")
+if any(flag not in final_workflow for flag in ("--profile industry", "--protect-so", "--encrypt-assets", "--detect-proxy", "--so-decrypt-mode lazy")):
+    raise SystemExit("FAIL: GitHub Xop security options are incomplete")
 if "--profile industry" not in codemagic or "--protect-so" not in codemagic:
     raise SystemExit("FAIL: expected XopProtector profile/SO protection is not configured")
 
