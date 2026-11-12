@@ -39,8 +39,13 @@ if pack_gate not in codemagic or sign_gate not in codemagic:
     raise SystemExit("FAIL: XopProtector default differs between pack and sign stages")
 xop_command = next((line for line in final_workflow.splitlines() if 'java -jar "$PACKER"' in line), "")
 codemagic_xop_args = codemagic.split('java -jar "$XOP_DIR/$PACKER_JAR"', 1)[1].split("CANDIDATE=", 1)[0]
-if "--encrypt-assets" in xop_command or "--encrypt-assets" in codemagic_xop_args:
-    raise SystemExit("FAIL: Xop asset encryption is unsafe until runtime readers use ProtectorAssets")
+if "--encrypt-assets" not in xop_command:
+    raise SystemExit("FAIL: GitHub Xop release must enable asset encryption")
+asset_vault = read("app/src/main/java/com/alvsia/pro/asset/AssetVault.kt")
+if 'Class.forName("com.yqsh.protector.shell.ProtectorAssets")' not in asset_vault:
+    raise SystemExit("FAIL: runtime asset reader is not wired to ProtectorAssets")
+if 'readBytes.invoke(null, ctx, "nx/i.dat")' not in asset_vault or 'readBytes.invoke(null, ctx, "nx/$file")' not in asset_vault:
+    raise SystemExit("FAIL: sealed JAR asset reads are not routed through ProtectorAssets")
 if "ignore_failure: true" in codemagic:
     raise SystemExit("FAIL: a CodeMagic step can silently ignore a release failure")
 if "ERROR: XopProtector is required for this release" not in codemagic:
