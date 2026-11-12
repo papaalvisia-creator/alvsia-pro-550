@@ -367,7 +367,7 @@ jobs:
             -o "$CANDIDATE" \
             --shell-dir "$XOP_DIR/executable/shell-files" \
             --profile industry \
-            --protect-so --encrypt-assets
+            --protect-so --encrypt-assets --detect-proxy --so-decrypt-mode lazy
           test -s "$CANDIDATE"
           # These standalone CLI executables must remain byte-identical and executable;
           # XopProtector may rewrite ordinary .so payloads, so restore only these
@@ -455,7 +455,14 @@ jobs:
               "assets/chaquopy/app.imy",
               "assets/nx/i.dat",
           }
-          candidate_required = base_required | {"lib/arm64-v8a/libprotector.so", "assets/protector/dexes.zip"}
+          encrypted_index = "assets/protector/aenc/nx/i.dat"
+          candidate_required = (base_required - {"assets/nx/i.dat"}) | {
+              "lib/arm64-v8a/libprotector.so",
+              "assets/protector/dexes.zip",
+              "assets/protector/config.json",
+              "assets/protector/assets.map",
+              encrypted_index,
+          }
           with zipfile.ZipFile(base) as a, zipfile.ZipFile(candidate) as b:
               for label, z, required in (("baseline", a, base_required), ("Xop candidate", b, candidate_required)):
                   missing = sorted(required - set(z.namelist()))
@@ -463,7 +470,18 @@ jobs:
                       raise SystemExit(f"{label} missing required entries: {missing}")
                   if z.testzip() is not None:
                       raise SystemExit(f"{label} ZIP integrity check failed")
-          print("PASS: ZIP integrity, Chaquopy payload, RASP library and Xop DEX container")
+              if not b.read(encrypted_index).startswith(b"PAS1"):
+                  raise SystemExit("Xop encrypted sealed-JAR index is missing its PAS1 header")
+              config = json.loads(b.read("assets/protector/config.json").decode("utf-8"))
+              required_flags = {
+                  "protect_so": True, "detect_proxy": True, "net_guard": True,
+                  "so_decrypt_mode": "lazy", "rasp_action": 2, "encrypt_assets": True,
+              }
+              mismatches = {key: (wanted, config.get(key)) for key, wanted in required_flags.items()
+                            if config.get(key) != wanted}
+              if mismatches:
+                  raise SystemExit(f"Xop security configuration mismatch: {mismatches}")
+          print("PASS: ZIP integrity, PAS1 asset encryption, Chaquopy payload, RASP and Xop security configuration")
           PY
           AAPT="$(find "$ANDROID_HOME/build-tools" -type f -name aapt | sort -V | tail -n 1)"
           test -x "$AAPT"
