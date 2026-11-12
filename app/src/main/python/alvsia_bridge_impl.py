@@ -74,7 +74,8 @@ def run_tool(module_id, sub_id, input_path, out_root, engine_dir, jars_dir):
             "lua_protect_encrypt", "lua_protect_decrypt", "lua_vm_protect",
             "str_recover", "pak_info", "pak_full_unpack", "pak_repack_full",
             "pak_integrity_audit", "obb_info", "obb_unzip", "obb_rezip",
-            "obb_integrity_audit"
+            "obb_integrity_audit", "dec_auto", "sm4_find_all",
+            "xor_single_byte", "metadata_v39_decode"
         ):
             try:
                 from module_adapters import dispatch as _adapter_dispatch
@@ -106,6 +107,19 @@ def run_tool(module_id, sub_id, input_path, out_root, engine_dir, jars_dir):
                     _adapter = _adapter_dispatch(
                         "string-recovery", "recover", input_path=ip,
                         output_dir=out / "OUT" / "STR",
+                    )
+                elif sid in ("dec_auto", "sm4_find_all", "xor_single_byte", "metadata_v39_decode"):
+                    data_ids = {
+                        "dec_auto": ("recover", "DEC"),
+                        "sm4_find_all": ("sm4", "SM4"),
+                        "xor_single_byte": ("xor", "XOR"),
+                        "metadata_v39_decode": ("metadata", "SCAN"),
+                    }
+                    data_op, folder = data_ids[sid]
+                    _adapter = _adapter_dispatch(
+                        "data", data_op, input_path=ip,
+                        output_dir=out / "OUT" / folder,
+                        work_dir=out / "WORK",
                     )
                 else:
                     archive_ids = {
