@@ -1,7 +1,7 @@
 name: Android Security Validation
 on:
   push:
-    branches: [ main, feat/alvsia-smart-premium-security-final-20261111, fix/task-output-routing-20261111, feat/combined-smart-lua-xop-release-20261110, feat/lua-intelligence-orchestrator-20261107, fix/chaquopy-python312-ci, fix/lua-normalization-fallback-20261103, release/5.5.2-19-module-redesign ]
+    branches: [ main, feat/alvsia-smart-premium-v1-20261112, feat/alvsia-smart-premium-security-final-20261111, fix/task-output-routing-20261111, feat/combined-smart-lua-xop-release-20261110, feat/lua-intelligence-orchestrator-20261107, fix/chaquopy-python312-ci, fix/lua-normalization-fallback-20261103, release/5.5.2-19-module-redesign ]
   pull_request:
     branches: [ main, feat/full-reference-source-registry-20261106 ]
   workflow_dispatch:
@@ -197,12 +197,33 @@ jobs:
           AAPT="$(find "$ANDROID_HOME/build-tools" -type f -name aapt | sort -V | tail -n 1)"
           test -x "$AAPT" || { echo "FAIL: aapt not found"; exit 1; }
           BADGING="$("$AAPT" dump badging "$APK")"
-          EXPECTED_PACKAGE=$(python3 -c 'import re,pathlib; s=pathlib.Path("app/build.gradle.kts").read_text(); m=[re.search(p,s) for p in (r'applicationId\s*=\s*"([^"]+)"',r'versionCode\s*=\s*(\d+)',r'versionName\s*=\s*"([^"]+)"')]; assert all(m), "missing Gradle identity"; print("package: name=%r versionCode=%r versionName=%r" % tuple(x.group(1) for x in m))')
-          printf '%s\\n' "$BADGING" | grep -Fq "$EXPECTED_PACKAGE" || {
-            echo "FAIL: APK package/version does not match app/build.gradle.kts"
-            printf '%s\n' "$BADGING" | grep -E "^package:|^application-label:" || true
-            exit 1
-          }
+          python3 - <<'PY'
+          import pathlib
+          import re
+          import subprocess
+          gradle = pathlib.Path("app/build.gradle.kts").read_text(encoding="utf-8")
+          patterns = (
+              r'applicationId\\s*=\\s*"([^"]+)"',
+              r'versionCode\\s*=\\s*(\\d+)',
+              r'versionName\\s*=\\s*"([^"]+)"',
+          )
+          values = [re.search(pattern, gradle) for pattern in patterns]
+          if not all(values):
+              raise SystemExit("FAIL: could not parse applicationId/versionCode/versionName from Gradle")
+          expected = tuple(match.group(1) for match in values)
+          badging = subprocess.check_output(
+              [__import__("glob").glob(str(pathlib.Path.home() / "Android/Sdk/build-tools/*/aapt"))[-1], "dump", "badging", __import__("glob").glob("app/build/outputs/apk/release/*.apk")[0]],
+              text=True,
+          )
+          package_line = next((line for line in badging.splitlines() if line.startswith("package: ")), "")
+          actual_match = re.search(r"^package: name='([^']+)' versionCode='([^']+)' versionName='([^']+)'", package_line)
+          if not actual_match:
+              raise SystemExit("FAIL: aapt package metadata could not be parsed: " + package_line)
+          actual = actual_match.groups()
+          if actual != expected:
+              raise SystemExit(f"FAIL: APK identity mismatch; expected={expected!r}, actual={actual!r}")
+          print(f"PASS: APK identity matches Gradle: {actual!r}")
+          PY
           echo "PASS: APK package/version matches active Gradle release configuration"
           mkdir -p validation-artifacts
           cp "$APK" validation-artifacts/ALVISIA_PRO_5.5.2-hardened_release_unsigned.apk
