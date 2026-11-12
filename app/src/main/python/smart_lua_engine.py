@@ -49,6 +49,22 @@ SM4_SECRET_NEW_EXPECTED_COUNT = 23
 
 
 
+def validate_sm4_secret_set() -> dict:
+    """Validate the authoritative ALVSIA PRO 4.7 modders SM4 key set."""
+    valid = (
+        SM4_SECRET_NEW_VERSION == "4.7-modders"
+        and len(SM4_SECRET_NEW) == SM4_SECRET_NEW_EXPECTED_COUNT == 23
+        and len(set(SM4_SECRET_NEW)) == 23
+        and all(isinstance(k, str) and len(k) == 20 for k in SM4_SECRET_NEW)
+    )
+    return {
+        "ok": valid,
+        "version": SM4_SECRET_NEW_VERSION,
+        "count": len(SM4_SECRET_NEW),
+        "expected_count": SM4_SECRET_NEW_EXPECTED_COUNT,
+    }
+
+
 def _result(ok: bool, operation: str, **extra: Any) -> dict:
     out = {"ok": bool(ok), "module": "lua", "operation": operation}
     out.update(extra)
@@ -226,6 +242,9 @@ def vm_protect(input_path, output_dir) -> dict:
 
 
 def execute(operation, input_path, output_dir, **kwargs) -> dict:
+    sm4 = validate_sm4_secret_set()
+    if not sm4["ok"]:
+        return _result(False, str(operation), error="authoritative SM4 4.7 key-set validation failed", sm4=sm4)
     op = str(operation).strip().lower()
     if op == "decompile":
         return decompile(input_path, output_dir, jars_dir=kwargs.get("jars_dir"))
