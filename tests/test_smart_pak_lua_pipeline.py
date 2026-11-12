@@ -2,6 +2,7 @@
 """Regression contract for the unified Smart PAK -> Lua pipeline."""
 import json
 import sys
+import tempfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -12,9 +13,17 @@ from smart_pak_lua_engine import MAX_IMPORT_BYTES, _looks_like_lua
 
 def test_limits_and_detection():
     assert MAX_IMPORT_BYTES == 5 * 1024 * 1024 * 1024
-    assert _looks_like_lua(Path("payload.lua"))
-    assert _looks_like_lua(Path("payload.luac"))
-    assert _looks_like_lua(Path("payload.bin")) is True
+    with tempfile.TemporaryDirectory(prefix="alvsia-pak-lua-") as tmp:
+        root = Path(tmp)
+        source = root / "payload.lua"
+        bytecode = root / "payload.luac"
+        wrapped_binary = root / "payload.bin"
+        source.write_text("local value = 1\\nreturn value\\n", encoding="utf-8")
+        bytecode.write_bytes(b"\\x1bLua\\x53\\x00\\x19\\x93\\r\\n\\x1a\\n")
+        wrapped_binary.write_bytes(b"WRAPPER\\x00\\x1bLua\\x53\\x00\\x19\\x93\\r\\n\\x1a\\n")
+        assert _looks_like_lua(source)
+        assert _looks_like_lua(bytecode)
+        assert _looks_like_lua(wrapped_binary)
 
 
 def test_real_pak_manifest_entry():
