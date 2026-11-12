@@ -43,7 +43,36 @@ object AssetVault {
         }
     }
 
+    private fun loadXopSealedMap(ctx: Context): Map<String, ByteArray>? {
+        return try {
+            // XopProtector injects ProtectorAssets only into the protected APK.
+            // Reflection keeps normal/debug builds independent of the injected shell.
+            val clazz = Class.forName("com.yqsh.protector.shell.ProtectorAssets")
+            val readBytes = clazz.getMethod("readBytes", Context::class.java, String::class.java)
+            val index = (readBytes.invoke(null, ctx, "nx/i.dat") as ByteArray)
+                .toString(Charsets.UTF_8)
+            val out = mutableMapOf<String, ByteArray>()
+            for (line in index.lines()) {
+                val parts = line.split("=", limit = 2)
+                if (parts.size != 2) continue
+                val logical = parts[0].trim()
+                val file = parts[1].trim()
+                if (logical.isEmpty() || !isSafeAssetName(file)) continue
+                val plain = readBytes.invoke(null, ctx, "nx/$file") as ByteArray
+                out[logical] = plain
+            }
+            out
+        } catch (_: Throwable) {
+            null
+        }
+    }
+
     fun loadSealedMap(ctx: Context): Map<String, ByteArray> {
+        // Final Xop APK: assets/nx/* is PAS1 encrypted and must be read through
+        // ProtectorAssets. Keep the existing ALVSA1 path as a compatibility fallback
+        // for debug/validation builds before Xop packaging.
+        loadXopSealedMap(ctx)?.let { return it }
+
         val k = NativeGuard.assetSealKey() ?: return emptyMap()
         val out = mutableMapOf<String, ByteArray>()
         return try {
