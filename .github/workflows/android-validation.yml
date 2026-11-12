@@ -66,6 +66,7 @@ jobs:
           print("PYTHON SYNTAX CHECK: PASS")
           PY
           python3 tests/test_tool_dispatch.py
+          python3 tests/test_sm4_streaming.py
           python3 tests/test_archive_engine.py
           python3 tests/test_studio_catalog.py
           python3 tests/test_process_page.py
