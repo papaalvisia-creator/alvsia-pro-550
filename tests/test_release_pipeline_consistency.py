@@ -46,6 +46,15 @@ if 'Class.forName("com.yqsh.protector.shell.ProtectorAssets")' not in asset_vaul
     raise SystemExit("FAIL: runtime asset reader is not wired to ProtectorAssets")
 if 'readBytes.invoke(null, ctx, "nx/i.dat")' not in asset_vault or 'readBytes.invoke(null, ctx, "nx/$file")' not in asset_vault:
     raise SystemExit("FAIL: sealed JAR asset reads are not routed through ProtectorAssets")
+if "fun readAssetBytes(ctx: Context, assetPath: String): ByteArray?" not in asset_vault:
+    raise SystemExit("FAIL: generic protected-asset reader is missing")
+if "readBytes.invoke(null, ctx, assetPath)" not in asset_vault or "ctx.assets.open(assetPath)" not in asset_vault:
+    raise SystemExit("FAIL: generic asset reader lacks Xop and debug fallbacks")
+bridge = read("app/src/main/java/com/alvsia/pro/tool/PythonBridgeRunner.kt")
+if 'AssetVault.readAssetBytes(context, "unluac/unluac_2025_12_23.jar")' not in bridge:
+    raise SystemExit("FAIL: Unluac JAR is not read through the Xop-compatible AssetVault")
+if 'context.assets.open("unluac/unluac_2025_12_23.jar")' in bridge:
+    raise SystemExit("FAIL: Unluac JAR still bypasses ProtectorAssets")
 if "ignore_failure: true" in codemagic:
     raise SystemExit("FAIL: a CodeMagic step can silently ignore a release failure")
 if "ERROR: XopProtector is required for this release" not in codemagic:
