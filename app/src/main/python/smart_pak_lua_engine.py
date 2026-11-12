@@ -90,6 +90,37 @@ def _probe_lua(path: Path) -> dict[str, Any]:
 def _looks_like_lua(path: Path) -> bool:
     return bool(_probe_lua(path).get("candidate"))
 
+def _make_lua_view(path: Path, probe: dict[str, Any], work_dir: Path) -> Path:
+    """Create a bounded parser view for wrapped Lua payloads.
+
+    The original file is never modified. If a Lua magic is found after a
+    wrapper, Smart Lua first receives the embedded chunk as a temporary view.
+    This is a recovery route only; encrypted/obfuscated payloads still require
+    their dedicated adapter.
+    """
+    offset = int(probe.get("magic_offset") or 0)
+    if offset <= 0:
+        return path
+    size = path.stat().st_size
+    if offset >= size:
+        return path
+    work_dir.mkdir(parents=True, exist_ok=True)
+    view = work_dir / ("lua_view_" + hashlib.sha256(
+        f"{path}:{size}:{offset}".encode("utf-8")
+    ).hexdigest()[:20] + ".bin")
+    with path.open("rb") as src, view.open("wb") as dst:
+        src.seek(offset)
+        remaining = size - offset
+        while remaining:
+            block = src.read(min(1024 * 1024, remaining))
+            if not block:
+                break
+            dst.write(block)
+            remaining -= len(block)
+    return view
+
+
+
 
 def _safe_error(exc: BaseException) -> str:
     return (f"{type(exc).__name__}: {exc}")[:500]
@@ -157,6 +188,17 @@ def execute(input_path, output_dir, work_dir=None, archive_kind="pak") -> dict[s
             }
             try:
                 result = decompile(src, dest_dir)
+                # If a wrapper precedes a real Lua chunk, retry against an
+                # immutable embedded view. This makes wrapped/hybrid payloads
+                # recoverable without altering the original corpus file.
+                if (not result.get("ok")) and probes[str(src)].get("magic_offset", 0) > 0:
+                    view = _make_lua_view(src, probes[str(src)], work / "LUA_VIEWS")
+                    retry_dir = dest_dir / "embedded"
+                    retry_dir.mkdir(parents=True, exist_ok=True)
+                    retry = decompile(view, retry_dir)
+                    result = dict(retry)
+                    result["recovery"] = "embedded-lua-view"
+                    result["embedded_offset"] = probes[str(src)].get("magic_offset")
             except Exception as exc:
                 result = {"ok": False, "error": _safe_error(exc)}
             record["decompile"] = result
