@@ -59,6 +59,18 @@ if "python3 tools/prepare_xop_final.py" not in final_workflow:
 if "6.0.0-smart-premium" not in readme or "Version code | 100" not in readme:
     raise SystemExit("FAIL: README release identity differs from Gradle")
 
+audit_script = read("tools/audit_release_apk.py")
+for required in (
+    'assets/protector/config.json',
+    'Xop native SO protection enabled',
+    'Xop proxy detection and NetGuard enabled',
+    'Xop SO decryption uses lazy mode',
+    'Xop RASP enforce action enabled',
+    'Xop dex_hmac is a populated SHA-256 HMAC',
+):
+    if required not in audit_script:
+        raise SystemExit("FAIL: APK audit does not verify packaged Xop control: " + required)
+
 print("RELEASE PIPELINE CONSISTENCY: PASS")
 print(f"- Gradle / CodeMagic identity: {version_name} (versionCode {version_code})")
 print("- XopProtector default-on and fail-closed behavior: PASS")
