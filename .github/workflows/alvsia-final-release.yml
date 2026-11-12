@@ -81,6 +81,7 @@ jobs:
           command -v luac5.3
           python3 tools/security_release_check.py
           python3 tests/test_release_pipeline_consistency.py
+          python3 tests/test_release_apk_audit_policy.py
           python3 -m unittest tests.test_security_wiring tests.test_security_fabric
           python3 -m pip install --disable-pip-version-check pycryptodome pytest && python3 -m pytest -q tests/test_tool_dispatch.py
           python3 -m unittest tests.test_live_workspace_and_file_limits
