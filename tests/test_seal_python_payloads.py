@@ -49,8 +49,9 @@ class ProductionSealPayloadTests(unittest.TestCase):
                 _seed()
 
     def test_module_manifest_is_nonempty_and_unique(self):
-        self.assertEqual(len(MODULES), 27, "release sealing inventory must include all 27 reviewed modules")
+        self.assertEqual(len(MODULES), 28, "release sealing inventory must include all 28 reviewed modules")
         self.assertIn("alvsia_metadata.py", MODULES)
+        self.assertIn("sm4_secret_registry.py", MODULES)
         self.assertEqual(len(MODULES), len(set(MODULES)))
         self.assertTrue(all((ROOT / "app/src/main/python" / rel).is_file() for rel in MODULES))
         loader = (ROOT / "app/src/main/python" / "sealed_loader.py").read_text(encoding="utf-8")
