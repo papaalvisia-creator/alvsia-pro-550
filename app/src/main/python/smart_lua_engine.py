@@ -242,7 +242,7 @@ def protect_encrypt(input_path, output_dir, work_dir, restore=False) -> dict:
                 suffix=".alvsia-tmp", delete=False
             ) as target:
                 temporary = Path(target.name)
-                target.write(b"ALVLUA1" + nonce + (b"\\x00" * 16))
+                target.write(b"ALVLUA1" + nonce + (b"\x00" * 16))
                 with src.open("rb") as source:
                     while True:
                         block = source.read(1024 * 1024)
