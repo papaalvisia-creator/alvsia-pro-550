@@ -66,6 +66,29 @@ def package_identity(aapt_output: str) -> tuple[str, str, str]:
         raise SystemExit("aapt could not read APK package/version metadata: " + package_line)
     return match.groups()
 
+def validate_required_entries(names: set[str], read_entry) -> None:
+    """Accept either plaintext sealed index or Xop PAS1-encrypted index."""
+    required = {
+        "AndroidManifest.xml", "classes.dex",
+        "lib/arm64-v8a/librasp_guard.so",
+        "assets/chaquopy/app.imy",
+        "lib/arm64-v8a/libprotector.so", "assets/protector/dexes.zip",
+    }
+    missing = sorted(required - names)
+    if missing:
+        raise SystemExit("Required APK entries missing: " + ", ".join(missing))
+
+    plain_index = "assets/nx/i.dat"
+    encrypted_index = "assets/protector/aenc/nx/i.dat"
+    if plain_index not in names and encrypted_index not in names:
+        raise SystemExit("Required sealed JAR index missing (plaintext or Xop PAS1)")
+    if encrypted_index in names:
+        if "assets/protector/assets.map" not in names:
+            raise SystemExit("Xop encrypted asset map missing")
+        if not read_entry(encrypted_index).startswith(b"PAS1"):
+            raise SystemExit("Xop sealed JAR index has an invalid PAS1 header")
+
+
 def main():
     if len(sys.argv) != 5:
         raise SystemExit("usage: validate_apk.py APK APKSIGNER ZIPALIGN AAPT")
@@ -80,15 +103,7 @@ def main():
         bad = archive.testzip()
         if bad:
             raise SystemExit("APK ZIP CRC failure: " + bad)
-        required = (
-            "AndroidManifest.xml", "classes.dex",
-            "lib/arm64-v8a/librasp_guard.so",
-            "assets/chaquopy/app.imy", "assets/nx/i.dat",
-            "lib/arm64-v8a/libprotector.so", "assets/protector/dexes.zip",
-        )
-        missing = [name for name in required if name not in names]
-        if missing:
-            raise SystemExit("Required APK entries missing: " + ", ".join(missing))
+        validate_required_entries(set(names), archive.read)
     alignment = command(alignment_check_args(aligner, apk))
     if "Verification successful" not in alignment:
         raise SystemExit("APK alignment verification did not pass")
