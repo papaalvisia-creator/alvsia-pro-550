@@ -157,11 +157,15 @@ def _archive_extract(input_path: str | Path, output_dir: str | Path) -> dict:
 
 
 def _archive_smart(operation: str, input_path: str | Path | None,
-                  output_dir: str | Path, work_dir: str | Path | None = None,
+                  output_dir: str | Path | None = None,
+                  work_dir: str | Path | None = None,
                   archive_kind: str = "auto") -> dict:
     from smart_archive_engine import execute
+    target_dir = Path(output_dir) if output_dir is not None else (
+        Path(input_path).parent / "_alvsia_archive_out" if input_path else Path("_alvsia_archive_out")
+    )
     result = execute(
-        operation, input_path, output_dir,
+        operation, input_path, target_dir,
         work_dir=work_dir, archive_kind=archive_kind,
     )
     result = dict(result or {})
