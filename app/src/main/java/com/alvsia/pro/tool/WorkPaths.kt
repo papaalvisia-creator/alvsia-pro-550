@@ -124,7 +124,7 @@ object WorkPaths {
         try {
             f.writeText(
                 """
-                ALVSIA PRO 5.5.2 - modern I/O
+                ALVSIA PRO - Smart workspace
                 ====================================
                 Root: Download/ALVSIA/
 
@@ -138,7 +138,8 @@ object WorkPaths {
 
                 Output Browser indexes both OUT/ and TASKS/*/OUT/.
 
-                Modules: PAK OBB LUA SCAN ASSET REPORT REBRAND SO FRIDA XOR DEC PAKD STR LINJ AUDIT LPROTECT ALVSIA_PRIVATE
+                Smart modules: SMART_LUA SMART_PAK SMART_OBB SMART_DATA SMART_ANALYSIS WORKSPACE_REPORT ALVSIA_PRIVATE
+                Legacy provider folders remain internal compatibility paths; users operate through the seven Smart modules.
 
                 Key:  @ALVSIA_PRO
                 Owner: @ALVSIA_PRO
