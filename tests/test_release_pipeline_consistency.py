@@ -38,7 +38,8 @@ sign_gate = 'if [ "${ALVSIA_XOPPROTECTOR_ENABLED:-true}" = "true" ]; then'
 if pack_gate not in codemagic or sign_gate not in codemagic:
     raise SystemExit("FAIL: XopProtector default differs between pack and sign stages")
 xop_command = next((line for line in final_workflow.splitlines() if 'java -jar "$PACKER"' in line), "")
-if "--encrypt-assets" in xop_command or re.search(r"^\\s*--encrypt-assets(?:\\s|$)", codemagic, re.MULTILINE):
+codemagic_xop_args = codemagic.split('java -jar "$XOP_DIR/$PACKER_JAR"', 1)[1].split("CANDIDATE=", 1)[0]
+if "--encrypt-assets" in xop_command or "--encrypt-assets" in codemagic_xop_args:
     raise SystemExit("FAIL: Xop asset encryption is unsafe until runtime readers use ProtectorAssets")
 if "ignore_failure: true" in codemagic:
     raise SystemExit("FAIL: a CodeMagic step can silently ignore a release failure")
