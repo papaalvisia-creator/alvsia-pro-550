@@ -1573,7 +1573,7 @@ class SM4KeyFinder:
         Returns deduplicated ``list[tuple[int, str]]`` sorted by offset.
         """
         all_results: list = []
-        for so_path in sorted(self.so_folder.rglob('*.so')):
+        for so_path in sorted(p for p in self.so_folder.rglob('*') if p.is_file() and p.suffix.lower() in ('.so', '.bin')):
             try:
                 hits = SM4KeyFinder.scan_file(so_path)
                 for off, key in hits:
@@ -1641,7 +1641,7 @@ class SM4AllKeyFinder(SM4KeyFinder):
         utf16_re = _re.compile(rb'(?:[\x20-\x7e]\x00){20}')
         utf8_re = _re.compile(rb'[\x21-\x7e]{20}')
 
-        for so_path in sorted(Path(self.so_folder).rglob('*.so')):
+        for so_path in sorted(p for p in Path(self.so_folder).rglob('*') if p.is_file() and p.suffix.lower() in ('.so', '.bin')):
             try:
                 offset = 0
                 carry = b""
