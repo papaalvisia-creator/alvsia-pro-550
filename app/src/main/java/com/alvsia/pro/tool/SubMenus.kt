@@ -14,7 +14,7 @@ object SubMenus {
         2  -> "PAK Rebuild"
         3  -> "PAK Compact"
         4  -> "OBB Tools"
-        5  -> "LUA Tools"
+        5  -> "SMART LUA"
         6  -> "File Scan"
         7  -> "Workspace"
         8  -> "Export Report"
@@ -78,29 +78,32 @@ object SubMenus {
                 "Select .obb/.zip → OUT/OBB/*.integrity_audit.json; archive is never extracted or modified"),
         )
 
-        // ── 5 LUA Tools ───────────────────────────────────────────────────
+        // ── 5 SMART LUA — exactly four public engines ───────────────────────
         5 -> listOf(
-            SubTool("lua_decompile",    "Smart Decompile",    "ART UnLuaC + validated fallback",
-                "Select .luac/.lua → validated .lua source"),
-            SubTool("lua_analyze",      "LUA Analyzer",       "Format + obfuscation analysis",
-                "Detect Lua/LuaJIT/source → structured analysis report"),
-            SubTool("lua_constants",    "Extract Constants",  "String/constant dump",
-                "Select Lua bytecode → OUT/LUA/*_constants.txt"),
-            SubTool("lua_clean_source", "Clean Lua Source",   "Safe source cleanup",
-                "Select Lua source → OUT/LUA/*_clean.lua"),
-            SubTool("lua_xor_crypt",   "XOR Layer",           "Body XOR probe",
-                "Select file → OUT/LUA/*.xor"),
-            SubTool("lua_multi_xor",   "Multi-XOR Probe",    "Candidate scan",
-                "Select file → OUT/LUA/*_xor_*.bin"),
-            SubTool("lua_format_probe", "Lua Format Probe", "Identify Lua 5.1–5.4, LuaJIT, source and common wrappers before selecting a decompiler",
-                "Select .lua/.luac/.bin → OUT/LUA/*.format_probe.json"),
-            SubTool("lua_vm_deobfuscate", "VM Deobfuscate",  "Detect supported ALVSEAL/ALVLUA formats and report recovery results",
-                "Select protected .lua/.luac/.alvlua → OUT/LUA/*_recovered.lua or partial recovery report"),
-            SubTool("pubg_lua_convert",  "PUBG→Std Convert",  "Convert PUBG/BGMI scrambled Lua bytecode to standard Lua 5.3 using XOR key from libUE4.so",
-                "Select .luac file or folder → OUT/PUBGLUA/*_std.luac"),
-            SubTool("t24_lua_decompile", "T24 Lua Decompile", "Normalize T24 v4 Lua 5.3 bytecode and run the validated ALVSIA decompiler",
-                "Select one T24 .luac → OUT/LUA_T24/ normalized bytecode and decompile report"),
-
+            SubTool(
+                "smart_lua_decompiler",
+                "SMART LUA DECOMPILER",
+                "Detect → route → Universal IR → adapters → recovery → semantic validation",
+                "Select Lua/LuaJIT/PUBG/BGMI/T24/VM-obfuscated input. The engine chooses the internal route automatically."
+            ),
+            SubTool(
+                "smart_lua_protect",
+                "SMART LUA PROTECT",
+                "Detect → route → IR → protection → strong/VM → validation",
+                "Select Lua source. Protection strategy is selected internally and validated before output."
+            ),
+            SubTool(
+                "smart_lua_compile",
+                "SMART LUA COMPILER / RECOMPILER",
+                "Source → bytecode or bytecode → source → bytecode with round-trip validation",
+                "Select Lua source or compatible bytecode. Compiler dialect is detected and validated automatically."
+            ),
+            SubTool(
+                "smart_lua_inject",
+                "SMART LUA INJECT",
+                "Detect → route → IR → patch/hook/repack → integrity validation",
+                "Select Lua/bytecode. Configure injection strategy internally through WORK/lua_inject_config.txt."
+            ),
         )
 
         // ── 6 File Scan ───────────────────────────────────────────────────
@@ -226,15 +229,10 @@ object SubMenus {
                 "Select .luac → OUT/STR/*_xref.txt"),
         )
 
-        // ── 16 Lua Inject ─────────────────────────────────────────────────
-        16 -> listOf(
-            SubTool("lua_patch_byte",  "Patch Bytecode",    "Replace raw bytes at a chosen offset; validate bytecode separately",
-                "CONFIG: offset=0x1234 and patch_hex=DEADBEEF. Select .luac → OUT/LINJ/*_patched.luac"),
-            SubTool("lua_inject_hook", "Inject Hook Func",  "Prepend custom hook source to a selected Lua source file",
-                "Enter hook source in CONFIG and select a Lua source → OUT/LINJ/*_hooked.lua (source only; no bytecode compile)"),
-            SubTool("lua_mod_repack",  "Mod + Repack PAK",  "Repack an already-edited tree; decompile and patch separately",
-                "Place the edited tree in WORK/MOD or OUT/PAK/<pak-name>, then select the original .pak → OUT/LINJ/*_modded.pak"),
-        )
+        // ── 16 Lua Inject — backend compatibility ID only ─────────────────
+        // The visible Inject tools live exclusively inside SMART LUA (module 05).
+        // Module 16 remains reserved so existing grants/dispatch IDs stay stable.
+        16 -> emptyList()
 
         // ── 17 Anti-RE Audit ──────────────────────────────────────────────
         17 -> listOf(
@@ -248,19 +246,10 @@ object SubMenus {
                 "Select .py/.lua/.js/.cpp → OUT/AUDIT/*.source_triage.json"),
         )
 
-        // ── 18 Lua Protector ──────────────────────────────────────────────
-        18 -> listOf(
-            SubTool("lua_smart_protect", "Smart Lua Protect", "Validated lexical local renaming and source compaction",
-                "Select UTF-8 .lua source → OUT/LPROTECT/*_protected.lua (balanced profile)"),
-            SubTool("lua_smart_protect_strong", "Smart Lua Protect Strong", "Local renaming, string encoding and comment stripping with validation",
-                "Select UTF-8 .lua source → OUT/LPROTECT/*_protected.lua (strong profile)"),
-            SubTool("lua_protect_encrypt", "Protect Lua Source", "AES-256-GCM authenticated encryption",
-                "Create WORK/lua_protect_key.txt with a 64-character hex key. Select .lua → OUT/LPROTECT/*.alvlua"),
-            SubTool("lua_protect_decrypt", "Restore Protected Lua", "Authenticate and decrypt an ALVLUA1 payload",
-                "Use the same WORK/lua_protect_key.txt and select .alvlua → OUT/LPROTECT/*.lua"),
-            SubTool("lua_vm_protect", "VM Protect (BGMI pattern)", "Encrypted Lua wrapper with dispatcher decoys; not a full VM compiler",
-                "Select .lua source → OUT/LPROTECT/*.alvlua3.lua (self-executing; reversible via module 05 / VM Deobfuscate)")
-        )
+        // ── 18 Lua Protector — backend compatibility ID only ───────────────
+        // The visible Protect tools live exclusively inside SMART LUA (module 05).
+        // Module 18 remains reserved so existing grants/dispatch IDs stay stable.
+        18 -> emptyList()
 
         // Module 19 — ALVSIA PRIVATE TOOL (sealed runtime required)
     19 -> listOf(

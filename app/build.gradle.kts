@@ -13,8 +13,8 @@ android {
         applicationId = "com.alvsia.pro"
         minSdk = 26
         targetSdk = 34
-        versionCode = 98
-        versionName = "5.5.2-hardened"
+        versionCode = 100
+        versionName = "6.0.0-smart-premium"
         buildConfigField("int", "PROTO", "2")
         buildConfigField("String", "CERT_SHA256", "\"99b33815c88a17abbcfe22be15250363f6dfc79c11ffc980e71b62b74b1f295c\"")
         // Sprint 1: DEX hash placeholder — CodeMagic seal script patches this at build time
