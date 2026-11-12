@@ -137,32 +137,34 @@ object AssetVault {
         jarsDir.mkdirs()
         var n = 0
         for ((name, bytes) in loadSealedMap(ctx)) {
-            val dest = safeJarTarget(jarsDir, name) ?: continue
-            // Length alone is not integrity: an attacker could alter a JAR without changing its size.
-            val alreadyValid = try {
-                dest.isFile && dest.length() == bytes.size.toLong() &&
-                    dest.readBytes().contentEquals(bytes)
-            } catch (_: Exception) {
-                false
-            }
-            if (alreadyValid) {
-                n++
-                continue
-            }
             try {
-                dest.writeBytes(bytes)
-            } catch (_: Exception) {
-                continue
+                val dest = safeJarTarget(jarsDir, name) ?: continue
+                // Length alone is not integrity: an attacker could alter a JAR without changing its size.
+                val alreadyValid = try {
+                    dest.isFile && dest.length() == bytes.size.toLong() &&
+                        dest.readBytes().contentEquals(bytes)
+                } catch (_: Exception) {
+                    false
+                }
+                if (alreadyValid) {
+                    n++
+                    continue
+                }
+                try {
+                    dest.writeBytes(bytes)
+                } catch (_: Exception) {
+                    continue
+                }
+                try {
+                    dest.setReadable(true, true)
+                    dest.setWritable(true, true)
+                } catch (_: Exception) {
+                }
+                n++
             } finally {
-                // Do not keep decrypted JAR plaintext resident after materialization.
+                // Clear every decrypted payload, including rejected names and cache hits.
                 bytes.fill(0)
             }
-            try {
-                dest.setReadable(true, true)
-                dest.setWritable(true, true)
-            } catch (_: Exception) {
-            }
-            n++
         }
         return n
     }
