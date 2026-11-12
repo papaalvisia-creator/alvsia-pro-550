@@ -21,9 +21,10 @@ object AssetVault {
     private fun isSafeAssetPath(path: String): Boolean =
         path.isNotBlank() &&
             !path.startsWith("/") &&
+            !path.contains("..") &&
             '\u0000' !in path &&
             '\\' !in path &&
-            path.split('/').all { it.isNotBlank() && it != "." && it != ".." }
+            path.split('/').all { it.isNotBlank() && it != "." }
 
     private fun safeJarTarget(root: File, name: String): File? {
         if (!isSafeAssetName(name) || !name.endsWith(".jar")) return null
@@ -80,14 +81,21 @@ object AssetVault {
      */
     fun readAssetBytes(ctx: Context, assetPath: String): ByteArray? {
         if (!isSafeAssetPath(assetPath)) return null
-        try {
-            val clazz = Class.forName("com.yqsh.protector.shell.ProtectorAssets")
-            val readBytes = clazz.getMethod("readBytes", Context::class.java, String::class.java)
-            val protected = readBytes.invoke(null, ctx, assetPath) as? ByteArray
-            if (protected != null && protected.isNotEmpty()) return protected
+        val protectorAssets = try {
+            Class.forName("com.yqsh.protector.shell.ProtectorAssets")
         } catch (_: Throwable) {
-            // The injected reader is absent in debug builds or the asset is not in its index.
+            null
         }
+        if (protectorAssets != null) {
+            // Protected APK: fail closed if PAS1 decryption fails; never fall back to plaintext.
+            return try {
+                val readBytes = protectorAssets.getMethod("readBytes", Context::class.java, String::class.java)
+                readBytes.invoke(null, ctx, assetPath) as? ByteArray
+            } catch (_: Throwable) {
+                null
+            }
+        }
+        // Debug/unprotected APK: the original asset is intentionally plaintext.
         return try {
             ctx.assets.open(assetPath).use { it.readBytes() }
         } catch (_: Throwable) {
