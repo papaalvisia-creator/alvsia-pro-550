@@ -38,7 +38,7 @@ profile = read(ROOT / "app/src/main/java/com/alvsia/pro/ui/profile/ProfileScreen
 required_modules = {
     "alvsia_bridge_impl.py", "alvsia_metadata.py", "alvsia_private.py", "alvsia_vm_protect.py", "lua_engine/pattern_registry.py",
     "alvsia_core.py", "alvsia_ultimate.py",
-    "alvsia_ultimate_compat.py", "alvsia_features.py", "pinned_http.py",
+    "alvsia_ultimate_compat.py", "alvsia_features.py", "sm4_secret_registry.py", "pinned_http.py",
     "lua_engine/lua_decompiler_final.py", "lua_engine/lua_protector.py",
     "lua_engine/t24.py",
     "lua_output_validator.py", "lua_string_recover.py",
