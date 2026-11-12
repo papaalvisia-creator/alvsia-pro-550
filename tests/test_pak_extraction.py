@@ -185,6 +185,7 @@ def test_unpack_refuses_skipped_entries_and_output_count_mismatch():
 def main():
     tests = (
         test_zlib_and_raw_deflate_blocks,
+        test_zstd_plain_block_uses_zero_argument_decoder,
         test_corrupt_zlib_is_rejected_not_returned_as_plaintext,
         test_write_is_atomic_and_checks_decompressed_size,
         test_pak_v46_sm4_flag50_key_vector,
