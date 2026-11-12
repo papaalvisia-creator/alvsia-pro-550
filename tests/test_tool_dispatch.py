@@ -144,8 +144,8 @@ def test_frida_spawn_preserves_full_package_name():
 
 def test_smart_lua_exposes_exactly_four_engines():
     menus = MENUS.read_text(encoding="utf-8")
-    lua_menu = menus.split("1 -> listOf(", 1)[1].split("\\n        2 -> listOf(", 1)[0]
-    ids = re.findall(r'SubTool\\(\\s*"([a-zA-Z0-9_]+)"', lua_menu)
+    lua_menu = menus.split("1 -> listOf(", 1)[1].split("\n        2 -> listOf(", 1)[0]
+    ids = re.findall(r'SubTool\(\s*"([a-zA-Z0-9_]+)"', lua_menu)
     assert ids == [
         "lua_decompile", "lua_smart_protect", "lua_compile", "lua_patch_byte"
     ], f"SMART LUA must expose exactly four engines, got {ids}"
