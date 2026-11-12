@@ -197,12 +197,13 @@ jobs:
           AAPT="$(find "$ANDROID_HOME/build-tools" -type f -name aapt | sort -V | tail -n 1)"
           test -x "$AAPT" || { echo "FAIL: aapt not found"; exit 1; }
           BADGING="$("$AAPT" dump badging "$APK")"
-          printf '%s\n' "$BADGING" | grep -Fq "package: name='com.alvsia.pro' versionCode='100' versionName='6.0.0'" || {
-            echo "FAIL: APK package/version does not match release source"
+          EXPECTED_PACKAGE=$(python3 -c 'import re,pathlib; s=pathlib.Path("app/build.gradle.kts").read_text(); m=[re.search(p,s) for p in (r'applicationId\s*=\s*"([^"]+)"',r'versionCode\s*=\s*(\d+)',r'versionName\s*=\s*"([^"]+)"')]; assert all(m), "missing Gradle identity"; print("package: name=%r versionCode=%r versionName=%r" % tuple(x.group(1) for x in m))')
+          printf '%s\\n' "$BADGING" | grep -Fqx "$EXPECTED_PACKAGE" || {
+            echo "FAIL: APK package/version does not match app/build.gradle.kts"
             printf '%s\n' "$BADGING" | grep -E "^package:|^application-label:" || true
             exit 1
           }
-          echo "PASS: APK package/version verified"
+          echo "PASS: APK package/version matches active Gradle release configuration"
           mkdir -p validation-artifacts
           cp "$APK" validation-artifacts/ALVISIA_PRO_5.5.2-hardened_release_unsigned.apk
           cp release_security_audit.txt validation-artifacts/
