@@ -1013,12 +1013,35 @@ class PakCrypto:
 class PakCompression:
 
     @staticmethod
+    @lru_cache(maxsize=1)
+    def _zstd_decompressor_without_dict() -> ZstdDecompressor:
+        """Create a plain Zstandard decoder without passing a null dictionary."""
+        if ZstdDecompressor is None:
+            raise RuntimeError("zstandard module is unavailable")
+        return ZstdDecompressor()
+
+    @staticmethod
     @lru_cache(maxsize=33)
-    def _zstd_decompressor(dict: ZstdCompressionDict) -> ZstdDecompressor:
+    def _zstd_decompressor_with_dict(dict: ZstdCompressionDict) -> ZstdDecompressor:
+        if ZstdDecompressor is None:
+            raise RuntimeError("zstandard module is unavailable")
+        if dict is None:
+            raise ValueError("ZSTD dictionary is required for dictionary-compressed block")
         return ZstdDecompressor(dict)
 
     @staticmethod
+    def _zstd_decompressor(dict: Optional[ZstdCompressionDict]) -> ZstdDecompressor:
+        """Select the correct decoder constructor for plain vs dictionary ZSTD."""
+        if dict is None:
+            return PakCompression._zstd_decompressor_without_dict()
+        return PakCompression._zstd_decompressor_with_dict(dict)
+
+    @staticmethod
     def zstd_dictionary(dict_data) -> ZstdCompressionDict:
+        if ZstdCompressionDict is None or DICT_TYPE_AUTO is None:
+            raise RuntimeError("zstandard module is unavailable")
+        if not dict_data:
+            raise ValueError("empty ZSTD dictionary")
         return ZstdCompressionDict(dict_data, DICT_TYPE_AUTO)
 
     @staticmethod
@@ -1030,9 +1053,6 @@ class PakCompression:
             except zlib.error:
                 pass
             # Fallback: raw DEFLATE (no zlib/gzip header, negative wbits).
-            # Tencent PAK files often store raw-deflate blocks without the
-            # two-byte zlib header; a silent "return block" was masking these
-            # as successful extraction while producing corrupt output.
             try:
                 return zlib.decompress(block, wbits=-zlib.MAX_WBITS)
             except zlib.error:
