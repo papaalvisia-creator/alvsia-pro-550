@@ -65,15 +65,16 @@ def run_tool(module_id, sub_id, input_path, out_root, engine_dir, jars_dir):
             return "X AUTH: module/subtool has no Unaux grant mapping"
         core._alvsia_require_operation((grant_operation,))
 
-        # Unified adapter facade: route the production Smart Lua/protection,
-        # string-recovery, and bounded OBB operations through one fail-closed
-        # dispatcher after the existing authentication/grant gates pass.
+        # Unified adapter facade: Smart Lua, Smart PAK/OBB, and Smart Data providers
+        # share one fail-closed dispatcher after existing authentication/grant gates.
         if sid in (
             "lua_decompile", "lua_analyze",
             "lua_smart_protect", "lua_smart_protect_strong",
             "lua_compile", "lua_patch_byte", "lua_inject_hook", "lua_mod_repack",
             "lua_protect_encrypt", "lua_protect_decrypt", "lua_vm_protect",
-            "str_recover", "obb_info", "obb_unzip"
+            "str_recover", "pak_info", "pak_full_unpack", "pak_repack_full",
+            "pak_integrity_audit", "obb_info", "obb_unzip", "obb_rezip",
+            "obb_integrity_audit"
         ):
             try:
                 from module_adapters import dispatch as _adapter_dispatch
@@ -106,15 +107,28 @@ def run_tool(module_id, sub_id, input_path, out_root, engine_dir, jars_dir):
                         "string-recovery", "recover", input_path=ip,
                         output_dir=out / "OUT" / "STR",
                     )
-                elif sid == "obb_info":
+                elif sid == "str_recover":
                     _adapter = _adapter_dispatch(
-                        "archive", "inspect", input_path=ip,
-                        output_file=out / "OUT" / "OBB" / "info.json",
+                        "string-recovery", "recover", input_path=ip,
+                        output_dir=out / "OUT" / "STR",
                     )
                 else:
+                    archive_ids = {
+                        "pak_info": ("inspect", "PAK", "pak"),
+                        "pak_full_unpack": ("extract", "PAK", "pak"),
+                        "pak_repack_full": ("rebuild", "PAK", "pak"),
+                        "pak_integrity_audit": ("integrity", "PAK", "pak"),
+                        "obb_info": ("inspect", "OBB", "obb"),
+                        "obb_unzip": ("extract", "OBB", "obb"),
+                        "obb_rezip": ("rebuild", "OBB", "obb"),
+                        "obb_integrity_audit": ("integrity", "OBB", "obb"),
+                    }
+                    archive_op, folder, archive_kind = archive_ids[sid]
                     _adapter = _adapter_dispatch(
-                        "archive", "extract", input_path=ip,
-                        output_dir=out / "OUT" / "OBB" / Path(ip).stem,
+                        "archive", archive_op, input_path=ip,
+                        output_dir=out / "OUT" / folder,
+                        work_dir=out / "WORK",
+                        archive_kind=archive_kind,
                     )
                 if not isinstance(_adapter, dict) or not _adapter.get("ok"):
                     return "\\n".join(lines + ["X UNIFIED ADAPTER: " + str((_adapter or {}).get("error", "operation failed"))[:900]])
