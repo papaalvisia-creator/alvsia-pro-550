@@ -19,6 +19,11 @@ jobs:
 
       # Chaquopy 15 host-side pip imports cgi, removed in Python 3.13+.
       # Pin the CI host interpreter; embedded app Python remains set in app/build.gradle.kts.
+      - name: Set up Chaquopy build Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.8'
+
       - name: Set up compatible host Python for Chaquopy
         uses: actions/setup-python@v5
         with:
@@ -160,6 +165,8 @@ jobs:
           test -s app/src/main/assets/engine_licenses/luau-decompiler-MIT.txt
 
       - name: Build and test Android debug variant
+        env:
+          CHAQUOPY_BUILD_PYTHON: python3.8
         run: |
           chmod +x ./gradlew
           bash tools/run_gradle_with_retry.sh ./gradlew testDebugUnitTest assembleDebug --no-daemon --stacktrace
@@ -191,6 +198,7 @@ jobs:
 
       - name: Build release APK
         env:
+          CHAQUOPY_BUILD_PYTHON: python3.8
           # This job audits the unsigned baseline before XopProtector runs.
           # Final XOP provenance is mandatory in the post-packaging audit.
           ALVSIA_REQUIRE_XOP_PROVENANCE: "0"
