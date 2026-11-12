@@ -56,6 +56,8 @@ jobs:
               "app/src/main/python/alvsia_ultimate.py",
               "app/src/main/python/alvsia_vm_protect.py",
               "app/src/main/python/archive_engine.py",
+              "app/src/main/python/smart_lua_engine.py",
+              "app/src/main/python/sm4_secret_registry.py",
               "app/src/main/python/alvsia_private.py",
               "app/src/main/python/sealed_loader.py",
           )
