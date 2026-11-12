@@ -26,14 +26,14 @@ def execute(operation: str, input_path, output_dir, work_dir=None) -> dict:
         if not source.is_file():
             return {"ok": False, "engine": "SMART DATA", "error": "recovery input must be a file"}
         import alvsia_ultimate as ultimate
-        result = ultimate.decrypt_auto(str(source), out / "DEC", str(work))
+        result = ultimate.decrypt_auto(str(source), out, str(work))
         return dict(result or {}, engine="SMART DATA", operation=op)
 
     if op == "xor":
         if not source.is_file():
             return {"ok": False, "engine": "SMART DATA", "error": "XOR input must be a file"}
         import alvsia_ultimate as ultimate
-        result = ultimate.xor_single_byte_scan(str(source), out / "XOR")
+        result = ultimate.xor_single_byte_scan(str(source), out)
         return dict(result or {}, engine="SMART DATA", operation=op)
 
     if op == "sm4":
@@ -41,7 +41,7 @@ def execute(operation: str, input_path, output_dir, work_dir=None) -> dict:
         folder = source if source.is_dir() else source.parent
         finder = SM4AllKeyFinder(str(folder))
         hits = finder.find_all_keys()
-        report_path = out / "SM4" / "sm4_all_keys.txt"
+        report_path = out / "sm4_all_keys.txt"
         report_path.parent.mkdir(parents=True, exist_ok=True)
         lines = []
         counts = {}
@@ -62,7 +62,7 @@ def execute(operation: str, input_path, output_dir, work_dir=None) -> dict:
             return {"ok": False, "engine": "SMART DATA", "error": "metadata input must be a file"}
         from alvsia_metadata import decode_metadata_v39_file
         digest = _sha256(source)[:12]
-        target = out / "METADATA" / (source.stem + "_decoded_" + digest + ".dat")
+        target = out / (source.stem + "_decoded_" + digest + ".dat")
         target.parent.mkdir(parents=True, exist_ok=True)
         report = decode_metadata_v39_file(source, target)
         report_path = target.with_suffix(target.suffix + ".json")
