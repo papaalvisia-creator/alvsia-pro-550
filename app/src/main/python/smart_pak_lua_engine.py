@@ -15,7 +15,11 @@ from typing import Any
 
 MAX_IMPORT_BYTES = 5 * 1024 * 1024 * 1024
 MAX_CANDIDATES = 50000
-LUA_SUFFIXES = {".lua", ".luac", ".luajit", ".ljbc", ".luau", ".bytes", ".bin", ".dat"}
+MAX_LUA_PROBE_BYTES = 1024 * 1024
+MAX_LUA_DECOMPILE_BYTES = 256 * 1024 * 1024
+LUA_SUFFIXES = {".lua", ".luac", ".luajit", ".ljbc", ".luau"}
+LUA_BINARY_SUFFIXES = {".bytes", ".bin", ".dat"}
+LUA_MAGIC = (b"\x1bLua", b"\x1bLJ")
 
 
 def _sha256(path: Path) -> str:
@@ -26,16 +30,65 @@ def _sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
-def _looks_like_lua(path: Path) -> bool:
+def _probe_lua(path: Path) -> dict[str, Any]:
+    """Classify without executing the payload.
+
+    Protected/hybrid game payloads can prepend a small wrapper before the Lua
+    bytecode header, so the probe scans a bounded prefix rather than requiring
+    the magic at offset zero. Plain text is accepted only for Lua-like syntax;
+    arbitrary UTF-8 assets are not promoted to decompile candidates.
+    """
     suffix = path.suffix.lower()
-    if suffix in LUA_SUFFIXES:
-        return True
     try:
+        size = path.stat().st_size
+        if size > MAX_LUA_DECOMPILE_BYTES:
+            return {"candidate": False, "reason": "candidate exceeds decompile size limit"}
         with path.open("rb") as handle:
-            head = handle.read(16)
-        return head.startswith(b"\x1bLua") or head.startswith(b"\x1bLJ")
-    except OSError:
-        return False
+            probe = handle.read(MAX_LUA_PROBE_BYTES)
+    except OSError as exc:
+        return {"candidate": False, "reason": _safe_error(exc)}
+
+    for magic in LUA_MAGIC:
+        pos = probe.find(magic)
+        if pos >= 0:
+            return {
+                "candidate": True,
+                "confidence": "high",
+                "kind": "bytecode",
+                "magic_offset": pos,
+                "suffix": suffix,
+            }
+
+    if suffix in LUA_SUFFIXES:
+        return {"candidate": True, "confidence": "high", "kind": "lua-extension", "suffix": suffix}
+
+    if suffix in LUA_BINARY_SUFFIXES:
+        return {"candidate": False, "reason": "binary suffix without Lua magic", "suffix": suffix}
+
+    if suffix not in (".txt", ".cfg", ".json", ".xml", ".ini", ".lua"):
+        return {"candidate": False, "reason": "non-Lua extension"}
+
+    try:
+        text = probe.decode("utf-8")
+    except UnicodeDecodeError:
+        return {"candidate": False, "reason": "not UTF-8 source"}
+
+    lua_markers = (
+        "function ", "local ", "return ", "require(", "require ",
+        "end", "--", "---@", "setmetatable(", "coroutine.", "string.",
+    )
+    score = sum(1 for marker in lua_markers if marker in text)
+    return {
+        "candidate": score >= 2,
+        "confidence": "medium" if score >= 2 else "low",
+        "kind": "source-probe",
+        "marker_score": score,
+        "suffix": suffix,
+    }
+
+
+def _looks_like_lua(path: Path) -> bool:
+    return bool(_probe_lua(path).get("candidate"))
 
 
 def _safe_error(exc: BaseException) -> str:
@@ -79,7 +132,8 @@ def execute(input_path, output_dir, work_dir=None, archive_kind="pak") -> dict[s
                     "stage": "scan", "error": "extracted file count exceeds safety limit",
                     "files": len(files)}
 
-        candidates = [p for p in files if _looks_like_lua(p)]
+        probes = {str(p): _probe_lua(p) for p in files}
+        candidates = [p for p in files if probes[str(p)].get("candidate")]
         lua_out = out / "SMART_LUA"
         lua_out.mkdir(parents=True, exist_ok=True)
 
@@ -99,6 +153,7 @@ def execute(input_path, output_dir, work_dir=None, archive_kind="pak") -> dict[s
                 "bytes": src.stat().st_size,
                 "sha256": _sha256(src),
                 "detection": detection,
+                "probe": probes[str(src)],
             }
             try:
                 result = decompile(src, dest_dir)
@@ -127,6 +182,11 @@ def execute(input_path, output_dir, work_dir=None, archive_kind="pak") -> dict[s
             "scan": {
                 "files": len(files),
                 "lua_candidates": len(candidates),
+                "non_candidates": len(files) - len(candidates),
+                "probe": {
+                    "max_probe_bytes": MAX_LUA_PROBE_BYTES,
+                    "max_decompile_bytes": MAX_LUA_DECOMPILE_BYTES,
+                },
             },
             "decompile": {
                 "attempted": len(candidates),
