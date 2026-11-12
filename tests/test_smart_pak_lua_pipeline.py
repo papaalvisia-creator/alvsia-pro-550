@@ -19,8 +19,9 @@ def test_limits_and_detection():
         bytecode = root / "payload.luac"
         wrapped_binary = root / "payload.bin"
         source.write_text("local value = 1\nreturn value\n", encoding="utf-8")
-        bytecode.write_bytes(b"\x1bLua\x53\x00\x19\x93\r\n\x1a\n")
-        wrapped_binary.write_bytes(b"WRAPPER\x00\x1bLua\x53\x00\x19\x93\r\n\x1a\n")
+        lua_chunk = bytes([0x1b]) + b"Lua" + bytes([0x53, 0x00, 0x19, 0x93, 13, 10, 0x1a, 10])
+        bytecode.write_bytes(lua_chunk)
+        wrapped_binary.write_bytes(b"WRAPPER" + bytes([0]) + lua_chunk)
         assert _looks_like_lua(source)
         assert _looks_like_lua(bytecode)
         assert _looks_like_lua(wrapped_binary)
