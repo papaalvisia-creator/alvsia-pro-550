@@ -38,6 +38,11 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Chaquopy build Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.8'
+
       - name: Host Python
         uses: actions/setup-python@v5
         with:
@@ -118,6 +123,8 @@ jobs:
           PY
 
       - name: Build unsigned APK
+        env:
+          CHAQUOPY_BUILD_PYTHON: python3.8
         run: |
           set -euo pipefail
           chmod +x ./gradlew
