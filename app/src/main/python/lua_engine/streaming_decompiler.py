@@ -291,7 +291,32 @@ def stream_decompile_lua53(input_path: Path, out_path: Path) -> Tuple[bool, str]
     failures = []
     seen = set()
 
-    def _try_candidate(variant: str, candidate: bytes):
+    def _looks_like_hybrid_lua53(blob: bytes) -> bool:
+        if len(blob) < 43 or not blob.startswith(b"\x1bLuaS"):
+            return False
+        if blob[5] != 0 or blob[6:12] != b"\x19\x93\x0d\x0a\x1a\x0a":
+            return False
+        if blob[12:17] != bytes((4, 8, 4, 8, 8)):
+            return False
+        if blob[17:25] != b"\x78\x56\x00\x00\x00\x00\x00\x00":
+            return False
+        if blob[25:33] != b"\x00\x00\x00\x00\x00\x28\x77\x40":
+            return False
+        if blob[34] != 0xFF:
+            return False
+        length = int.from_bytes(blob[35:39], "little")
+        if length < 2 or length > min(16 * 1024 * 1024, len(blob) - 38):
+            return False
+        source = blob[39:39 + length - 1]
+        printable = sum(1 for b in source if b in (9, 10, 13) or 32 <= b < 127)
+        return printable >= max(8, int(len(source) * 0.85))
+
+    def _try_candidate(
+        variant: str,
+        candidate: bytes,
+        *,
+        hybrid_long_string_size: bool = False,
+    ):
         if __import__("time").monotonic() >= deadline:
             return False, f"lua53_total_budget_exceeded_after_{budget_seconds:g}s"
         digest = __import__("hashlib").sha256(candidate).digest()
@@ -301,7 +326,11 @@ def stream_decompile_lua53(input_path: Path, out_path: Path) -> Tuple[bool, str]
         try:
             # decompile_bytes already performs strict chunk parsing; the old
             # extra load_chunk call parsed the complete bytecode twice.
-            source_text = decompile_bytes(memoryview(candidate), deadline=deadline)
+            source_text = decompile_bytes(
+                memoryview(candidate),
+                deadline=deadline,
+                hybrid_long_string_size=hybrid_long_string_size,
+            )
             if not source_text or not source_text.strip():
                 raise ValueError("decompiler returned empty source")
             ok, msg = validate_lua_source(source_text, expected_version="Lua 5.3")
@@ -320,6 +349,16 @@ def stream_decompile_lua53(input_path: Path, out_path: Path) -> Tuple[bool, str]
     if ok:
         return True, note
     failures.append(note)
+
+    if _looks_like_hybrid_lua53(data):
+        ok, note = _try_candidate(
+            "hybrid_long_string_size32",
+            data,
+            hybrid_long_string_size=True,
+        )
+        if ok:
+            return True, note
+        failures.append(note)
     del data
     if note.startswith("lua53_total_budget_exceeded"):
         return False, note
