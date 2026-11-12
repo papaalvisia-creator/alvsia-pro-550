@@ -286,7 +286,8 @@ workflows:
               SIGNED_APK="ALVISIA_PRO_6.0.0-smart-premium-xop_candidate_signed.apk"
               echo "XopProtector candidate passed packaging gates; signing candidate."
             else
-              echo "WARNING: XopProtector candidate unavailable; safely falling back to baseline release APK."
+              echo "ERROR: XopProtector is required for this release, but its candidate artifact is missing."
+              exit 1
             fi
           fi
 
