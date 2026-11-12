@@ -113,6 +113,10 @@ def test_menu_ids_are_unique_and_reachable():
     for sid in ids:
         if sid in direct_engine_routes and direct_engine_routes[sid] in engine:
             continue
+        # Compact Smart menus may normalize a visible operation to a legacy
+        # provider ID in SmartModuleRouter; that mapping is a valid route.
+        if f'"{sid}"' in router:
+            continue
         if f'"{sid}"' in bridge:
             continue
         route = generic.get(sid)
