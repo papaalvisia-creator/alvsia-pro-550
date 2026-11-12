@@ -37,6 +37,13 @@ def test_real_pak_manifest_entry():
         "papaalvisia-creator/kumpulan-source-tool:"
         "samples/pak/game_patch_4.7.0.21752.pak"
     )
+    sample_zstd = data["game_patch_4.7.0.21756.pak"]
+    assert sample_zstd["size"] == 713299
+    assert sample_zstd["sha256"] == "dc6a229d388889b599e154a1354eb48a0ecd0c2e762f68a4837be598f70bd578"
+    assert sample_zstd["source"] == (
+        "papaalvisia-creator/kumpulan-source-tool:"
+        "samples/pak/game_patch_4.7.0.21756.pak"
+    )
 
 
 if __name__ == "__main__":
