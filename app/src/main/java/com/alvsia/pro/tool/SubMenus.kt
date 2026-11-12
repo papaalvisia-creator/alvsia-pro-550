@@ -28,14 +28,10 @@ object SubMenus {
 
     fun forModule(moduleId: Int): List<SubTool> = when (moduleId) {
         1 -> listOf(
-            SubTool("lua_decompile", "SMART LUA DECOMPILER", "Detect → normalize → recover → validate Lua/LuaJIT/protected layers", "Select Lua/bytecode/container. One pipeline automatically selects compatible engines and validates the final source."),
-            SubTool("lua_analyze", "SMART LUA ANALYZE", "Format, VM/protection, constants, strings and XOR diagnostics", "Select Lua/bytecode. Analysis is automatic and feeds the decompiler recovery pipeline."),
-            SubTool("lua_smart_protect", "SMART LUA PROTECT", "Balanced protection with syntax + differential validation", "Select Lua source. The unified protection pipeline validates before publishing output."),
-            SubTool("lua_smart_protect_strong", "SMART LUA PROTECT · STRONG", "Strong protection profile with validation", "Select Lua source. Strong mode is still handled by the same Smart Lua protection mechanism."),
-            SubTool("lua_compile", "SMART LUA COMPILE / RECOMPILE", "Compile validated Lua source back to bytecode", "Select Lua source. The engine detects the target version and uses an available compatible compiler; no fake bytecode is produced."),
-            SubTool("lua_protect_encrypt", "SMART LUA PROTECT · ENCRYPT / RESTORE", "Authenticated ALVLUA package encryption and restore", "Select Lua or ALVLUA and provide the existing protection key configuration."),
-            SubTool("lua_vm_protect", "SMART LUA PROTECT · VM", "VM-style protected Lua wrapper", "Select Lua source. Uses the existing validated VM provider behind the single Smart Lua mechanism."),
-            SubTool("lua_patch_byte", "SMART LUA INJECT", "Validated byte patch, hook injection and repack path", "Select Lua/PAK input and provide the existing injection configuration. Injection remains one Smart Lua operation family.")
+            SubTool("lua_decompile", "SMART LUA DECOMPILER", "Detect → route → Universal IR → adapters → recovery → semantic validation", "Select Lua/LuaJIT/PUBG/BGMI/T24/VM input. Analysis, format adapters, multi-candidate recovery and legacy fallback run internally."),
+            SubTool("lua_smart_protect", "SMART LUA PROTECT", "Protect → strong/VM/encrypt/restore → validate", "Select Lua or protected package. Choose internal profile/mode in WORK/lua_protect_config.json; no separate protection tools are exposed."),
+            SubTool("lua_compile", "SMART LUA COMPILER / RECOMPILER", "Source → bytecode or bytecode → source → bytecode → round-trip validation", "Select Lua source or bytecode. Compatible compiler/provider selection and validation are automatic."),
+            SubTool("lua_patch_byte", "SMART LUA INJECT", "Detect → route → IR → patch/hook/script/mod integration → integrity validation", "Select Lua/bytecode/PAK input. Configure patch, hook or repack internally in WORK/lua_inject_config.json.")
         )
         2 -> listOf(
             SubTool("pak_smart_inspect", "SMART PAK INSPECT", "Auto-detect PAK version, index, encryption, compression and integrity", "Select .pak. The engine inspects first and chooses the compatible provider."),
