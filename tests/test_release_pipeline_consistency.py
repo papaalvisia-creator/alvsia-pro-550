@@ -2,7 +2,6 @@
 """Regression checks for ALVSIA 6.0.0 release identity and Xop fail-closed behavior."""
 from pathlib import Path
 import re
-import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -17,8 +16,8 @@ codemagic = read("codemagic.yaml")
 final_workflow = read(".github/workflows/alvsia-final-release.yml")
 readme = read("README.md")
 
-code_match = re.search(r"versionCode\\s*=\\s*(\\d+)", gradle)
-name_match = re.search(r'versionName\\s*=\\s*"([^"]+)"', gradle)
+code_match = re.search(r"versionCode\s*=\s*(\d+)", gradle)
+name_match = re.search(r'versionName\s*=\s*"([^"]+)"', gradle)
 if not code_match or not name_match:
     raise SystemExit("FAIL: Gradle release identity cannot be parsed")
 version_code, version_name = code_match.group(1), name_match.group(1)
