@@ -376,7 +376,7 @@ def test_reference_inspection_subtools_are_registered_and_read_only():
     bridge = BRIDGE_IMPL.read_text(encoding="utf-8")
     helper = (ROOT / "app/src/main/python/alvsia_reference_tools.py").read_text(encoding="utf-8")
     for sid in ("lua_format_probe", "anti_re_source_triage", "so_dump_audit"):
-        assert sid in menus
+        assert sid not in menus, f"{sid} must remain an internal Smart provider, not a public menu"
         assert sid in bridge
     assert "probe_lua_file" in helper
     assert "scan_source_file" in helper
