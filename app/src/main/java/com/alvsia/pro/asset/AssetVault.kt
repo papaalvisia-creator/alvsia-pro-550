@@ -21,7 +21,7 @@ object AssetVault {
     private fun isSafeAssetPath(path: String): Boolean =
         path.isNotBlank() &&
             !path.startsWith("/") &&
-            '\\u0000' !in path &&
+            '\u0000' !in path &&
             '\\\\' !in path &&
             path.split('/').all { it.isNotBlank() && it != "." && it != ".." }
 
