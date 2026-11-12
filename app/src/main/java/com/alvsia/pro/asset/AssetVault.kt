@@ -84,7 +84,7 @@ object AssetVault {
             val clazz = Class.forName("com.yqsh.protector.shell.ProtectorAssets")
             val readBytes = clazz.getMethod("readBytes", Context::class.java, String::class.java)
             val protected = readBytes.invoke(null, ctx, assetPath) as? ByteArray
-            if (protected != null) return protected
+            if (protected != null && protected.isNotEmpty()) return protected
         } catch (_: Throwable) {
             // The injected reader is absent in debug builds or the asset is not in its index.
         }
