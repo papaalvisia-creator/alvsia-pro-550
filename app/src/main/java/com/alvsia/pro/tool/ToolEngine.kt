@@ -326,80 +326,9 @@ class ToolEngine(private val context: Context) {
         } catch (_: Exception) {
         }
 
-        // LUA decompile on ART (no external Java)
-        if (subId == "lua_decompile" || subId.contains("unluac")) {
-            if (inputPath.isNotEmpty()) {
-                val inFile = File(inputPath)
-                val outFile = File(WorkPaths.taskModuleOut(taskId, moduleId), inFile.nameWithoutExtension + "_decompiled.lua")
-                lines.addAll(UnluacRunner.decompile(inFile, outFile))
-                if (outFile.isFile && outFile.length() > 0) {
-                    lines.add("OK OUT -> ${WorkPaths.taskModuleOut(taskId, moduleId).absolutePath}")
-                    return lines
-                }
-                // Large-file path: hand off to Python streaming decompiler.
-                // This is mandatory for inputs ≥ ART_SAFE_LIMIT because the
-                // in-process unluac deliberately rejects them.
-                lines.add("... ART unluac produced no output, trying Python bridge")
-                if (PythonBridgeRunner.isReady()) {
-                    // The Lua fast-path runs before the generic bridge setup below.
-                    // Establish the same authenticated Python environment here or
-                    // the bridge rejects the fallback with AUTH despite a valid login.
-                    if (SessionGate.sessionOk) {
-                        PythonBridgeRunner.setEnv("ALVSIA_APK_SESSION", "1")
-                        PythonBridgeRunner.setEnv("ALVSIA_SEALED_RUNTIME", "1")
-                    } else {
-                        PythonBridgeRunner.clearEnv("ALVSIA_APK_SESSION")
-                        PythonBridgeRunner.clearEnv("ALVSIA_SOFT_AUTH")
-                    }
-                    try {
-                        val (bridgeOk, bridgeLines) = PythonBridgeRunner.runBridge(
-                            moduleId = moduleId,
-                            subId = subId,
-                            inputPath = inputPath,
-                            extraName = null,
-                            workDirPath = WorkPaths.taskRoot(taskId).absolutePath,
-                            jarsDirPath = jarsDir.absolutePath
-                        )
-                        lines.addAll(bridgeLines)
-
-                        // Python's streaming decompiler writes to OUT/LUA, while this
-                        // fast-path checks the module-specific OUT directory. Promote
-                        // only the bridge-reported Lua file to the expected output.
-                        val reportedOutput = bridgeLines.firstOrNull { it.startsWith("OUT -> ") }
-                            ?.substringAfter("OUT -> ")
-                            ?.takeIf { it.isNotBlank() && !it.startsWith("(see ") }
-                        if (reportedOutput != null) {
-                            val produced = File(reportedOutput)
-                            if (produced.isFile && produced.length() > 0 &&
-                                produced.extension.equals("lua", ignoreCase = true) &&
-                                produced.absoluteFile != outFile.absoluteFile) {
-                                outFile.parentFile?.mkdirs()
-                                produced.copyTo(outFile, overwrite = true)
-                                lines.add("OK promoted Python Lua output -> ${outFile.absolutePath}")
-                            }
-                        }
-
-                        mirrorMsvToOut(moduleId, taskId, lines)
-                        if (bridgeOk && outFile.isFile && outFile.length() > 0) {
-                            lines.add("OK Python streaming decompiler -> ${outFile.absolutePath}")
-                            lines.add("bytes ${outFile.length()}")
-                            return lines
-                        }
-                        if (!bridgeOk) {
-                            lines.add("X DECOMPILE FAILED: ART unluac + Python streaming both produced no validated Lua source")
-                            lines.add("Input preserved under IN/; no fake .lua output was created")
-                            lines.add("Inspect the input-format/header diagnostic above; no source bytes were guessed or patched.")
-                            return lines
-                        }
-                    } catch (t: Throwable) {
-                        val cause = t.cause ?: t
-                        lines.add("... Python bridge survived parser failure: ${cause.javaClass.simpleName}: ${cause.message ?: "no detail"}")
-                    }
-                } else {
-                    lines.add("... Python runtime not ready — Chaquopy diagnostic: ${PythonBridgeRunner.startupDiagnostic()}")
-                }
-            }
-        }
+        // All Lua operations now enter the single Smart Lua Python mechanism.
+        // The bridge owns detection, provider selection, validation and fallback;
+        // this Kotlin layer only stages/isolates the task and reports progress.
 
         // Bridge for heavier modules
         try {
