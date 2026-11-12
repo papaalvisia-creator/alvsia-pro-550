@@ -18,6 +18,13 @@ object AssetVault {
             '\u0000' !in name &&
             '/' !in name && '\\' !in name
 
+    private fun isSafeAssetPath(path: String): Boolean =
+        path.isNotBlank() &&
+            !path.startsWith("/") &&
+            '\\u0000' !in path &&
+            '\\\\' !in path &&
+            path.split('/').all { it.isNotBlank() && it != "." && it != ".." }
+
     private fun safeJarTarget(root: File, name: String): File? {
         if (!isSafeAssetName(name) || !name.endsWith(".jar")) return null
         return try {
@@ -62,6 +69,27 @@ object AssetVault {
                 out[logical] = plain
             }
             out
+        } catch (_: Throwable) {
+            null
+        }
+    }
+
+    /**
+     * Read an ordinary bundled asset through Xop ProtectorAssets when present.
+     * Debug/unprotected APKs retain the Android AssetManager fallback.
+     */
+    fun readAssetBytes(ctx: Context, assetPath: String): ByteArray? {
+        if (!isSafeAssetPath(assetPath)) return null
+        try {
+            val clazz = Class.forName("com.yqsh.protector.shell.ProtectorAssets")
+            val readBytes = clazz.getMethod("readBytes", Context::class.java, String::class.java)
+            val protected = readBytes.invoke(null, ctx, assetPath) as? ByteArray
+            if (protected != null) return protected
+        } catch (_: Throwable) {
+            // The injected reader is absent in debug builds or the asset is not in its index.
+        }
+        return try {
+            ctx.assets.open(assetPath).use { it.readBytes() }
         } catch (_: Throwable) {
             null
         }
