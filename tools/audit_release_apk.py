@@ -152,7 +152,12 @@ def main() -> int:
             names = set(outer.namelist())
             xop_config_name = "assets/protector/config.json"
             if xop_config_name not in names:
-                check(False, "Xop protector config packaged")
+                # The unsigned baseline is audited before XopProtector runs, so
+                # its config cannot exist yet. Require it only for the final/XOP
+                # audit; this keeps the baseline gate meaningful without
+                # weakening the post-XOP gate.
+                check(False, "Xop protector config packaged" if REQUIRE_XOP_PROVENANCE
+                      else "Xop protector config deferred to final XOP packaging")
             else:
                 try:
                     xop_config = json.loads(outer.read(xop_config_name).decode("utf-8"))
