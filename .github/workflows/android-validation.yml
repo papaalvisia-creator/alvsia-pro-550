@@ -198,7 +198,7 @@ jobs:
           test -x "$AAPT" || { echo "FAIL: aapt not found"; exit 1; }
           BADGING="$("$AAPT" dump badging "$APK")"
           EXPECTED_PACKAGE=$(python3 -c 'import re,pathlib; s=pathlib.Path("app/build.gradle.kts").read_text(); m=[re.search(p,s) for p in (r'applicationId\s*=\s*"([^"]+)"',r'versionCode\s*=\s*(\d+)',r'versionName\s*=\s*"([^"]+)"')]; assert all(m), "missing Gradle identity"; print("package: name=%r versionCode=%r versionName=%r" % tuple(x.group(1) for x in m))')
-          printf '%s\\n' "$BADGING" | grep -Fqx "$EXPECTED_PACKAGE" || {
+          printf '%s\\n' "$BADGING" | grep -Fq "$EXPECTED_PACKAGE" || {
             echo "FAIL: APK package/version does not match app/build.gradle.kts"
             printf '%s\n' "$BADGING" | grep -E "^package:|^application-label:" || true
             exit 1
