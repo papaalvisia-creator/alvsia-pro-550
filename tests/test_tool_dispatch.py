@@ -142,6 +142,19 @@ def test_frida_spawn_preserves_full_package_name():
         assert "-f com.tencent " not in output, output
 
 
+def test_smart_lua_exposes_exactly_four_engines():
+    menus = MENUS.read_text(encoding="utf-8")
+    lua_menu = menus.split("1 -> listOf(", 1)[1].split("\\n        2 -> listOf(", 1)[0]
+    ids = re.findall(r'SubTool\\(\\s*"([a-zA-Z0-9_]+)"', lua_menu)
+    assert ids == [
+        "lua_decompile", "lua_smart_protect", "lua_compile", "lua_patch_byte"
+    ], f"SMART LUA must expose exactly four engines, got {ids}"
+    for internal in ("lua_analyze", "lua_smart_protect_strong",
+                     "lua_protect_encrypt", "lua_vm_protect",
+                     "lua_inject_hook", "lua_mod_repack"):
+        assert internal not in ids, f"{internal} must remain internal to Smart Lua"
+
+
 def test_catalog_contains_compact_smart_modules():
     catalog = CATALOG.read_text(encoding="utf-8")
     ids = [int(x) for x in re.findall(r'ToolItem\((\d+),', catalog)]
@@ -489,6 +502,7 @@ if __name__ == "__main__":
         test_sm4_47_modders_authoritative_secret_set,
         test_menu_ids_are_unique_and_reachable,
         test_catalog_contains_compact_smart_modules,
+        test_smart_lua_exposes_exactly_four_engines,
         test_private_module_is_compact_and_dispatchable,
         test_frida_spawn_preserves_full_package_name,
         test_engine_surfaces_bridge_failures,
