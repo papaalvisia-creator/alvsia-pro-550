@@ -34,6 +34,16 @@ class SmartCatalogTests(unittest.TestCase):
         self.assertEqual(len(all_ids), len(set(all_ids)), "SubTool IDs must be unique")
         self.assertIn("metadata_v39_decode", all_ids)
 
+    def test_output_handoff_catalog_targets_the_same_seven_smart_modules(self):
+        source = (ROOT / "app/src/main/java/com/alvsia/pro/ui/home/StudioCatalog.kt").read_text(encoding="utf-8")
+        entries = re.findall(
+            r'StudioItem\\("([^"]+)",\\s*"([^"]+)",.*?listOf\\(([^)]*)\\)\\)',
+            source,
+        )
+        self.assertEqual(len(entries), 7)
+        ids = [int(value) for _, _, raw in entries for value in re.findall(r"\\d+", raw)]
+        self.assertEqual(ids, list(range(1, 8)))
+
     def test_legacy_provider_dispatch_is_internal_and_reachable(self):
         router = ROUTER.read_text(encoding="utf-8")
         main = MAIN.read_text(encoding="utf-8")
