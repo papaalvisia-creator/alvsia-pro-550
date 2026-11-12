@@ -172,6 +172,13 @@ def main() -> int:
                           "Xop application signing certificate fingerprint is populated")
                     report.append("INFO insns_xor_key is a legacy field; native instruction protection is AES-GCM")
                     report.append("INFO Xop encrypt_assets is disabled until every asset reader is migrated to ProtectorAssets")
+            version_metadata = sorted(
+                n for n in names
+                if n.startswith("META-INF/") and n.lower().endswith(".version")
+            )
+            check(not version_metadata,
+                  "dependency version metadata absent from APK" if not version_metadata
+                  else "dependency version metadata remains: " + ", ".join(version_metadata))
             forbidden_package_names = {"rebrand_config.txt", "app-metadata.properties"}
             packaged_forbidden = sorted(n for n in names if Path(n).name.lower() in forbidden_package_names)
             check(not packaged_forbidden,
