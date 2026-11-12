@@ -197,28 +197,27 @@ jobs:
           AAPT="$(find "$ANDROID_HOME/build-tools" -type f -name aapt | sort -V | tail -n 1)"
           test -x "$AAPT" || { echo "FAIL: aapt not found"; exit 1; }
           BADGING="$("$AAPT" dump badging "$APK")"
-          python3 - <<'PY'
+          python3 - "$AAPT" "$APK" <<'PY'
           import pathlib
           import re
           import subprocess
+          import sys
+          aapt, apk = sys.argv[1:3]
           gradle = pathlib.Path("app/build.gradle.kts").read_text(encoding="utf-8")
           patterns = (
-              r'applicationId\\s*=\\s*"([^"]+)"',
-              r'versionCode\\s*=\\s*(\\d+)',
-              r'versionName\\s*=\\s*"([^"]+)"',
+              r'applicationId\s*=\s*"([^"]+)"',
+              r'versionCode\s*=\s*(\d+)',
+              r'versionName\s*=\s*"([^"]+)"',
           )
-          values = [re.search(pattern, gradle) for pattern in patterns]
-          if not all(values):
-              raise SystemExit("FAIL: could not parse applicationId/versionCode/versionName from Gradle")
-          expected = tuple(match.group(1) for match in values)
-          badging = subprocess.check_output(
-              [__import__("glob").glob(str(pathlib.Path.home() / "Android/Sdk/build-tools/*/aapt"))[-1], "dump", "badging", __import__("glob").glob("app/build/outputs/apk/release/*.apk")[0]],
-              text=True,
-          )
+          matches = [re.search(pattern, gradle) for pattern in patterns]
+          if not all(matches):
+              raise SystemExit("FAIL: could not parse Gradle applicationId/versionCode/versionName")
+          expected = tuple(match.group(1) for match in matches)
+          badging = subprocess.check_output([aapt, "dump", "badging", apk], text=True)
           package_line = next((line for line in badging.splitlines() if line.startswith("package: ")), "")
           actual_match = re.search(r"^package: name='([^']+)' versionCode='([^']+)' versionName='([^']+)'", package_line)
           if not actual_match:
-              raise SystemExit("FAIL: aapt package metadata could not be parsed: " + package_line)
+              raise SystemExit("FAIL: cannot parse APK package metadata: " + package_line)
           actual = actual_match.groups()
           if actual != expected:
               raise SystemExit(f"FAIL: APK identity mismatch; expected={expected!r}, actual={actual!r}")
