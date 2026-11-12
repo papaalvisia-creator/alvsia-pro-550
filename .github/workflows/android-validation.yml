@@ -444,7 +444,7 @@ jobs:
           print("PASS: native Smart Lua executables restored byte-identically from immutable baseline")
           PY
           python3 - "$BASELINE_SNAPSHOT" "$CANDIDATE" <<'PY'
-          import sys, zipfile
+          import json, sys, zipfile
           base, candidate = sys.argv[1:3]
           base_required = {
               "lib/arm64-v8a/librasp_guard.so",
