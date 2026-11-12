@@ -176,7 +176,8 @@ def main() -> int:
                     check(bool(re.fullmatch(r"[0-9a-f]{64}", str(xop_config.get("app_sign_sha256", "")))),
                           "Xop application signing certificate fingerprint is populated")
                     report.append("INFO insns_xor_key is a legacy field; native instruction protection is AES-GCM")
-                    report.append("INFO Xop encrypt_assets is disabled until every asset reader is migrated to ProtectorAssets")
+                    check(xop_config.get("encrypt_assets") is True, "Xop asset encryption enabled")
+                    report.append("INFO Xop asset encryption excludes Chaquopy app.imy and engine license metadata by CI policy")
             version_metadata = sorted(
                 n for n in names
                 if n.startswith("META-INF/") and n.lower().endswith(".version")
@@ -258,9 +259,15 @@ def main() -> int:
                     check(expected_hash == hashlib.sha256(luau_native).hexdigest(),
                           "PumbaaDev Android executable checksum verified")
             check("assets/chaquopy/app.imy" in names, "Chaquopy app bundle packaged")
-            check("assets/nx/i.dat" in names, "sealed JAR index packaged")
+            nx_index_plain = "assets/nx/i.dat" in names
+            nx_index_xop = "assets/protector/aenc/nx/i.dat" in names
+            check(nx_index_plain or nx_index_xop,
+                  "sealed JAR index packaged" if (nx_index_plain or nx_index_xop) else "sealed JAR index missing")
             check(not any(n.startswith("assets/unluac/") and n.lower().endswith(".jar") for n in names),
                   "plaintext unluac JAR assets absent")
+            if nx_index_xop:
+                check("assets/protector/assets.map" in names, "Xop encrypted asset index packaged")
+                check("assets/protector/aenc/nx/i.dat" in names, "Xop PAS1 encrypted sealed JAR index packaged")
             vcs_entries = sorted(n for n in names if n.endswith("version-control-info.textproto"))
             check(not vcs_entries, "VCS revision metadata absent" if not vcs_entries else "VCS revision metadata absent; found: " + ", ".join(vcs_entries))
             dex_names = sorted(n for n in names if re.fullmatch(r"classes(?:[0-9]+)?\.dex", n))
@@ -292,12 +299,19 @@ def main() -> int:
             # Do not fail the release audit merely because that declared permission is present;
             # any future permission removal must be verified against PermissionHelper/tool usage.
             report.append("INFO compiled manifest READ_PHONE_STATE presence recorded; permission policy is source-reviewed")
-            blobs = sorted(n for n in names if n.startswith("assets/nx/") and n.endswith(".bin"))
+            blobs_plain = sorted(n for n in names if n.startswith("assets/nx/") and n.endswith(".bin"))
+            blobs_xop = sorted(n for n in names if n.startswith("assets/protector/aenc/nx/") and n.endswith(".bin"))
+            blobs = blobs_xop if blobs_xop else blobs_plain
             check(len(blobs) >= 3, f"sealed JAR asset count >= 3 (found {len(blobs)})")
-            for n in blobs:
-                check(outer.read(n).startswith(ASSET_MAGIC), f"sealed JAR header: {n}")
+            if blobs_xop:
+                for n in blobs_xop:
+                    check(outer.read(n).startswith(b"PAS1"), f"Xop PAS1 sealed JAR header: {n}")
+            else:
+                for n in blobs_plain:
+                    check(outer.read(n).startswith(ASSET_MAGIC), f"sealed JAR header: {n}")
             index = outer.read("assets/nx/i.dat") if "assets/nx/i.dat" in names else b""
-            check(index.startswith(ASSET_MAGIC), "sealed JAR index header")
+            if index:
+                check(index.startswith(ASSET_MAGIC), "sealed JAR index header")
             imy = outer.read("assets/chaquopy/app.imy") if "assets/chaquopy/app.imy" in names else b""
             try:
                 with zipfile.ZipFile(io.BytesIO(imy)) as inner:
