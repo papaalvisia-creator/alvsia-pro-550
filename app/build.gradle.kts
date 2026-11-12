@@ -116,6 +116,9 @@ android {
 chaquopy {
     defaultConfig {
         version = "3.8"
+        // Chaquopy bytecode compilation requires buildPython to match this runtime minor version.
+        // CI sets CHAQUOPY_BUILD_PYTHON=python3.8; local builds retain the normal PATH fallback.
+        buildPython(System.getenv("CHAQUOPY_BUILD_PYTHON") ?: "python3")
         pip {
             // Retry slow Chaquopy index downloads; source fallback cannot compile native packages here.
             options("--timeout", "120", "--retries", "10")
