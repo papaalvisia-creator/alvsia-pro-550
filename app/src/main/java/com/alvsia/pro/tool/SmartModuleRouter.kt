@@ -32,7 +32,11 @@ object SmartModuleRouter {
             subId.startsWith("audit_") -> 17
             else -> 10
         }
-        6 -> if (subId == "clear_work") 7 else 8
+        6 -> when (subId) {
+            "clear_work" -> 7
+            "hash_scan" -> 6
+            else -> 8
+        }
         7 -> 19
         else -> visibleModuleId
     }
