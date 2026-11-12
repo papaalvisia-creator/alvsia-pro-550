@@ -191,7 +191,8 @@ jobs:
           (cd "$XOP" && bash "$GITHUB_WORKSPACE/tools/run_gradle_with_retry.sh" ./gradlew --no-daemon :packer:jar exportShellFiles)
           PACKER=$(find "$XOP/packer/build/libs" -maxdepth 1 -type f -name 'protector-packer-*.jar' ! -name '*-sources.jar' | head -n 1)
           test -s "$PACKER"
-          java -jar "$PACKER" "$RUNNER_TEMP/alvsia-xop-input.apk" -o "$RUNNER_TEMP/alvsia-xop-candidate.apk" --shell-dir "$XOP/executable/shell-files" --profile industry --protect-so --encrypt-assets --detect-proxy --so-decrypt-mode lazy
+          # Optional asset encryption stays off until ALVSIA readers are migrated to Xop ProtectorAssets.
+          java -jar "$PACKER" "$RUNNER_TEMP/alvsia-xop-input.apk" -o "$RUNNER_TEMP/alvsia-xop-candidate.apk" --shell-dir "$XOP/executable/shell-files" --profile industry --protect-so --detect-proxy --so-decrypt-mode lazy
           test -s "$RUNNER_TEMP/alvsia-xop-candidate.apk"
           python3 tools/prepare_xop_final.py "$RUNNER_TEMP/alvsia-xop-input.apk" "$RUNNER_TEMP/alvsia-xop-candidate.apk"
 
