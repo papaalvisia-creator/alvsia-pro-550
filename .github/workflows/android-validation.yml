@@ -38,6 +38,7 @@ jobs:
         run: |
           python3 tools/security_release_check.py
           python3 tests/test_release_pipeline_consistency.py
+          python3 tests/test_release_apk_audit_policy.py
 
       - name: Verify security protections are wired into runtime
         run: python3 -m unittest tests.test_security_wiring tests.test_security_fabric
