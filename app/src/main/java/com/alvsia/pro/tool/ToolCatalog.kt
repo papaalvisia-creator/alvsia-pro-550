@@ -15,7 +15,7 @@ object ToolCatalog {
         ToolItem(2,  "PAK Rebuild",     "Repack · inject · encrypt · decrypt"),
         ToolItem(3,  "PAK Compact",     "Delete entry · empty · clean"),
         ToolItem(4,  "OBB Tools",       "Unzip · rezip · info"),
-        ToolItem(5,  "LUA Tools",       "Detect · analyze · decompile · clean · XOR · constants"),
+        ToolItem(5,  "SMART LUA",       "Decompiler · Protect · Compiler/Recompiler · Inject"),
         ToolItem(6,  "File Scan",       "Strings · hash · report"),
         ToolItem(7,  "Workspace",       "Clear WORK/OUT"),
         ToolItem(8,  "Export Report",   "Session / file summary"),
@@ -27,9 +27,7 @@ object ToolCatalog {
         ToolItem(13, "Decrypt Engine",  "AES-CBC/ECB · ZUC-like fallback · SM4 · SIMPLE1 · auto-detect"),
         ToolItem(14, "PAK Deep",        "AES-SHA1 PAK · Zstd decompress · ZUC-like fallback · SM4"),
         ToolItem(15, "String Recover",  "Obfuscated string restore · constant pool dump"),
-        ToolItem(16, "Lua Inject",      "Patch Lua bytes · prepend hook source · repack edited PAK tree"),
         ToolItem(17, "Anti-RE Audit",   "Detect weak points in target APK · generate report"),
-        ToolItem(18, "Lua Protector",    "Smart source protection · AES-256-GCM · VM wrapper"),
         // --- PRIVATE MODULE ---
         ToolItem(19, "ALVSIA PRIVATE TOOL", "Private analysis suite · sealed runtime required"),
     )
@@ -55,7 +53,7 @@ object ToolCatalog {
             // IDs, while missing modules are filled from defaults to prevent menu gaps.
             val merged = defaults().associateBy { it.id }.toMutableMap()
             out.forEach { item -> merged[item.id] = item }
-            merged.values.sortedBy { it.id }
+            merged.values.filter { it.id !in setOf(16, 18) }.sortedBy { it.id }
         } catch (_: Exception) {
             defaults()
         }
