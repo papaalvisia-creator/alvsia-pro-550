@@ -27,7 +27,9 @@ object ToolCatalog {
         ToolItem(13, "Decrypt Engine",  "AES-CBC/ECB · ZUC-like fallback · SM4 · SIMPLE1 · auto-detect"),
         ToolItem(14, "PAK Deep",        "AES-SHA1 PAK · Zstd decompress · ZUC-like fallback · SM4"),
         ToolItem(15, "String Recover",  "Obfuscated string restore · constant pool dump"),
+        ToolItem(16, "Lua Inject",      "Legacy backend adapter — public access is SMART LUA INJECT"),
         ToolItem(17, "Anti-RE Audit",   "Detect weak points in target APK · generate report"),
+        ToolItem(18, "Lua Protector",   "Legacy backend adapter — public access is SMART LUA PROTECT"),
         // --- PRIVATE MODULE ---
         ToolItem(19, "ALVSIA PRIVATE TOOL", "Private analysis suite · sealed runtime required"),
     )
@@ -53,7 +55,7 @@ object ToolCatalog {
             // IDs, while missing modules are filled from defaults to prevent menu gaps.
             val merged = defaults().associateBy { it.id }.toMutableMap()
             out.forEach { item -> merged[item.id] = item }
-            merged.values.filter { it.id !in setOf(16, 18) }.sortedBy { it.id }
+            merged.values.sortedBy { it.id }
         } catch (_: Exception) {
             defaults()
         }
