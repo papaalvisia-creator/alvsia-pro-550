@@ -40,3 +40,22 @@ with tempfile.TemporaryDirectory() as td:
     assert not (out / "tampered.lua").exists()
 
 print("SMART LUA STREAMING PROTECT: PASS (large-file round-trip and tamper rejection)")
+
+
+# Smart Lua is an independent engine: an invalid optional SM4 registry must not
+# block Lua decompile/protect/compile/inject routing.
+import unittest
+from unittest.mock import patch
+import sm4_secret_registry
+from smart_lua_engine import execute as execute_smart_lua
+
+class TestSmartLuaSM4Isolation(unittest.TestCase):
+    def test_invalid_sm4_registry_does_not_gate_lua_dispatch(self):
+        with patch.object(sm4_secret_registry, "SM4_SECRET_NEW_EXPECTED_COUNT", 0):
+            result = execute_smart_lua("unsupported-operation", None, None)
+        self.assertFalse(result.get("ok"))
+        self.assertIn("unsupported Smart Lua operation", result.get("error", ""))
+        self.assertNotIn("SM4", result.get("error", ""))
+
+if __name__ == "__main__":
+    unittest.main()
