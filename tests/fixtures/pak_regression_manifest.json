@@ -1,0 +1,8 @@
+{
+  "game_patch_4.7.0.21756.pak": {
+    "sha256": "dc6a229d388889b599e154a1354eb48a0ecd0c2e762f68a4837be598f70bd578",
+    "size": 713299,
+    "source": "papaalvisia-creator/kumpulan-source-tool:samples/pak/game_patch_4.7.0.21756.pak",
+    "expected_issue": "plain ZSTD blocks must not construct ZstdDecompressor(None)"
+  }
+}
