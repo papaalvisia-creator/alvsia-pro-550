@@ -59,6 +59,9 @@ if "python3 tools/prepare_xop_final.py" not in final_workflow:
 if "6.0.0-smart-premium" not in readme or "Version code | 100" not in readme:
     raise SystemExit("FAIL: README release identity differs from Gradle")
 
+if '"META-INF/*.version"' not in gradle or '"**/META-INF/*.version"' not in gradle:
+    raise SystemExit("FAIL: release packaging does not exclude dependency version metadata")
+
 audit_script = read("tools/audit_release_apk.py")
 for required in (
     'assets/protector/config.json',
