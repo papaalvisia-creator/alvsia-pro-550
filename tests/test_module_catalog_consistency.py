@@ -14,7 +14,7 @@ expected_ids = list(range(1, 8))
 assert [i for i, _ in catalog_items] == expected_ids, (
     f"ToolCatalog IDs must be exactly 1..7 in order; got {[i for i, _ in catalog_items]}"
 )
-assert len(catalog_items) == 19, f"expected 7 catalog entries, got {len(catalog_items)}"
+assert len(catalog_items) == 7, f"expected 7 catalog entries, got {len(catalog_items)}"
 
 profile_names = re.findall(r'ModuleChip\(\s*"[^"]*"\s*,\s*"([^"]+)"\s*\)', profile)
 catalog_names = [name for _, name in catalog_items]
