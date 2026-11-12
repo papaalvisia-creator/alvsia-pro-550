@@ -216,9 +216,31 @@ def _archive_repack(input_path: str | Path, output_dir: str | Path) -> dict:
     return result
 
 
+def _smart_lua_decompile(input_path, output_path, jars_dir=None):
+    from smart_lua_engine import decompile
+    return decompile(input_path, Path(output_path).parent, jars_dir=jars_dir)
+
+
+def _smart_lua_protect(input_path, output_path, profile="auto"):
+    from smart_lua_engine import protect
+    return protect(input_path, output_path, profile=profile)
+
+
+def _smart_lua_compile(input_path, output_dir, jars_dir=None):
+    from smart_lua_engine import compile_or_recompile
+    return compile_or_recompile(input_path, output_dir, jars_dir=jars_dir)
+
+
+def _smart_lua_inject(input_path, output_dir, mode="auto"):
+    from smart_lua_engine import inject
+    return inject(input_path, output_dir, mode=mode)
+
+
 _ADAPTERS: dict[tuple[str, str], Callable[..., dict]] = {
-    ("lua", "decompile"): _lua_decompile,
-    ("lua", "protect"): _lua_protect,
+    ("lua", "decompile"): _smart_lua_decompile,
+    ("lua", "protect"): _smart_lua_protect,
+    ("lua", "compile"): _smart_lua_compile,
+    ("lua", "inject"): _smart_lua_inject,
     ("string-recovery", "recover"): _string_recover,
     ("archive", "inspect"): _archive_inspect,
     ("archive", "extract"): _archive_extract,
