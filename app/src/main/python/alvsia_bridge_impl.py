@@ -295,6 +295,38 @@ def run_tool(module_id, sub_id, input_path, out_root, engine_dir, jars_dir):
             except Exception as exc:
                 lines.append("X PAK UNPACK FAILED: %s" % (str(exc)[:1200] or type(exc).__name__))
                 return "\n".join(lines)
+            if isinstance(r, dict):
+                stats = r.get("stats") or {}
+                if stats:
+                    lines.append(
+                        "PAK VERIFY expected=%s written=%s skipped=%s skipped_dirs=%s bytes=%s"
+                        % (
+                            stats.get("expected_files", "?"),
+                            stats.get("written_files", "?"),
+                            stats.get("skipped_files", "?"),
+                            stats.get("skipped_directories", "?"),
+                            stats.get("written_bytes", "?"),
+                        )
+                    )
+                    index_stats = stats.get("index_parse") or {}
+                    if index_stats:
+                        lines.append(
+                            "PAK INDEX entries=%s dirs=%s loaded_dirs=%s bad_refs=%s bad_paths=%s cursor=%s/%s"
+                            % (
+                                index_stats.get("file_entries", "?"),
+                                index_stats.get("directory_records", "?"),
+                                index_stats.get("loaded_directories", "?"),
+                                index_stats.get("skipped_bad_refs", "?"),
+                                index_stats.get("skipped_bad_paths", "?"),
+                                index_stats.get("reader_cursor", "?"),
+                                index_stats.get("index_length", "?"),
+                            )
+                        )
+                    for failure in (stats.get("failures") or [])[:8]:
+                        lines.append(
+                            "PAK ENTRY ERROR %s -> %s"
+                            % (failure.get("path", "?"), failure.get("error", "?"))
+                        )
             if not isinstance(r, dict) or not r.get("ok"):
                 lines.append("X PAK UNPACK FAILED: %s" % (
                     r.get("error", r) if isinstance(r, dict) else str(r)
