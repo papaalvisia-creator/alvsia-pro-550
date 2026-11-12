@@ -1,5 +1,6 @@
 package com.alvsia.pro.tool
 
+import com.alvsia.pro.asset.AssetVault
 import com.alvsia.pro.sec.SessionGate
 import com.alvsia.pro.panel.Hwid
 import android.content.Context
@@ -75,8 +76,16 @@ object PythonBridgeRunner {
                 return it.absolutePath
             }
             val dest = File(dir, "unluac_2025_12_23.jar")
-            context.assets.open("unluac/unluac_2025_12_23.jar").use { source ->
-                FileOutputStream(dest).use { output -> source.copyTo(output) }
+            val assetBytes = AssetVault.readAssetBytes(context, "unluac/unluac_2025_12_23.jar")
+                ?: return null
+            try {
+                if (assetBytes.size <= 1000) return null
+                FileOutputStream(dest).use { output ->
+                    output.write(assetBytes)
+                    output.fd.sync()
+                }
+            } finally {
+                assetBytes.fill(0)
             }
             if (dest.isFile && dest.length() > 1000) dest.absolutePath else null
         } catch (_: Throwable) {
