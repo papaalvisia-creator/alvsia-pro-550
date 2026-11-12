@@ -22,6 +22,17 @@ from sm4_secret_registry import (
 )
 
 
+def _sha256_file(path: Path, chunk_size: int = 1024 * 1024) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        while True:
+            block = handle.read(chunk_size)
+            if not block:
+                break
+            digest.update(block)
+    return digest.hexdigest()
+
+
 def _result(ok: bool, operation: str, **extra: Any) -> dict:
     out = {"ok": bool(ok), "module": "lua", "operation": operation}
     out.update(extra)
@@ -51,25 +62,32 @@ def decompile(input_path, output_dir, jars_dir=None) -> dict:
     p = Path(input_path)
     out = Path(output_dir)
     out.mkdir(parents=True, exist_ok=True)
-    # Analysis is an internal preflight stage of the Decompiler, not a separate
-    # user-facing tool. A diagnostic failure must not suppress real recovery.
-    analysis = None
-    try:
-        analysis_dir = out / "_smart_analysis"
-        analysis = run_lua_analyze(str(p), analysis_dir)
-    except Exception as exc:
-        analysis = {"ok": False, "error": type(exc).__name__}
+
+    # Recovery runs first so optional diagnostics can never delay or suppress
+    # the primary decompilation result.
     result = dict(run_lua_smart(p, out, jars_dir=jars_dir) or {})
-    result["analysis"] = analysis
     result.update({"module": "lua", "operation": "decompile"})
-    if result.get("ok") and not result.get("out"):
-        return _result(False, "decompile", error="decompiler reported success without a source artifact", diagnostics=result)
-    if result.get("ok"):
-        artifact = Path(str(result["out"]))
-        if not artifact.is_file() or artifact.stat().st_size <= 0 or artifact.suffix.lower() != ".lua":
-            return _result(False, "decompile", error="decompiler output failed source-artifact validation", diagnostics=result)
-        result["output_bytes"] = artifact.stat().st_size
-        result["sha256"] = hashlib.sha256(artifact.read_bytes()).hexdigest()
+    if not result.get("ok") or not result.get("out"):
+        if result.get("ok"):
+            return _result(False, "decompile",
+                           error="decompiler reported success without a source artifact",
+                           diagnostics=result)
+        return result
+
+    artifact = Path(str(result["out"]))
+    if not artifact.is_file() or artifact.stat().st_size <= 0 or artifact.suffix.lower() != ".lua":
+        return _result(False, "decompile",
+                       error="decompiler output failed source-artifact validation",
+                       diagnostics=result)
+    result["output_bytes"] = artifact.stat().st_size
+    result["sha256"] = _sha256_file(artifact)
+
+    # Format/constant/VM analysis is part of this engine, not a separate menu.
+    # It is deliberately post-recovery and non-fatal.
+    try:
+        result["analysis"] = run_lua_analyze(str(p), out / "_smart_analysis")
+    except Exception as exc:
+        result["analysis"] = {"ok": False, "error": type(exc).__name__}
     return result
 
 
