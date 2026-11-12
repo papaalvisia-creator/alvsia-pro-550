@@ -75,12 +75,14 @@ class ToolEngine(private val context: Context) {
         for (name in jarNames) {
             val dest = File(jarsDir, name)
             if (dest.exists() && dest.length() > 1000L) continue
+            val assetBytes = AssetVault.readAssetBytes(context, "unluac/$name") ?: continue
             try {
-                context.assets.open("unluac/$name").use { ins ->
-                    dest.outputStream().use { ins.copyTo(it) }
-                }
+                if (assetBytes.size <= 1000) continue
+                dest.writeBytes(assetBytes)
                 dest.setReadable(true, true)
             } catch (_: Exception) {
+            } finally {
+                assetBytes.fill(0)
             }
         }
     }
