@@ -122,6 +122,7 @@ def test_pak_writer_ignores_predictable_temp_symlink(tmp_path):
         size=3,
         encrypted=False,
         uncompressed_size=3,
+        compressed_blocks=[],
     )
 
     core.TencentPakFile._write_to_disk(pak, target, entry)
