@@ -317,7 +317,8 @@ jobs:
           s = s.replace(anchor, inject + anchor, 1)
           p.write_text(s)
           print("PASS: Xop asset encryptor patched for Chaquopy-safe exclusions")
-          PY          # Prevent an upstream/local.properties Windows SDK path from overriding the hosted runner SDK.
+          PY
+          # Prevent an upstream/local.properties Windows SDK path from overriding the hosted runner SDK.
           rm -f "$XOP_DIR/local.properties"
           test -d "$ANDROID_HOME/build-tools" || { echo "ERROR: Android build-tools missing from hosted SDK"; exit 1; }
           # XopProtector's native module otherwise requests legacy NDK 25.1.8937393.
