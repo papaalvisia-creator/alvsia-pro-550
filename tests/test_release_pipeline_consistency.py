@@ -57,6 +57,11 @@ if 'context.assets.open("unluac/unluac_2025_12_23.jar")' in bridge:
     raise SystemExit("FAIL: Unluac JAR still bypasses ProtectorAssets")
 if "assetBytes.fill(0)" not in bridge:
     raise SystemExit("FAIL: decrypted Unluac asset bytes are not cleared after materialization")
+tool_engine = read("app/src/main/java/com/alvsia/pro/tool/ToolEngine.kt")
+if 'AssetVault.readAssetBytes(context, "unluac/$name")' not in tool_engine:
+    raise SystemExit("FAIL: ToolEngine debug JAR reader bypasses AssetVault")
+if 'context.assets.open("unluac/$name")' in tool_engine:
+    raise SystemExit("FAIL: ToolEngine still reads Unluac assets directly")
 if "Protected APK: fail closed" not in asset_vault:
     raise SystemExit("FAIL: protected asset read can fall back to plaintext")
 materializer = asset_vault.split("fun materializeJars", 1)[1]
