@@ -14,8 +14,7 @@ from pathlib import Path
 from typing import Any
 
 
-# The repository currently contains 22 verified SM4_SECRET_NEW values. Do not
-# invent a 23rd value when the source does not contain it.
+# The repository uses the authoritative 4.7-modders SM4_SECRET_NEW set supplied for this build: exactly 23 values.
 SM4_SECRET_NEW = (
     "xG2qW5lP7lV2iN5fN5pG",
     "xT1cJ6dL5wC0kK1rB4dK",
@@ -36,10 +35,18 @@ SM4_SECRET_NEW = (
     "rT6aQ6oZ1yM0gO5tO1aN",
     "jU5bH7lQ0fM9hK2kI0oF",
     "iQ0eM0mJ7uT0kV6kL5zY",
-    "wD2rP3lP9xF4mE1eC5jS",
     "rG0lR2rZ5vM6mW5lM1rR",
+    "wD2rP3lP9xF4mE1eC5jS",
     "fO3kW1fE6eD0pU1kY7xK",
+    "nE1jQ6qK5tW7rM8iD5vV",
 )
+
+# ALVSIA PRO 4.7 SM4 for modders: authoritative 23-key candidate set.
+# 53 = known-good fixture; 55 = known-failing fixture and must remain a
+# negative validation case until its failure cause is independently resolved.
+SM4_SECRET_NEW_VERSION = "4.7-modders"
+SM4_SECRET_NEW_EXPECTED_COUNT = 23
+
 
 
 def _result(ok: bool, operation: str, **extra: Any) -> dict:
