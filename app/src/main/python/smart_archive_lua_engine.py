@@ -101,8 +101,20 @@ def execute(input_path, output_dir, work_dir=None, archive_kind="auto",
         if result.get("ok") and result.get("out"):
             artifact = Path(str(result["out"]))
             if artifact.is_file() and artifact.stat().st_size > 0:
-                record["status"] = result.get("final_status", "SUCCESS")
-                if record["status"] == "SUCCESS":
+                # Strongest available proof: compile the recovered source and
+                # compare normalized VM listings with the original chunk.
+                # This never executes recovered Lua.
+                try:
+                    from lua_recovery_proof import prove_roundtrip
+                    proof = prove_roundtrip(src, artifact)
+                except Exception as exc:
+                    proof = {"status": "UNPROVEN", "reason": f"{type(exc).__name__}: {exc}"}
+                record["recovery_proof"] = proof
+                if proof.get("status") == "ROUNDTRIP_VERIFIED":
+                    record["status"] = "ROUNDTRIP_VERIFIED"
+                else:
+                    record["status"] = result.get("final_status", "SUCCESS")
+                if record["status"] in ("SUCCESS", "ROUNDTRIP_VERIFIED"):
                     successes.append(record)
                 else:
                     partials.append(record)
