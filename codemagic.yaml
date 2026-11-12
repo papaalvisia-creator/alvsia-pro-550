@@ -1,6 +1,6 @@
 workflows:
   alvisia-android:
-    name: ALVSIA PRO 5.5.2-hardened
+    name: ALVSIA PRO 6.0.0-smart-premium
     max_build_duration: 120
     instance_type: mac_mini_m2
     # Branch restriction — release only from main
@@ -155,7 +155,6 @@ workflows:
           python3 tools/seal_python.py --restore || true
 
       - name: Build XopProtector candidate (default-on, preserves baseline APK)
-        ignore_failure: true
         script: |
           set -euo pipefail
           # Build the Xop candidate by default while preserving the separately signed baseline.
@@ -208,11 +207,11 @@ workflows:
           # SO protection is enabled. ReArk is intentionally a separate later stage
           # performed by the owner after downloading this candidate.
           java -jar "$XOP_DIR/$PACKER_JAR" "$BASE_APK" \
-            -o "$CM_BUILD_DIR/ALVISIA_PRO_5.5.2-xop_candidate_work.apk" \
+            -o "$CM_BUILD_DIR/ALVISIA_PRO_6.0.0-smart-premium-xop_candidate_work.apk" \
             --shell-dir "$XOP_DIR/executable/shell-files" \
             --profile industry \
             --protect-so
-          CANDIDATE="$CM_BUILD_DIR/ALVISIA_PRO_5.5.2-xop_candidate_work.apk"
+          CANDIDATE="$CM_BUILD_DIR/ALVISIA_PRO_6.0.0-smart-premium-xop_candidate_work.apk"
           test -s "$CANDIDATE"
           # Structural regression gates: required runtime payloads, package/version,
           # and manifest permission set must survive packing unchanged.
@@ -264,9 +263,9 @@ workflows:
           python3 tools/audit_release_apk.py "$CANDIDATE"
           # Publish only after every structural gate passes; failed/partial candidates
           # must never be mistaken for the APK intended for ReArk handoff.
-          mv "$CANDIDATE" "$CM_BUILD_DIR/ALVISIA_PRO_5.5.2-xop_candidate_unsigned.apk"
+          mv "$CANDIDATE" "$CM_BUILD_DIR/ALVISIA_PRO_6.0.0-smart-premium-xop_candidate_unsigned.apk"
           echo "XopProtector candidate generated; runtime/device smoke tests are still mandatory."
-          echo "ALVSIA_XOP_UNSIGNED=$CM_BUILD_DIR/ALVISIA_PRO_5.5.2-xop_candidate_unsigned.apk" >> "$CM_ENV"
+          echo "ALVSIA_XOP_UNSIGNED=$CM_BUILD_DIR/ALVISIA_PRO_6.0.0-smart-premium-xop_candidate_unsigned.apk" >> "$CM_ENV"
 
       - name: Exclude VCS metadata from packaging
         script: |
@@ -279,12 +278,12 @@ workflows:
           set -euo pipefail
           UNSIGNED="$(find app/build/outputs/apk/release -type f -name '*.apk' | head -n 1)"
           test -n "$UNSIGNED" || { echo "ERROR: release APK not found"; exit 1; }
-          SIGNED_APK="ALVISIA_PRO_5.5.2-hardened_signed.apk"
-          if [ "${ALVSIA_XOPPROTECTOR_ENABLED:-false}" = "true" ]; then
-            XOP_CANDIDATE="$CM_BUILD_DIR/ALVISIA_PRO_5.5.2-xop_candidate_unsigned.apk"
+          SIGNED_APK="ALVISIA_PRO_6.0.0-smart-premium-hardened_signed.apk"
+          if [ "${ALVSIA_XOPPROTECTOR_ENABLED:-true}" = "true" ]; then
+            XOP_CANDIDATE="$CM_BUILD_DIR/ALVISIA_PRO_6.0.0-smart-premium-xop_candidate_unsigned.apk"
             if [ -s "$XOP_CANDIDATE" ]; then
               UNSIGNED="$XOP_CANDIDATE"
-              SIGNED_APK="ALVISIA_PRO_5.5.2-xop_candidate_signed.apk"
+              SIGNED_APK="ALVISIA_PRO_6.0.0-smart-premium-xop_candidate_signed.apk"
               echo "XopProtector candidate passed packaging gates; signing candidate."
             else
               echo "WARNING: XopProtector candidate unavailable; safely falling back to baseline release APK."
@@ -371,7 +370,7 @@ workflows:
           "$BUILD_TOOLS/zipalign" -c -v 4 "$SIGNED_APK"
           python3 tools/audit_release_apk.py "$SIGNED_APK"
           BADGING="$("$BUILD_TOOLS/aapt" dump badging "$SIGNED_APK")"
-          printf '%s\n' "$BADGING" | grep -Fq "package: name='com.alvsia.pro' versionCode='98' versionName='5.5.2-hardened'" || {
+          printf '%s\n' "$BADGING" | grep -Fq "package: name='com.alvsia.pro' versionCode='100' versionName='6.0.0-smart-premium'" || {
             echo "ERROR: final APK package/version does not match release source"
             printf '%s\n' "$BADGING" | grep -E "^package:|^application-label:" || true
             exit 1
@@ -380,8 +379,8 @@ workflows:
           sha256sum "$SIGNED_APK"
     artifacts:
       - app/build/outputs/apk/**/*.apk
-      - ALVISIA_PRO_5.5.2-hardened_signed.apk
-      - ALVISIA_PRO_5.5.2-xop_candidate_unsigned.apk
-      - ALVISIA_PRO_5.5.2-xop_candidate_signed.apk
-      - ALVISIA_PRO_5.5.2-hardened_unsigned.apk
+      - ALVISIA_PRO_6.0.0-smart-premium-hardened_signed.apk
+      - ALVISIA_PRO_6.0.0-smart-premium-xop_candidate_unsigned.apk
+      - ALVISIA_PRO_6.0.0-smart-premium-xop_candidate_signed.apk
+      - ALVISIA_PRO_6.0.0-smart-premium-hardened_unsigned.apk
       - build_full.log
