@@ -92,6 +92,40 @@ def decompile(input_path, output_dir, jars_dir=None) -> dict:
     return result
 
 
+
+def deep_recover(input_path, output_dir, jars_dir=None) -> dict:
+    """Run the full Smart Lua recovery stack without executing recovered code.
+
+    The normal Android path remains fast. This explicit deep route enables
+    multi-engine comparison, protected-pattern recovery, intelligence analysis,
+    and candidate scoring for corpus/Smart-Archive jobs.
+    """
+    old = os.environ.get("ALVSIA_LUA_DEEP_SCAN")
+    os.environ["ALVSIA_LUA_DEEP_SCAN"] = "1"
+    try:
+        from alvsia_features import run_lua_smart
+        p = Path(input_path)
+        out = Path(output_dir)
+        out.mkdir(parents=True, exist_ok=True)
+        result = dict(run_lua_smart(p, out, jars_dir=jars_dir) or {})
+        result.update({"module": "lua", "operation": "deep-recover"})
+        artifact = result.get("out")
+        if artifact:
+            candidate = Path(str(artifact))
+            if not candidate.is_file() or candidate.stat().st_size <= 0:
+                result["ok"] = False
+                result["error"] = "deep recovery reported an invalid source artifact"
+        result.setdefault("final_status", "SUCCESS" if result.get("ok") else "FAILED")
+        return result
+    except Exception as exc:
+        return _result(False, "deep-recover", error=f"{type(exc).__name__}: {exc}")
+    finally:
+        if old is None:
+            os.environ.pop("ALVSIA_LUA_DEEP_SCAN", None)
+        else:
+            os.environ["ALVSIA_LUA_DEEP_SCAN"] = old
+
+
 def analyze(input_path, output_dir) -> dict:
     from alvsia_features import run_lua_analyze
     p = Path(input_path)
