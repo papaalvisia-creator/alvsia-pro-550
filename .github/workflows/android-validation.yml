@@ -59,6 +59,7 @@ jobs:
               "app/src/main/python/smart_lua_engine.py",
               "app/src/main/python/sm4_secret_registry.py",
               "app/src/main/python/smart_archive_engine.py",
+              "app/src/main/python/smart_data_engine.py",
               "app/src/main/python/alvsia_private.py",
               "app/src/main/python/sealed_loader.py",
           )
@@ -68,6 +69,7 @@ jobs:
           PY
           python3 tests/test_tool_dispatch.py
           python3 tests/test_sm4_streaming.py
+          python3 tests/test_smart_data_engine.py
           python3 tests/test_archive_engine.py
           python3 tests/test_smart_archive_engine.py
           python3 tests/test_studio_catalog.py
