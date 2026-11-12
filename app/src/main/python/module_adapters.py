@@ -67,6 +67,25 @@ def _lua_decompile(
     return result
 
 
+
+def _lua_unified(operation: str, input_path: str | Path, output_dir: str | Path,
+                 jars_dir: str | Path | None = None, work_dir: str | Path | None = None,
+                 sub_id: str = "", profile: str = "balanced") -> dict:
+    """Single Smart Lua mechanism; providers are selected internally."""
+    from smart_lua_engine import execute
+    result = execute(
+        operation,
+        input_path,
+        output_dir,
+        jars_dir=jars_dir,
+        work_dir=work_dir,
+        sub_id=sub_id,
+        profile=profile,
+    )
+    result = dict(result or {})
+    result.update({"module": "lua", "operation": operation})
+    return result
+
 def _lua_protect(input_path: str | Path, output_path: str | Path,
                  profile: str = "balanced", expected_version: str | None = None) -> dict:
     from lua_engine.protection_pipeline import protect_file
@@ -120,8 +139,14 @@ def _intelligence_analyze(input_path: str | Path, output_dir: str | Path,
 
 
 _ADAPTERS: dict[tuple[str, str], Callable[..., dict]] = {
-    ("lua", "decompile"): _lua_decompile,
-    ("lua", "protect"): _lua_protect,
+    ("lua", "decompile"): lambda **kw: _lua_unified("decompile", **kw),
+    ("lua", "analyze"): lambda **kw: _lua_unified("analyze", **kw),
+    ("lua", "protect"): lambda **kw: _lua_unified("protect", **kw),
+    ("lua", "compile"): lambda **kw: _lua_unified("compile", **kw),
+    ("lua", "inject"): lambda **kw: _lua_unified("inject", **kw),
+    ("lua", "encrypt"): lambda **kw: _lua_unified("encrypt", **kw),
+    ("lua", "restore"): lambda **kw: _lua_unified("restore", **kw),
+    ("lua", "vm-protect"): lambda **kw: _lua_unified("vm-protect", **kw),
     ("string-recovery", "recover"): _string_recover,
     ("archive", "inspect"): _archive_inspect,
     ("archive", "extract"): _archive_extract,
