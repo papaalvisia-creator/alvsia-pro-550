@@ -326,11 +326,10 @@ def stream_decompile_lua53(input_path: Path, out_path: Path) -> Tuple[bool, str]
         try:
             # decompile_bytes already performs strict chunk parsing; the old
             # extra load_chunk call parsed the complete bytecode twice.
-            source_text = decompile_bytes(
-                memoryview(candidate),
-                deadline=deadline,
-                hybrid_long_string_size=hybrid_long_string_size,
-            )
+            decode_kwargs = {"deadline": deadline}
+            if hybrid_long_string_size:
+                decode_kwargs["hybrid_long_string_size"] = True
+            source_text = decompile_bytes(memoryview(candidate), **decode_kwargs)
             if not source_text or not source_text.strip():
                 raise ValueError("decompiler returned empty source")
             ok, msg = validate_lua_source(source_text, expected_version="Lua 5.3")
