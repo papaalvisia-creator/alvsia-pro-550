@@ -490,7 +490,7 @@ def test_decrypt_known_answer_selftest_is_registered():
 def test_private_module_uses_dedicated_workspace_paths():
     paths = (ROOT / "app/src/main/java/com/alvsia/pro/tool/WorkPaths.kt").read_text(encoding="utf-8")
     menus = MENUS.read_text(encoding="utf-8")
-    assert '7 -> "ALVSIA_PRIVATE"' in paths
+    assert '7, 19 -> "ALVSIA_PRIVATE"' in paths
     assert "ALVSIA_PRIVATE" in menus
     assert "fun moduleOut(moduleId: Int)" in paths
     assert 'return File(dirOut(), name).also { it.mkdirs() }' in paths
