@@ -25,8 +25,15 @@ def execute(operation: str, input_path, output_dir, work_dir=None,
     out = Path(output_dir)
     work = Path(work_dir) if work_dir else out.parent / "WORK"
     out.mkdir(parents=True, exist_ok=True)
-    if op not in {"inspect", "extract", "rebuild", "integrity"}:
+    if op not in {"inspect", "extract", "rebuild", "integrity", "smart-recover"}:
         return {"ok": False, "engine": "SMART ARCHIVE", "error": "unsupported archive operation"}
+
+    if op == "smart-recover":
+        from smart_archive_lua_engine import execute as smart_recover
+        return smart_recover(
+            source, out, work_dir=work,
+            archive_kind=archive_kind, deep_lua=True,
+        )
 
     if op == "rebuild":
         kind = str(archive_kind).lower()
