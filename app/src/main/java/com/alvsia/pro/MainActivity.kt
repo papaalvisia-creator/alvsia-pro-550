@@ -37,6 +37,7 @@ import com.alvsia.pro.sec.Tamper
 import com.alvsia.pro.sec.ThreatReport
 import com.alvsia.pro.sec.TelegramNotifier
 import com.alvsia.pro.sec.TacticalNotifier
+import com.alvsia.pro.tool.SmartModuleRouter
 import com.alvsia.pro.tool.SubMenus
 import com.alvsia.pro.tool.SubTool
 import com.alvsia.pro.tool.ToolCatalog
