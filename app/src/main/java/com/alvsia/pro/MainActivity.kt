@@ -384,17 +384,11 @@ class MainActivity : ComponentActivity() {
                                 running = task?.status == TaskStatus.RUNNING, logs = task?.logs ?: emptyList(),
                                 onBack = { activeTaskId = null; screen = "submenu" },
                                 onRun = { uri, extra ->
-                                    // Smart Lua presents Inject/Protect in one menu, but the
-                                    // execution backend keeps the original engine IDs so their
-                                    // dedicated handlers, permissions and RSA grant mappings remain intact.
-                                    val dispatchModuleId = when (sub.id) {
-                                        "lua_patch_byte", "lua_inject_hook", "lua_mod_repack" -> 16
-                                        "lua_smart_protect", "lua_smart_protect_strong",
-                                        "lua_protect_encrypt", "lua_protect_decrypt",
-                                        "lua_vm_protect" -> 18
-                                        else -> moduleId
-                                    }
-                                    val taskId = TaskCenter.start(moduleId, sub.id, sub.title, uri?.lastPathSegment?.substringAfterLast("/") ?: "", null)
+                                                                        // Visible UI uses only Smart engines. Provider IDs are internal
+// and selected centrally so legacy implementations never become menus.
+val dispatchModuleId = SmartModuleRouter.backendModule(moduleId, sub.id)
+val dispatchSubId = SmartModuleRouter.normalizedSubId(moduleId, sub.id)
+val taskId = TaskCenter.start(moduleId, sub.id, sub.title, uri?.lastPathSegment?.substringAfterLast("/") ?: "", null)
                                     activeTaskId = taskId
                                     // Raise process importance for the lifetime of this real tool run.
                                     // This does not replace or disable any engine; it protects long
@@ -408,7 +402,7 @@ class MainActivity : ComponentActivity() {
                                             val result = withContext(Dispatchers.IO) {
                                                 try {
                                                     withTimeoutOrNull(20 * 60 * 1000L) {
-                                                        engine.runSub(dispatchModuleId, sub.id, uri, extra, onProgress = { stage, progress ->
+                                                        engine.runSub(dispatchModuleId, dispatchSubId, uri, extra, onProgress = { stage, progress ->
                                                             TaskCenter.update(
                                                                 taskId,
                                                                 stage = stage,
@@ -426,13 +420,13 @@ class MainActivity : ComponentActivity() {
                                                         }, taskId = taskId)
                                                     } ?: listOf(
                                                         "X TOOL EXECUTION TIMEOUT: 20-minute watchdog expired",
-                                                        "diagnostic: menu_module=${moduleId}; dispatch_module=${dispatchModuleId}; subtool=${sub.id}",
+                                                        "diagnostic: menu_module=${moduleId}; dispatch_module=${dispatchModuleId}; subtool=${dispatchSubId}",
                                                         "The selected input is preserved; retry is safe."
                                                     )
                                                 }
                                                 catch (t: Throwable) {
                                                     val root = t.cause ?: t
-                                                    listOf("X TOOL EXECUTION FAILED: ${root.javaClass.simpleName}: ${root.message ?: "no detail"}", "diagnostic: module=${dispatchModuleId}; subtool=${sub.id}", "Input file is preserved; no successful output is claimed.")
+                                                    listOf("X TOOL EXECUTION FAILED: ${root.javaClass.simpleName}: ${root.message ?: "no detail"}", "diagnostic: module=${dispatchModuleId}; subtool=${dispatchSubId}", "Input file is preserved; no successful output is claimed.")
                                                 }
                                             }
                                             val success = result.any { it.startsWith("OK ") } && result.none { it.startsWith("X ") }
