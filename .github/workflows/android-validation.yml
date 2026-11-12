@@ -302,7 +302,22 @@ jobs:
           rm -rf "$XOP_DIR"
           git clone --filter=blob:none https://github.com/xopJack/XopProtector.git "$XOP_DIR"
           git -C "$XOP_DIR" checkout --detach 5990c31
-          # Prevent an upstream/local.properties Windows SDK path from overriding the hosted runner SDK.
+          # ALVSIA Chaquopy compatibility: keep assets/chaquopy and runtime license files plaintext.
+          # Business payloads (including nx/* sealed JARs) are encrypted by Xop PAS1 and
+          # loaded through the injected ProtectorAssets bridge. Chaquopy's app.imy is
+          # intentionally excluded because the Chaquopy runtime reads it directly.
+          python3 - "$XOP_DIR/packer/src/main/java/com/yqsh/protector/packer/AssetsEncryptor.java" <<'PY'
+          import pathlib, sys
+          p = pathlib.Path(sys.argv[1])
+          s = p.read_text()
+          anchor = '            if (rel.startsWith("dexopt/") || rel.equals("dexopt")) {\n'
+          inject = '''            // ALVSIA runtime exclusions: Chaquopy loads app.imy directly; engine notices are audited runtime metadata.\n            if (rel.startsWith("chaquopy/") || rel.startsWith("engine_licenses/")) {\n                skipped++;\n                prog.tick();\n                continue;\n            }\n'''
+          if s.count(anchor) != 1:
+              raise SystemExit("unexpected Xop AssetsEncryptor layout; refusing blind patch")
+          s = s.replace(anchor, inject + anchor, 1)
+          p.write_text(s)
+          print("PASS: Xop asset encryptor patched for Chaquopy-safe exclusions")
+          PY          # Prevent an upstream/local.properties Windows SDK path from overriding the hosted runner SDK.
           rm -f "$XOP_DIR/local.properties"
           test -d "$ANDROID_HOME/build-tools" || { echo "ERROR: Android build-tools missing from hosted SDK"; exit 1; }
           # XopProtector's native module otherwise requests legacy NDK 25.1.8937393.
@@ -350,7 +365,7 @@ jobs:
             -o "$CANDIDATE" \
             --shell-dir "$XOP_DIR/executable/shell-files" \
             --profile industry \
-            --protect-so
+            --protect-so --encrypt-assets
           test -s "$CANDIDATE"
           # These standalone CLI executables must remain byte-identical and executable;
           # XopProtector may rewrite ordinary .so payloads, so restore only these
