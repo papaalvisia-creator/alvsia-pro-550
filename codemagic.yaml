@@ -204,6 +204,7 @@ workflows:
           cd "$CM_BUILD_DIR"
           # Industry profile enables Xop's app-oriented hardening policy; keep the
           # existing Chaquopy asset layout and Android resource table intact.
+# Do not enable --encrypt-assets until every app asset reader uses Xop ProtectorAssets; stock AssetManager.open() is incompatible.
           # SO protection is enabled. ReArk is intentionally a separate later stage
           # performed by the owner after downloading this candidate.
           java -jar "$XOP_DIR/$PACKER_JAR" "$BASE_APK" \
@@ -211,7 +212,7 @@ workflows:
             --shell-dir "$XOP_DIR/executable/shell-files" \
             --profile industry \
             --protect-so \
-            --encrypt-assets \
+            \
             --detect-proxy \
             --so-decrypt-mode lazy
           CANDIDATE="$CM_BUILD_DIR/ALVISIA_PRO_6.0.0-smart-premium-xop_candidate_work.apk"
