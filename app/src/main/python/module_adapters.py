@@ -156,6 +156,15 @@ def _archive_extract(input_path: str | Path, output_dir: str | Path) -> dict:
     return result
 
 
+def _data_smart(operation: str, input_path: str | Path,
+                output_dir: str | Path, work_dir: str | Path | None = None) -> dict:
+    from smart_data_engine import execute
+    result = execute(operation, input_path, output_dir, work_dir=work_dir)
+    result = dict(result or {})
+    result.update({"module": "data", "operation": operation})
+    return result
+
+
 def _archive_smart(operation: str, input_path: str | Path | None,
                   output_dir: str | Path | None = None,
                   work_dir: str | Path | None = None,
@@ -200,6 +209,10 @@ _ADAPTERS: dict[tuple[str, str], Callable[..., dict]] = {
     ("archive", "extract"): lambda **kw: _archive_smart("extract", **kw),
     ("archive", "rebuild"): lambda **kw: _archive_smart("rebuild", **kw),
     ("archive", "integrity"): lambda **kw: _archive_smart("integrity", **kw),
+    ("data", "recover"): lambda **kw: _data_smart("recover", **kw),
+    ("data", "xor"): lambda **kw: _data_smart("xor", **kw),
+    ("data", "sm4"): lambda **kw: _data_smart("sm4", **kw),
+    ("data", "metadata"): lambda **kw: _data_smart("metadata", **kw),
     ("program-intelligence", "analyze"): _intelligence_analyze,
 }
 
