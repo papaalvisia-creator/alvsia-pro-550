@@ -55,6 +55,10 @@ if 'AssetVault.readAssetBytes(context, "unluac/unluac_2025_12_23.jar")' not in b
     raise SystemExit("FAIL: Unluac JAR is not read through the Xop-compatible AssetVault")
 if 'context.assets.open("unluac/unluac_2025_12_23.jar")' in bridge:
     raise SystemExit("FAIL: Unluac JAR still bypasses ProtectorAssets")
+if "assetBytes.fill(0)" not in bridge:
+    raise SystemExit("FAIL: decrypted Unluac asset bytes are not cleared after materialization")
+if "Protected APK: fail closed" not in asset_vault:
+    raise SystemExit("FAIL: protected asset read can fall back to plaintext")
 if "ignore_failure: true" in codemagic:
     raise SystemExit("FAIL: a CodeMagic step can silently ignore a release failure")
 if "ERROR: XopProtector is required for this release" not in codemagic:
