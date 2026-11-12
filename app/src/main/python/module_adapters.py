@@ -68,21 +68,52 @@ def _lua_decompile(
 
 
 
-def _lua_unified(operation: str, input_path: str | Path, output_dir: str | Path,
-                 jars_dir: str | Path | None = None, work_dir: str | Path | None = None,
+def _lua_unified(operation: str, input_path: str | Path,
+                 output_dir: str | Path | None = None,
+                 output_path: str | Path | None = None,
+                 jars_dir: str | Path | None = None,
+                 work_dir: str | Path | None = None,
                  sub_id: str = "", profile: str = "balanced") -> dict:
-    """Single Smart Lua mechanism; providers are selected internally."""
+    """Single Smart Lua mechanism; providers are selected internally.
+
+    Accept output_path for older callers and output_dir for the unified bridge.
+    A requested decompiler filename is materialized only from a real validated
+    source artifact returned by the engine.
+    """
+    import shutil
     from smart_lua_engine import execute
+
+    requested = Path(output_path) if output_path is not None else None
+    target_dir = Path(output_dir) if output_dir is not None else (
+        requested.parent if requested is not None else None
+    )
+    if target_dir is None:
+        return {"ok": False, "module": "lua", "operation": operation,
+                "error": "output_dir or output_path is required"}
+    target_dir.mkdir(parents=True, exist_ok=True)
     result = execute(
         operation,
         input_path,
-        output_dir,
+        target_dir,
         jars_dir=jars_dir,
         work_dir=work_dir,
         sub_id=sub_id,
         profile=profile,
     )
     result = dict(result or {})
+    if operation == "decompile" and result.get("ok") and requested is not None:
+        reported = result.get("out")
+        candidate = Path(str(reported)) if reported else None
+        if candidate is None or not candidate.is_file() or candidate.stat().st_size <= 0:
+            result.update({"ok": False, "error": "decompiler returned no valid source artifact"})
+        elif candidate.suffix.lower() != ".lua":
+            result.update({"ok": False, "error": "decompiler output is not a Lua source file"})
+        else:
+            requested.parent.mkdir(parents=True, exist_ok=True)
+            if candidate.resolve() != requested.resolve():
+                shutil.copy2(candidate, requested)
+            result["out"] = str(requested)
+            result["output_bytes"] = requested.stat().st_size
     result.update({"module": "lua", "operation": operation})
     return result
 
