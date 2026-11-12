@@ -105,7 +105,8 @@ object WorkPaths {
         16 -> "LINJ"
         17 -> "AUDIT"
         18 -> "LPROTECT"
-        7, 19 -> "ALVSIA_PRIVATE"
+        7 -> "ASSET"
+        19 -> "ALVSIA_PRIVATE"
         else -> "MISC"
     }
 
@@ -124,7 +125,7 @@ object WorkPaths {
         try {
             f.writeText(
                 """
-                ALVSIA PRO - Smart workspace
+                ALVSIA PRO 5.5.2 - Smart workspace
                 ====================================
                 Root: Download/ALVSIA/
 
