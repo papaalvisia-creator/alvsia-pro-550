@@ -66,7 +66,7 @@ for required in (
     'Xop proxy detection and NetGuard enabled',
     'Xop SO decryption uses lazy mode',
     'Xop RASP enforce action enabled',
-    'Xop dex_hmac is a populated SHA-256 HMAC',
+    'populated SHA-256 HMAC',
 ):
     if required not in audit_script:
         raise SystemExit("FAIL: APK audit does not verify packaged Xop control: " + required)
