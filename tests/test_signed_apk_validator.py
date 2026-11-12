@@ -48,9 +48,9 @@ class SignedApkCertificatePinTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             config = Path(tmp) / "build.gradle.kts"
             config.write_text(
-                'applicationId = "com.alvsia.pro"\\n'
-                'versionCode = 100\\n'
-                'versionName = "6.0.0-smart-premium"\\n',
+                'applicationId = "com.alvsia.pro"\n'
+                'versionCode = 100\n'
+                'versionName = "6.0.0-smart-premium"\n',
                 encoding="utf-8",
             )
             self.assertEqual(
@@ -61,12 +61,12 @@ class SignedApkCertificatePinTests(unittest.TestCase):
     def test_rejects_missing_gradle_package_identity(self):
         with tempfile.TemporaryDirectory() as tmp:
             config = Path(tmp) / "build.gradle.kts"
-            config.write_text('versionCode = 100\\n', encoding="utf-8")
+            config.write_text('versionCode = 100\n', encoding="utf-8")
             with self.assertRaises(SystemExit):
                 validator.expected_package_identity(config)
 
     def test_parses_aapt_package_identity(self):
-        output = "package: name='com.alvsia.pro' versionCode='100' versionName='6.0.0-smart-premium'\\n"
+        output = "package: name='com.alvsia.pro' versionCode='100' versionName='6.0.0-smart-premium'\n"
         self.assertEqual(
             validator.package_identity(output),
             ("com.alvsia.pro", "100", "6.0.0-smart-premium"),
