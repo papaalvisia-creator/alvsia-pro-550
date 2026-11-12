@@ -10,6 +10,7 @@ import hashlib
 import os
 import shutil
 import subprocess
+import tempfile
 from pathlib import Path
 from typing import Any
 
@@ -209,40 +210,95 @@ def inject(input_path, output_dir, sub_id, work_dir) -> dict:
 
 
 def protect_encrypt(input_path, output_dir, work_dir, restore=False) -> dict:
-    # Keep the existing ALVLUA1 authenticated format for compatibility.
+    """Stream the authenticated ALVLUA1 format without buffering multi-GB files."""
     from Crypto.Cipher import AES
     from Crypto.Random import get_random_bytes
+
     src = Path(input_path)
+    if not src.is_file():
+        return _result(False, "protect", error="input file not found")
     key_file = Path(work_dir) / "lua_protect_key.txt"
     if not key_file.is_file():
         return _result(False, "protect", error="WORK/lua_protect_key.txt is required")
     key_hex = key_file.read_text(encoding="utf-8").strip()
     if len(key_hex) != 64:
         return _result(False, "protect", error="Lua protection key must be 64 hex characters")
-    key = bytes.fromhex(key_hex)
+    try:
+        key = bytes.fromhex(key_hex)
+    except ValueError:
+        return _result(False, "protect", error="Lua protection key must contain valid hex")
     out = Path(output_dir)
     out.mkdir(parents=True, exist_ok=True)
-    raw = src.read_bytes()
+
     if not restore:
         nonce = get_random_bytes(12)
         cipher = AES.new(key, AES.MODE_GCM, nonce=nonce, mac_len=16)
         cipher.update(b"ALVLUA1")
-        ciphertext, tag = cipher.encrypt_and_digest(raw)
         dest = out / (src.stem + ".alvlua")
-        dest.write_bytes(b"ALVLUA1" + nonce + tag + ciphertext)
-        return _result(True, "protect", mode="encrypt", out=str(dest), bytes=dest.stat().st_size)
-    if len(raw) < 35 or raw[:7] != b"ALVLUA1":
+        temporary = None
+        try:
+            with tempfile.NamedTemporaryFile(
+                mode="w+b", dir=str(out), prefix="." + dest.name + ".",
+                suffix=".alvsia-tmp", delete=False
+            ) as target:
+                temporary = Path(target.name)
+                target.write(b"ALVLUA1" + nonce + (b"\\x00" * 16))
+                with src.open("rb") as source:
+                    while True:
+                        block = source.read(1024 * 1024)
+                        if not block:
+                            break
+                        target.write(cipher.encrypt(block))
+                tag = cipher.digest()
+                target.seek(19)
+                target.write(tag)
+                target.flush()
+                os.fsync(target.fileno())
+            os.replace(str(temporary), str(dest))
+            return _result(True, "protect", mode="encrypt", out=str(dest),
+                           bytes=dest.stat().st_size)
+        except Exception as exc:
+            if temporary is not None:
+                temporary.unlink(missing_ok=True)
+            return _result(False, "protect", error="streaming encryption failed: " + str(exc)[:300])
+
+    if src.stat().st_size < 35:
         return _result(False, "protect", error="invalid ALVLUA1 payload")
-    nonce, tag, ciphertext = raw[7:19], raw[19:35], raw[35:]
-    cipher = AES.new(key, AES.MODE_GCM, nonce=nonce, mac_len=16)
-    cipher.update(b"ALVLUA1")
-    try:
-        plain = cipher.decrypt_and_verify(ciphertext, tag)
-    except ValueError:
-        return _result(False, "protect", error="authentication failed")
+    temporary = None
     dest = out / (src.stem + ".lua")
-    dest.write_bytes(plain)
-    return _result(True, "protect", mode="restore", out=str(dest), bytes=len(plain))
+    try:
+        with src.open("rb") as source:
+            header = source.read(35)
+            if len(header) != 35 or header[:7] != b"ALVLUA1":
+                return _result(False, "protect", error="invalid ALVLUA1 payload")
+            nonce, tag = header[7:19], header[19:35]
+            cipher = AES.new(key, AES.MODE_GCM, nonce=nonce, mac_len=16)
+            cipher.update(b"ALVLUA1")
+            with tempfile.NamedTemporaryFile(
+                mode="w+b", dir=str(out), prefix="." + dest.name + ".",
+                suffix=".alvsia-tmp", delete=False
+            ) as target:
+                temporary = Path(target.name)
+                while True:
+                    block = source.read(1024 * 1024)
+                    if not block:
+                        break
+                    target.write(cipher.decrypt(block))
+                # Do not publish any plaintext until the authentication tag passes.
+                cipher.verify(tag)
+                target.flush()
+                os.fsync(target.fileno())
+        os.replace(str(temporary), str(dest))
+        return _result(True, "protect", mode="restore", out=str(dest),
+                       bytes=dest.stat().st_size)
+    except ValueError:
+        if temporary is not None:
+            temporary.unlink(missing_ok=True)
+        return _result(False, "protect", error="authentication failed")
+    except Exception as exc:
+        if temporary is not None:
+            temporary.unlink(missing_ok=True)
+        return _result(False, "protect", error="streaming restore failed: " + str(exc)[:300])
 
 
 def vm_protect(input_path, output_dir) -> dict:
