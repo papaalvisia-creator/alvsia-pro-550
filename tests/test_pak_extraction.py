@@ -20,6 +20,33 @@ def test_zlib_and_raw_deflate_blocks():
     assert core.PakCompression.decompress_block(raw, None, core.CM_ZLIB) == plain
 
 
+def test_zstd_plain_block_uses_zero_argument_decoder():
+
+    """Regression for python-zstandard rejecting ZstdDecompressor(None)."""
+    try:
+        import zstandard as zstd
+    except ImportError:
+        raise AssertionError("zstandard dependency is required for PAK ZSTD support")
+
+    plain = (b"ALVSIA PAK ZSTD regression payload\\n" * 128)
+    compressed = zstd.ZstdCompressor(level=3).compress(plain)
+    assert core.PakCompression.decompress_block(compressed, None, core.CM_ZSTD) == plain
+
+    # A dictionary-compressed block must still require an actual dictionary;
+    # never silently pass None into the dictionary constructor.
+    dictionary = zstd.ZstdCompressionDict(b"ALVSIA dictionary regression seed")
+    with_dict = zstd.ZstdCompressor(dict_data=dictionary).compress(plain)
+    assert core.PakCompression.decompress_block(
+        with_dict, dictionary, core.CM_ZSTD_DICT
+    ) == plain
+    try:
+        core.PakCompression.decompress_block(with_dict, None, core.CM_ZSTD_DICT)
+    except (ValueError, TypeError, zstd.ZstdError):
+        pass
+    else:
+        raise AssertionError("dictionary-compressed block accepted without dictionary")
+
+
 def test_corrupt_zlib_is_rejected_not_returned_as_plaintext():
     try:
         core.PakCompression.decompress_block(b"not-a-deflate-stream", None, core.CM_ZLIB)
