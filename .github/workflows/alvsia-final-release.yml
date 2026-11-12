@@ -74,22 +74,11 @@ jobs:
       - name: Source and Lua validation
         run: |
           set -euo pipefail
-          LUA53_DIR="$RUNNER_TEMP/lua-5.3"
           if ! command -v luac5.3 >/dev/null 2>&1; then
-            TARBALL="$RUNNER_TEMP/lua-5.3.6.tar.gz"
-            curl --fail --location --retry 8 --retry-connrefused --silent --show-error \
-              https://www.lua.org/ftp/lua-5.3.6.tar.gz -o "$TARBALL"
-            echo "fc5fd69bb8736323f026672b1b7235da613d7177e72558893a0bdcd320466d60  $TARBALL" | sha256sum -c -
-            rm -rf "$LUA53_DIR"
-            mkdir -p "$LUA53_DIR"
-            tar -xzf "$TARBALL" --strip-components=1 -C "$LUA53_DIR"
-            test -f "$LUA53_DIR/src/luac.c"
-            make -C "$LUA53_DIR/src" generic
-            test -x "$LUA53_DIR/src/luac"
-            install -m 0755 "$LUA53_DIR/src/luac" "$RUNNER_TEMP/luac5.3"
-            export PATH="$RUNNER_TEMP:$PATH"
+            sudo apt-get update
+            sudo apt-get install -y lua5.3
           fi
-          command -v luac5.3 || command -v "$RUNNER_TEMP/luac5.3"
+          command -v luac5.3
           python3 tools/security_release_check.py
           python3 -m unittest tests.test_security_wiring tests.test_security_fabric
           python3 -m pip install --disable-pip-version-check pycryptodome pytest && python3 -m pytest -q tests/test_tool_dispatch.py
