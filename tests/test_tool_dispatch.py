@@ -63,9 +63,9 @@ def test_python_auth_normalizes_java_string_and_lua_avoids_art_oom():
 
 
 def test_sm4_47_modders_authoritative_secret_set():
-    source = (ROOT / "app/src/main/python/smart_lua_engine.py").read_text(encoding="utf-8")
+    source = (ROOT / "app/src/main/python/sm4_secret_registry.py").read_text(encoding="utf-8")
     namespace = {}
-    tree = ast.parse(source, filename=str(ROOT / "app/src/main/python/smart_lua_engine.py"))
+    tree = ast.parse(source, filename=str(ROOT / "app/src/main/python/sm4_secret_registry.py"))
     # Load only the constant/validation declarations; do not import Android-only dependencies.
     nodes = []
     for node in tree.body:
@@ -73,7 +73,7 @@ def test_sm4_47_modders_authoritative_secret_set():
             if isinstance(node, ast.FunctionDef) and node.name not in {"validate_sm4_secret_set"}:
                 continue
             nodes.append(node)
-    exec(compile(ast.Module(body=nodes, type_ignores=[]), "smart_lua_engine.py", "exec"), namespace)
+    exec(compile(ast.Module(body=nodes, type_ignores=[]), "sm4_secret_registry.py", "exec"), namespace)
     expected = (
         "xG2qW5lP7lV2iN5fN5pG", "xT1cJ6dL5wC0kK1rB4dK", "qC4jS5bZ6fL5xE6nD4zA",
         "gD4jQ2aL3bS3lC3xT0iW", "xU1yQ8wE9zY3gZ3bT5aE", "uQ3cO2dX7xY4xU7gH7iS",
