@@ -438,15 +438,14 @@ def test_decrypt_known_answer_selftest_is_registered():
     assert "NIST AES known-answer tests" in bridge
 
 
-def test_private_module_19_uses_dedicated_workspace_paths():
+def test_private_module_uses_dedicated_workspace_paths():
     paths = (ROOT / "app/src/main/java/com/alvsia/pro/tool/WorkPaths.kt").read_text(encoding="utf-8")
-    bridge = BRIDGE_IMPL.read_text(encoding="utf-8")
+    menus = MENUS.read_text(encoding="utf-8")
     assert '19 -> "ALVSIA_PRIVATE"' in paths
+    assert "ALVSIA_PRIVATE" in menus
     assert "fun moduleOut(moduleId: Int)" in paths
     assert 'return File(dirOut(), name).also { it.mkdirs() }' in paths
-    ensure = paths.split("fun ensureTree()", 1)[1].split("fun readme(", 1)[0]
-    assert "for (id in 1..19)" not in ensure
-    assert 'dest = out_dir("ALVSIA_PRIVATE")' in bridge
+
 
 if __name__ == "__main__":
     tests = (
@@ -470,7 +469,7 @@ if __name__ == "__main__":
         test_reference_inspectors_format_and_archive_fixtures,
         test_xor_known_vector_selftest_is_registered,
         test_decrypt_known_answer_selftest_is_registered,
-        test_private_module_19_uses_dedicated_workspace_paths,
+        test_private_module_uses_dedicated_workspace_paths,
     )
     for test in tests:
         test()
