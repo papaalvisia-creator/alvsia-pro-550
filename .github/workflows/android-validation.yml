@@ -35,7 +35,8 @@ jobs:
           echo "Seal seed generated (32 bytes); value is masked."
 
       - name: Run source-level security checks
-        run: python3 tools/security_release_check.py
+        run: |
+          python3 tools/security_release_check.py
           python3 tests/test_release_pipeline_consistency.py
 
       - name: Verify security protections are wired into runtime
