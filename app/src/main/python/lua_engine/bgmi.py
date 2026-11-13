@@ -297,33 +297,38 @@ def transform_bgmi_lua(data: bytes, key: bytes | None = None, decrypt=True) -> b
         if nln > 0x200000:
             raise ValueError("lineinfo count out of range")
         if decrypt:
-            # BGMI: nln signed-byte deltas, then an absolute-line record count.
-            cur = ldef
-            lines = []
+            # BGMI input: nln signed-byte deltas, then an absolute-line record count.
+            # Output must be REAL Lua 5.3 debug format: 1-byte deltas + abslineinfo.
+            deltas = []
             for _ in range(nln):
                 d = r.byte()
-                cur += d if d <= 127 else d - 256
-                lines.append(cur)
+                deltas.append(d)
             abs_count = r.u32()
             if abs_count > 0x200000:
                 raise ValueError("absolute line record count out of range")
             for _ in range(abs_count):
                 r.raw(8)          # absolute (line, pc) records - not needed for source
-            w.u32(len(lines))
-            for ln in lines:
-                w.i32(ln)
+            w.u32(nln)
+            for d in deltas:
+                w.byte(d)
+            w.u32(0)              # empty abslineinfo table (valid real-format chunk)
         else:
-            # Standard: nln absolute int32 lines -> BGMI delta stream.
-            lines = [r.i32() for _ in range(nln)]
-            w.u32(len(lines))
-            prev = ldef
-            for ln in lines:
-                diff = ln - prev
-                prev = ln
-                if diff < 0:
-                    diff += 256
-                w.byte(diff & 255)
-            w.u32(0)              # no absolute-line records
+            # Standard input (real Lua 5.3 debug format): nln signed-byte deltas
+            # followed by the abslineinfo table. The code array is unchanged by
+            # this transform, so both sections are copied verbatim into the
+            # BGMI chunk (same debug layout on both sides of the transform).
+            deltas = []
+            for _ in range(nln):
+                deltas.append(r.byte())
+            abs_count = r.u32()
+            if abs_count > 0x200000:
+                raise ValueError("absolute line record count out of range")
+            w.u32(nln)
+            for d in deltas:
+                w.byte(d)
+            w.u32(abs_count)
+            for _ in range(abs_count):
+                w.raw(r.raw(8))
 
         nloc = r.u32()
         if nloc > 0x100000:

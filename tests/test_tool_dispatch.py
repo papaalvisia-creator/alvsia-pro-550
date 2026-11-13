@@ -62,7 +62,7 @@ def test_python_auth_normalizes_java_string_and_lua_avoids_art_oom():
     assert "if in_size > 1 * 1024 * 1024:" not in lua_branch
 
 
-def test_sm4_47_modders_authoritative_secret_set():
+def test_sm4_registry_contains_no_embedded_secret_material():
     source = (ROOT / "app/src/main/python/sm4_secret_registry.py").read_text(encoding="utf-8")
     namespace = {}
     tree = ast.parse(source, filename=str(ROOT / "app/src/main/python/sm4_secret_registry.py"))
@@ -74,22 +74,21 @@ def test_sm4_47_modders_authoritative_secret_set():
                 continue
             nodes.append(node)
     exec(compile(ast.Module(body=nodes, type_ignores=[]), "sm4_secret_registry.py", "exec"), namespace)
-    expected = (
-        "xG2qW5lP7lV2iN5fN5pG", "xT1cJ6dL5wC0kK1rB4dK", "qC4jS5bZ6fL5xE6nD4zA",
-        "gD4jQ2aL3bS3lC3xT0iW", "xU1yQ8wE9zY3gZ3bT5aE", "uQ3cO2dX7xY4xU7gH7iS",
-        "gW1fR0jK6wQ4oN0oK1kZ", "aJ4pV7iZ7pU4wP2aC2cZ", "cX6jT3cM2oT3vK0kJ1qN",
-        "iT2vS0cS6yT6cZ1sE1lO", "hM1pH9iY8wM9hT4lN5uJ", "kG6bC8jK0fL0dE4sH4mL",
-        "dB6lB3vE0eZ8wM8rI0aC", "tP7sP7nI9rA2vQ4cV5yQ", "aT0cL1yN4pT3sZ7eM2vY",
-        "uV6fU8fC9zN3mP5dH8mN", "rT6aQ6oZ1yM0gO5tO1aN", "jU5bH7lQ0fM9hK2kI0oF",
-        "iQ0eM0mJ7uT0kV6kL5zY", "rG0lR2rZ5vM6mW5lM1rR", "wD2rP3lP9xF4mE1eC5jS",
-        "fO3kW1fE6eD0pU1kY7xK", "nE1jQ6qK5tW7rM8iD5vV",
-    )
-    assert namespace["SM4_SECRET_NEW"] == expected
-    assert namespace["SM4_SECRET_NEW_VERSION"] == "4.7-modders"
-    assert namespace["SM4_SECRET_NEW_EXPECTED_COUNT"] == 23
+    assert namespace["SM4_SECRET_NEW"] == ()
+    assert namespace["SM4_SECRET_NEW_SET"] == frozenset()
+    assert namespace["SM4_SECRET_NEW_EXPECTED_COUNT"] == 0
+    assert namespace["SM4_SECRET_NEW_VERSION"] == "external-authorized"
     assert namespace["validate_sm4_secret_set"]() == {
-        "ok": True, "version": "4.7-modders", "count": 23, "expected_count": 23
+        "ok": True, "version": "external-authorized", "count": 0,
+        "expected_count": 0, "source": "caller_supplied"
     }
+    # The public source must not contain the previously embedded 4.7-modders key set.
+    assert "4.7-modders" not in source
+    assert "xG2qW5lP7lV2iN5fN5pG" not in source
+    core = (ROOT / "app/src/main/python/alvsia_core.py").read_text(encoding="utf-8")
+    assert "xG2qW5lP7lV2iN5fN5pG" not in core
+    assert "SM4 candidate material is not authorized/supplied" in core
+    assert "set_authorized_sm4_candidates" in core
 
 def test_menu_ids_are_unique_and_reachable():
     menus = MENUS.read_text(encoding="utf-8")
@@ -526,7 +525,7 @@ def test_private_module_uses_dedicated_workspace_paths():
 if __name__ == "__main__":
     tests = (
         test_python_auth_normalizes_java_string_and_lua_avoids_art_oom,
-        test_sm4_47_modders_authoritative_secret_set,
+        test_sm4_registry_contains_no_embedded_secret_material,
         test_menu_ids_are_unique_and_reachable,
         test_catalog_contains_compact_smart_modules,
         test_smart_lua_groups_all_four_legacy_lua_modules,

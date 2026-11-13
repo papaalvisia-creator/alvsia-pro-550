@@ -101,6 +101,15 @@ jobs:
           python3 -m pytest -q tests/test_lua_orchestrator.py
           python3 tests/test_vm_protect_roundtrip.py
 
+      - name: Reference corpus research status
+        run: |
+          set -euo pipefail
+          echo "Reference corpus is private and is validated by its own ALVSIA Reference Corpus Research workflow."
+          echo "Release workflow does not attempt unauthenticated cross-repository access."
+          echo "Corpus repository: papaalvisia-creator/kumpulan-source-tool"
+          echo "Required research workflow: ALVSIA Reference Corpus Research"
+          test -n "papaalvisia-creator/kumpulan-source-tool"
+
       - name: Prepare sealed release
         run: |
           set -euo pipefail

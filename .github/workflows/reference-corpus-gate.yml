@@ -1,0 +1,67 @@
+name: ALVSIA Reference Corpus Runtime Gate
+
+env:
+  REFERENCE_CORPUS_REV: a5b889e3477b7e5b8fb22060cb24f248f3dfe757
+
+on:
+  push:
+    branches:
+      - feat/alvsia-capability-expansion-security-20261114-clean
+    paths:
+      - "app/src/main/python/**"
+      - "app/src/main/java/com/alvsia/pro/tool/**"
+      - "tests/**"
+      - ".github/workflows/reference-corpus-gate.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  reference-corpus:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - name: Checkout ALVSIA Smart Engine
+        uses: actions/checkout@v4
+
+      - name: Checkout reference corpus
+        uses: actions/checkout@v4
+        with:
+          repository: papaalvisia-creator/kumpulan-source-tool
+          ref: ${{ env.REFERENCE_CORPUS_REV }}
+          path: reference-corpus
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install research dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y lua5.3
+          python -m pip install --disable-pip-version-check pycryptodome zstandard gmalg
+
+      - name: Verify reference corpus
+        run: |
+          set -euo pipefail
+          test -s "reference-corpus/samples/pak/game_patch_4.7.0.21752.pak"
+          test -s "reference-corpus/samples/pak/game_patch_4.7.0.21756.pak"
+          test -s "reference-corpus/samples/lua/PUBG_(4.7.0)_All-Orginal-Lua.zip"
+          test -s "reference-corpus/ALVSIAPRO_SRC/LUA/BRPlayerCharacterBase.lua"
+          python reference-corpus/tools/run_strict_engine_research.py \
+            --app-python "$GITHUB_WORKSPACE/app/src/main/python" \
+            --pak-dir "$GITHUB_WORKSPACE/reference-corpus/samples/pak" \
+            --lua-zip "$GITHUB_WORKSPACE/reference-corpus/samples/lua/PUBG_(4.7.0)_All-Orginal-Lua.zip" \
+            --source-lua "$GITHUB_WORKSPACE/reference-corpus/ALVSIAPRO_SRC/LUA/BRPlayerCharacterBase.lua" \
+            --out "$GITHUB_WORKSPACE/reference-corpus-gate-report"
+
+      - name: Upload research evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ALVSIA-reference-corpus-gate
+          path: reference-corpus-gate-report/**
+          if-no-files-found: error
+          retention-days: 30

@@ -857,21 +857,23 @@ class LuaOpcodeConverter:
         line_count = reader.u32()
         if line_count > (len(reader.data) - reader.pos):
             raise ValueError('invalid compressed lineinfo count %d at offset %d' % (line_count, reader.pos))
-        lines = []
-        current_line = line_defined
+        # Output must be REAL Lua 5.3 debug format: 1-byte signed deltas followed
+        # by an abslineinfo table. The previous 4-byte-int expansion produced
+        # chunks that no real Lua 5.3 loader accepts.
+        deltas = []
         for _ in range(line_count):
-            delta = reader.u8()
-            current_line += delta if delta <= 127 else delta - 256
-            lines.append(current_line)
-        writer.u32(len(lines))
-        for line in lines:
-            writer.i32(line)
+            deltas.append(reader.u8())
+        writer.u32(line_count)
+        for delta in deltas:
+            writer.u8(delta)
 
-        # The game variant carries an additional abslineinfo table; standard 5.3 does not.
+        # The game variant carries an additional abslineinfo table; the emitted
+        # standard chunk keeps an empty one (valid real-format debug section).
         abs_count = reader.u32()
         if abs_count > (len(reader.data) - reader.pos) // 8:
             raise ValueError('invalid absolute lineinfo count %d at offset %d' % (abs_count, reader.pos))
         reader.read(abs_count * 8)
+        writer.u32(0)
 
         local_count = reader.u32()
         if local_count > (len(reader.data) - reader.pos) // 9:

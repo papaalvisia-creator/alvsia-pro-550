@@ -56,6 +56,28 @@ def test_corrupt_zlib_is_rejected_not_returned_as_plaintext():
         raise AssertionError("corrupt compressed block was silently accepted")
 
 
+def test_corrupt_zlib_with_nonstandard_trailer_decodes_leniently():
+    """Game-written zlib frames carry a non-standard trailing checksum word.
+
+    The DEFLATE body itself is intact; the engine decodes it leniently and the
+    entry-level SHA-1 content-hash gate provides the cryptographic integrity
+    check. A truncated body must still fail closed.
+    """
+    plain = b"lenient zlib regression payload\n" * 16
+    wrapped = zlib.compress(plain)
+    # Corrupt only the trailing ADLER32 word; the deflate body stays valid.
+    broken = wrapped[:-4] + b"\x00\x00\x00\x00"
+    result = core.PakCompression.decompress_block(broken, None, core.CM_ZLIB)
+    assert result == plain
+    # A truncated deflate body must NOT decode.
+    try:
+        core.PakCompression.decompress_block(wrapped[: len(wrapped) - 12], None, core.CM_ZLIB)
+    except ValueError as exc:
+        assert "decompression failed" in str(exc).lower()
+    else:
+        raise AssertionError("truncated deflate body was silently accepted")
+
+
 def test_write_is_atomic_and_checks_decompressed_size():
     plain = b"Lua payload: validated"
     compressed = zlib.compress(plain)
@@ -99,9 +121,80 @@ def test_write_is_atomic_and_checks_decompressed_size():
 
 
 
+def _authorize_synthetic_sm4():
+    """Install a synthetic SM4 candidate registry for cipher round-trip tests.
+
+    Synthetic test keys only: no production/game/server material is embedded
+    in this repository. Real deployments supply authorized candidates at
+    runtime via alvsia_core.set_authorized_sm4_candidates().
+    """
+    synthetic = ("ALVSIA-SYNTHETIC-CANDIDATE-0001", "ALVSIA-SYNTHETIC-CANDIDATE-0002")
+    assert core.set_authorized_sm4_candidates(synthetic)
+
+
+def test_sm4_new_method_derivation_is_deterministic_and_fails_closed():
+    """Method >= 32 derives its key from the authorized candidate registry."""
+    _authorize_synthetic_sm4()
+    try:
+        path = Path("Test_Entry_Name.uasset")
+        key_a = core.PakCrypto._derive_sm4_key(path, 50)
+        key_b = core.PakCrypto._derive_sm4_key(path, 50)
+        assert key_a == key_b
+        # Same stem, different new-method indexes must not collide.
+        keys = {
+            core.PakCrypto._derive_sm4_key(path, method)
+            for method in (32, 50, 51, 53)
+        }
+        assert len(keys) == 4
+        # Without authorization the new-method path must fail closed.
+        core.clear_authorized_sm4_candidates()
+        try:
+            core.PakCrypto._derive_sm4_key(path, 50)
+        except RuntimeError as exc:
+            assert "not authorized" in str(exc)
+        else:
+            raise AssertionError("unauthorized SM4 derivation did not fail closed")
+    finally:
+        core.clear_authorized_sm4_candidates()
+
+
+def test_sm4_game_variant_roundtrip_with_synthetic_material():
+    """SM4 encrypt/decrypt round-trip through the game's SM4 S-box variant."""
+    _authorize_synthetic_sm4()
+    try:
+        path = Path("Test_Entry_Name.uasset")
+        block = bytes(range(64))
+        cipher = core.PakCrypto._decrypt_sm4(block, path, 50)
+        assert cipher != block
+        restored = core.PakCrypto._encrypt_sm4_block(cipher, path, 50)
+        assert restored == block
+    finally:
+        core.clear_authorized_sm4_candidates()
+
+
 def test_pak_v46_sm4_flag50_key_vector():
-    # Captured from the first encrypted block of a v14 PAK entry.
-    # This is the game-specific SM4 variant used by the PAK, not standards SM4.
+    """Captured from the first encrypted block of a v14 PAK entry (method 50).
+
+    The verification material (candidate secret list) is authorized local
+    configuration; it is intentionally NOT embedded in this public repository.
+    When the operator supplies ALVSIA_TEST_SM4_CANDIDATES_FILE (one candidate
+    per line), the exact captured vector is asserted; otherwise the test skips
+    with the authorization blocker stated explicitly - it never fakes a pass.
+    """
+    import os
+    import pytest
+    candidates_file = os.environ.get("ALVSIA_TEST_SM4_CANDIDATES_FILE", "")
+    if not candidates_file or not Path(candidates_file).is_file():
+        pytest.skip(
+            "SM4 candidate material is not authorized/supplied "
+            "(set ALVSIA_TEST_SM4_CANDIDATES_FILE to the operator-provided list)"
+        )
+    candidates = [
+        line.strip()
+        for line in Path(candidates_file).read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
+    assert core.set_authorized_sm4_candidates(candidates)
     path = Path("Lobby_VersionUpdateSlap_Page_002_UIBP.uasset")
     cipher = bytes.fromhex("dc91fe9cf0e2f652416102fe148da3e8")
     key = core.PakCrypto._derive_sm4_key(path, 50)

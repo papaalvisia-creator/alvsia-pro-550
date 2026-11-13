@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Bounded-memory regression tests for the authoritative SM4 candidate scanner."""
+"""Bounded-memory regression tests for caller-supplied SM4 candidate scanning."""
 import ast
 import importlib.util
 import re
@@ -29,15 +29,19 @@ exec(compile(ast.Module(body=classes, type_ignores=[]), "sm4_scanner.py", "exec"
 SM4KeyFinder = namespace["SM4KeyFinder"]
 SM4AllKeyFinder = namespace["SM4AllKeyFinder"]
 
+# Synthetic test fixture only. It is intentionally not a shipped/project key.
+key = "aB1cD2eF3gH4iJ5kL6mN"
+assert registry.validate_sm4_secret_set()["ok"]
+assert registry.validate_candidate_keys([key])["ok"]
+
 with tempfile.TemporaryDirectory() as td:
     root = Path(td)
     sample = root / "libfixture.so"
-    key = registry.SM4_SECRET_NEW[0]
     offset = SM4KeyFinder._CHUNK_SIZE - 5
     with sample.open("wb") as handle:
         handle.write(b"\x00" * offset)
         handle.write(key.encode("ascii"))
-        handle.write(b"\\x00" * 128)
+        handle.write(b"\x00" * 128)
 
     single = SM4KeyFinder.scan_file(sample)
     assert (offset, key) in single, single
@@ -45,5 +49,4 @@ with tempfile.TemporaryDirectory() as td:
     grouped = SM4AllKeyFinder(str(root)).find_all_keys()
     assert (offset, key) in grouped["SM4_SECRET_NEW"], grouped
 
-assert registry.validate_sm4_secret_set()["ok"]
-print("SM4 STREAMING: PASS (23-key registry, cross-chunk UTF-8 detection, all-type scan)")
+print("SM4 STREAMING: PASS (caller-supplied fixture, cross-chunk UTF-8 detection, all-type scan)")

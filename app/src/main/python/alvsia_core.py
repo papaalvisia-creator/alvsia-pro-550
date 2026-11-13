@@ -7,7 +7,7 @@ from __future__ import annotations
 from __future__ import annotations
 import os, re, struct, subprocess, shutil, hashlib, json, sys, zipfile, fnmatch, tempfile, zlib, time, uuid, threading, platform, getpass, urllib.request, urllib.error
 from dataclasses import dataclass, field
-from pathlib import Path, PurePath
+from pathlib import Path, PurePath, PurePosixPath
 from functools import lru_cache
 from collections import Counter
 from typing import List, Dict, Tuple, Optional, Any, Union
@@ -333,30 +333,25 @@ SIMPLE2_DECRYPT_KEY = bytes.fromhex('E55B4ED1')
 SIMPLE2_BLOCK_SIZE = 4
 SM4_SECRET_4 = 'eb691efea914241317a8'
 SM4_SECRET_2 = 'Q0hVTKey$as*1ZFlQCiA'
-SM4_SECRET_NEW = [
-    'xG2qW5lP7lV2iN5fN5pG',  # [0]
-    'xT1cJ6dL5wC0kK1rB4dK',  # [1]
-    'qC4jS5bZ6fL5xE6nD4zA',  # [2]
-    'gD4jQ2aL3bS3lC3xT0iW',  # [3]
-    'xU1yQ8wE9zY3gZ3bT5aE',  # [4]
-    'uQ3cO2dX7xY4xU7gH7iS',  # [5]
-    'gW1fR0jK6wQ4oN0oK1kZ',  # [6]
-    'aJ4pV7iZ7pU4wP2aC2cZ',  # [7]
-    'cX6jT3cM2oT3vK0kJ1qN',  # [8]
-    'iT2vS0cS6yT6cZ1sE1lO',  # [9]
-    'hM1pH9iY8wM9hT4lN5uJ',  # [10]
-    'kG6bC8jK0fL0dE4sH4mL',  # [11]
-    'dB6lB3vE0eZ8wM8rI0aC',  # [12]
-    'tP7sP7nI9rA2vQ4cV5yQ',  # [13]
-    'aT0cL1yN4pT3sZ7eM2vY',  # [14]
-    'uV6fU8fC9zN3mP5dH8mN',  # [15]
-    'rT6aQ6oZ1yM0gO5tO1aN',  # [16]
-    'jU5bH7lQ0fM9hK2kI0oF',  # [17]
-    'iQ0eM0mJ7uT0kV6kL5zY',  # [18]
-    'wD2rP3lP9xF4mE1eC5jS',  # [19] — missing from original; needed for flag ≥50
-    'rG0lR2rZ5vM6mW5lM1rR',  # [20] — missing from original
-    'fO3kW1fE6eD0pU1kY7xK',  # [21] — missing from original
-]
+# New/variant SM4 candidates are never embedded in the public source tree.
+# They must be supplied by an authorized caller for the corresponding PAK.
+from sm4_secret_registry import SM4_SECRET_NEW
+_SM4_AUTHORIZED_CANDIDATES = ()
+
+def set_authorized_sm4_candidates(candidates) -> bool:
+    global _SM4_AUTHORIZED_CANDIDATES
+    values = tuple(candidates or ())
+    if not all(isinstance(key, str) and 1 <= len(key) <= 64 for key in values):
+        return False
+    _SM4_AUTHORIZED_CANDIDATES = values
+    PakCrypto._derive_sm4_key.cache_clear()
+    return True
+
+def clear_authorized_sm4_candidates() -> None:
+    global _SM4_AUTHORIZED_CANDIDATES
+    _SM4_AUTHORIZED_CANDIDATES = ()
+    PakCrypto._derive_sm4_key.cache_clear()
+
 EM_SIMPLE1 = 1
 EM_SIMPLE2 = 16
 EM_SM4_2 = 2
@@ -850,11 +845,17 @@ class PakCrypto:
         elif encryption_method == EM_SM4_4:
             _sbd281f3d3181 = SM4_SECRET_4
         elif encryption_method == EM_UNKNOWN_17:
-            _s2b8e7b87d9f2 = (encryption_method - EM_SM4_NEW_BASE) % len(SM4_SECRET_NEW)
-            _sbd281f3d3181 = SM4_SECRET_NEW[_s2b8e7b87d9f2]
+            candidates = _SM4_AUTHORIZED_CANDIDATES
+            if not candidates:
+                raise RuntimeError('SM4 candidate material is not authorized/supplied')
+            _s2b8e7b87d9f2 = (encryption_method - EM_SM4_NEW_BASE) % len(candidates)
+            _sbd281f3d3181 = candidates[_s2b8e7b87d9f2]
         else:
-            _s2b8e7b87d9f2 = (encryption_method - EM_SM4_NEW_BASE) % len(SM4_SECRET_NEW)
-            _sbd281f3d3181 = f'{SM4_SECRET_NEW[_s2b8e7b87d9f2]}{encryption_method}'
+            candidates = _SM4_AUTHORIZED_CANDIDATES
+            if not candidates:
+                raise RuntimeError('SM4 candidate material is not authorized/supplied')
+            _s2b8e7b87d9f2 = (encryption_method - EM_SM4_NEW_BASE) % len(candidates)
+            _sbd281f3d3181 = f'{candidates[_s2b8e7b87d9f2]}{encryption_method}'
         return SHA1.new(str(_s5faefbac755f + _sbd281f3d3181).encode()).digest()[:SM4.key_length()]
 
     @staticmethod
@@ -871,6 +872,18 @@ class PakCrypto:
         return b''.join(
             sm4.decrypt(ciphertext[i:i + block_size])
             for i in range(0, len(ciphertext), block_size)
+        )
+
+    @staticmethod
+    def _encrypt_sm4_block(plaintext, file_path: PurePath, encryption_method: int) -> bytes:
+        """Inverse of _decrypt_sm4 (game SM4 variant, ECB per 16-byte block)."""
+        assert len(plaintext) % SM4.block_length() == 0
+        key = PakCrypto._derive_sm4_key(file_path, encryption_method)
+        sm4 = PakCrypto._sm4_context_for_key(key)
+        block_size = SM4.block_length()
+        return b''.join(
+            sm4.encrypt(plaintext[i:i + block_size])
+            for i in range(0, len(plaintext), block_size)
         )
 
     @staticmethod
@@ -1056,13 +1069,31 @@ class PakCompression:
             try:
                 result = zlib.decompress(block)
             except zlib.error:
-                # Fallback: raw DEFLATE (no zlib/gzip header, negative wbits).
+                # Fallback 1: raw DEFLATE (no zlib/gzip header, negative wbits).
+                result = None
                 try:
                     result = zlib.decompress(block, wbits=-zlib.MAX_WBITS)
-                except zlib.error as exc:
+                except zlib.error:
+                    result = None
+                if result is None:
+                    # Fallback 2: game-written zlib frames keep the standard
+                    # 2-byte header and raw-DEFLATE body but store a non-standard
+                    # trailing checksum where the ADLER32 word normally lives
+                    # (verified against the entry SHA-1 content hash upstream).
+                    # Decode the DEFLATE body leniently and bound the output.
+                    body = block[2:] if len(block) > 6 else None
+                    if body is not None:
+                        try:
+                            dobj = zlib.decompressobj(wbits=-zlib.MAX_WBITS)
+                            result = dobj.decompress(body)
+                            if not dobj.eof:
+                                result = None
+                        except zlib.error:
+                            result = None
+                if result is None:
                     raise ValueError(
                         "decompression failed: block is neither valid zlib nor raw DEFLATE"
-                    ) from exc
+                    )
             if max_output_size and len(result) > int(max_output_size):
                 raise ValueError("decompressed block exceeds declared output limit")
             return result
@@ -1316,17 +1347,38 @@ class TencentPakFile:
             _s2c1f87975662 = bytes(pak_buffer[entry.offset:][:_se741c9e5b336])
             if entry.encrypted:
                 _s2c1f87975662 = PakCrypto.decrypt_block(_s2c1f87975662, file_path_for_crypto, entry.encryption_method)
+                # Word-padded cipher blocks decrypt to aligned_size bytes; the
+                # true plaintext is entry.size bytes (the writer zero-padded the
+                # plaintext before encryption). Trim so callers hash real data.
+                if len(_s2c1f87975662) > entry.size:
+                    _s2c1f87975662 = _s2c1f87975662[:entry.size]
             return _s2c1f87975662
         _sa2b725aa04a1 = []
         for _s233f3b8af19b in PakCrypto.generate_block_indices(len(entry.compressed_blocks), entry.encryption_method):
             _s352a9973d0a5 = entry.compressed_blocks[_s233f3b8af19b]
-            _se51624ae001c = PakCrypto.align_encrypted_content_size(_s352a9973d0a5.end - _s352a9973d0a5.start, entry.encryption_method)
+            _span = _s352a9973d0a5.end - _s352a9973d0a5.start
+            _se51624ae001c = PakCrypto.align_encrypted_content_size(_span, entry.encryption_method)
             _s3ab48815ace4 = bytes(pak_buffer[_s352a9973d0a5.start:][:_se51624ae001c])
             if entry.encrypted:
                 _s3ab48815ace4 = PakCrypto.decrypt_block(_s3ab48815ace4, file_path_for_crypto, entry.encryption_method)
+                # Decryptors require cipher-block-aligned lengths; the true
+                # compressed stream is the declared block span. Trim padding
+                # so the decompressor sees exactly the stored bytes.
+                if len(_s3ab48815ace4) > _span:
+                    _s3ab48815ace4 = _s3ab48815ace4[:_span]
             _sbe77522f0741 = PakCompression.decompress_block(_s3ab48815ace4, zstd_dict, entry.compression_method)
             _sa2b725aa04a1.append(_sbe77522f0741)
-        return b''.join(_sa2b725aa04a1)
+        _plain = b''.join(_sa2b725aa04a1)
+        # Cryptographic integrity gate: the index stores SHA-1 of the full
+        # plaintext. A wrong decrypt/decompress path must fail closed here
+        # instead of writing silently corrupted files.
+        expected_hash = bytes(entry.content_hash or b'')
+        if len(expected_hash) == 20 and len(_plain) == entry.uncompressed_size:
+            if SHA1.new(_plain).digest() != expected_hash:
+                raise ValueError(
+                    'PAK entry integrity check failed: SHA-1 mismatch for %s' % str(file_path_for_crypto)
+                )
+        return _plain
 
     def inject_files(self, inject_plan: list, output_pak: Path) -> None:
         """Inject new files into this PAK, producing a new PAK at output_pak."""
@@ -1734,7 +1786,23 @@ class TencentPakFile:
                 stats['skipped_files'] += len(entries)
                 _failure(dir_text, ValueError('directory contains an embedded NUL'))
                 continue
-            current_out_path = (safe_root / dir_text).resolve()
+            # Normalize PAK directory records before joining them to the
+            # validated mount root. Some valid indexes encode the root as
+            # "."/"" or "/" and must not be treated as host-absolute paths.
+            dir_norm = dir_text.replace("\\", "/")
+            dir_parts = tuple(
+                part for part in dir_norm.split("/")
+                if part not in ("", ".")
+            )
+            if any(part == ".." for part in dir_norm.split("/")):
+                stats['skipped_directories'] += 1
+                stats['skipped_files'] += len(entries)
+                _failure(dir_text, ValueError('unsafe PAK directory path'))
+                continue
+            current_out_path = (
+                safe_root / Path(*dir_parts)
+                if dir_parts else safe_root
+            ).resolve()
             try:
                 current_out_path.relative_to(safe_root)
                 current_out_path.mkdir(parents=True, exist_ok=True)
@@ -1747,13 +1815,36 @@ class TencentPakFile:
             for file_name, entry in entries.items():
                 file_text = str(file_name)
                 relative_name = str(PurePath(dir_path) / file_text).replace('\\', '/')
-                if not file_text or '\x00' in file_text or file_text in ('.', '..') or '/' in file_text or '\\' in file_text:
+                # Some valid PAK indexes store the full relative filename in
+                # the entry name instead of splitting it into directory records.
+                # Treat separators as path components, but keep extraction strictly
+                # beneath the validated mount root.
+                if not file_text or '\x00' in file_text or file_text in ('.', '..'):
                     stats['skipped_files'] += 1
                     _failure(relative_name, ValueError('unsafe PAK filename'))
                     continue
-                target = (current_out_path / file_text).resolve()
+                normalized_name = file_text.replace('\\', '/')
+                # A root-level PAK directory is commonly represented as "." or
+                # an empty PurePath. Do not reject that legitimate root component.
+                dir_norm = str(dir_path).replace('\\', '/').strip('/')
+                base_parts = () if dir_norm in ('', '.') else tuple(
+                    part for part in dir_norm.split('/') if part not in ('', '.')
+                )
+                name_parts = tuple(part for part in normalized_name.split('/') if part not in ('', '.'))
+                rel_parts = base_parts + name_parts
+                rel_candidate = PurePosixPath(*rel_parts)
+                if (
+                    rel_candidate.is_absolute()
+                    or not rel_parts
+                    or any(part == '..' for part in rel_parts)
+                ):
+                    stats['skipped_files'] += 1
+                    _failure(relative_name, ValueError('unsafe PAK relative path'))
+                    continue
+                target = (safe_root / Path(*rel_candidate.parts)).resolve()
                 try:
                     target.relative_to(safe_root)
+                    target.parent.mkdir(parents=True, exist_ok=True)
                     self._write_to_disk(target, entry)
                     if not target.is_file():
                         raise OSError('extractor returned without creating a regular file')
@@ -2878,6 +2969,7 @@ def run_pak_unpack(pak_path, out_dir, authorization_operation='pak.unpack'):
         written = int(stats.get('written_files', 0))
         skipped = int(stats.get('skipped_files', 0))
         actual_on_disk = sum(1 for p in out_dir.rglob('*') if p.is_file())
+        stats["on_disk"] = actual_on_disk
         if expected <= 0:
             return {
                 'ok': False,
