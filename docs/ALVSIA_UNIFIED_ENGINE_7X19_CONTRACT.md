@@ -1,17 +1,17 @@
-# ALVSIA Unified Engine — 7 Menu / 20 Submenu Contract
+# ALVSIA Unified Engine — 7 Menu / 19 Submenu Contract
 
 Status: Approved implementation target
 Date: 2026-11-13
-Branch: feat/alvsia-unified-engine-7x19-20261113
+Branch: feat/alvsia-unified-engine-7x22-20261113
 Base: feat/alvsia-smart-premium-v1-20261112
 
 ## Non-negotiable product contract
 
 - Exactly **7** visible top-level menus.
-- Exactly **20** visible submenu entries across those menus.
-- The existing **19 legacy module IDs (1..19)** remain stable; Smart Asset Engine is a new provider ID 20 internal capability/provider identities.
+- Exactly **19** visible submenu entries across those menus.
+- The existing **19 legacy module IDs (1..19)** remain stable internal capability/provider identities.
 - All useful legacy operations remain available inside their owning submenu as operations/actions; they must not be deleted merely to reduce the visible submenu count.
-- No extra top-level menu or hidden duplicate catalog is permitted. The single Smart Asset Modding Engine submenu is the approved capability expansion; it does not add another top-level menu.
+- No extra top-level menu, submenu, hidden duplicate catalog, or legacy navigation surface is permitted.
 - One Unified Engine owns routing, execution lifecycle, adapters, pipelines, validation, recovery, reporting, and provider selection.
 - Domain-specific engines remain specialized providers behind the Unified Engine; "one engine" means one orchestration and contract layer, not one algorithm for every file format.
 - Preserve authentication, signed operation grants, SessionGate, Unaux policy, private sealed-runtime gate, Xop asset handling, TLS policy, and existing permissions/login behavior.
@@ -34,19 +34,19 @@ Base: feat/alvsia-smart-premium-v1-20261112
 | SMART DATA | SMART DECRYPT ENGINE | 13 | AES, SM4, SIMPLE1 and explicitly labelled compatibility transforms |
 | SMART ANALYSIS | SMART SO ANALYZER | 10 | SO analysis, URL/string extraction, AES pattern analysis, safe patch workflow |
 | SMART ANALYSIS | SMART JNI TRACE | 11 | Frida/JNI script generation and trace command generation |
-| SMART ANALYSIS | SMART ANTI-RE AUDIT | 17 | APK, Lua, SO and source triage audits |\n| SMART ANALYSIS | SMART ASSET MODDING ENGINE | 20 | Asset fingerprinting, contextual ID discovery, safe user-mapped patching and validation |
+| SMART ANALYSIS | SMART ANTI-RE AUDIT | 17 | APK, Lua, SO and source triage audits |
 | WORKSPACE & REPORT | SMART WORKSPACE | 7 | Workspace lifecycle and safe cleanup |
 | WORKSPACE & REPORT | SMART REPORT EXPORT | 8 | File/session report export |
 | WORKSPACE & REPORT | SMART REBRAND | 9 | Auto/manual rebrand and brand scan |
 | ALVSIA PRIVATE | ALVSIA PRIVATE ENGINE | 19 | Sealed private providers: Lua parse/convert, PAK manifest, private crypto and analysis utilities |
 
-Total: 7 menus, 20 submenus, 19 legacy module IDs + 1 new Smart Asset provider (ID 20). Every legacy module ID must appear exactly once in this mapping.
+Total: 7 menus, 19 submenus, 19 legacy module IDs. Every legacy module ID must appear exactly once in this mapping.
 
 ## Unified Engine architecture and implementation status
 
 ### Implemented on this branch
 
-`UI (7 menus / 20 submenu groups)`
+`UI (7 menus / 19 submenu groups)`
 → `SmartEnginePlanner.resolve/plan(submenu, detected input, workspace context)`
 → `UnifiedEngineFacade.resolve(menuId, internal stage)`
 → `one TaskCenter task / ToolEngine.runSub(shared taskId, immutable input snapshot)`
@@ -73,7 +73,7 @@ Total: 7 menus, 20 submenus, 19 legacy module IDs + 1 new Smart Asset provider (
 - Run real input-to-output fixtures for PAK, OBB, Lua, data, SO, and private providers; static catalog coverage is not functional proof.
 - Keep operations read-only where appropriate and require atomic output plus evidence before reporting success.
 
-Each of the 20 visible submenus is one complete Smart Engine. Its 89 retained implementations are orchestrated internally through automatic detection, routing and compatible pipeline stages. The user sees one submenu workspace and one RUN action—not a second layer of tools. Configuration inputs are shown only when the chosen route requires them.
+Each of the 22 visible submenus is one complete Smart Engine. Its 89 retained implementations are orchestrated internally through automatic detection, routing and compatible pipeline stages. The user sees one submenu workspace and one RUN action—not a second layer of tools. Configuration inputs are shown only when the chosen route requires them.
 
 ## Required provider contract
 
@@ -106,3 +106,7 @@ No provider may return success solely because a process exited with code 0. Succ
 - Live server, autostart, panel, login, permission, TLS pin, or production data changes.
 - Merging this branch into main or merging PR #19 without separate approval.
 - Claiming full functionality based only on catalog coverage, static tests, or a green Gradle build.
+
+
+### Expanded Smart capabilities
+The public catalog now contains three additional Smart capability submenus without adding a new top-level menu: **SMART ASSET MODDING ENGINE**, **SMART CRYPTO & COMPRESSION ENGINE**, and **SMART BINARY FORENSICS ENGINE**. They orchestrate existing validated providers internally; no legacy operation picker is exposed. User-provided keys/configuration remain separate from any research-source secrets.
