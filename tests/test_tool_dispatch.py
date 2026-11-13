@@ -85,6 +85,10 @@ def test_sm4_registry_contains_no_embedded_secret_material():
     # The public source must not contain the previously embedded 4.7-modders key set.
     assert "4.7-modders" not in source
     assert "xG2qW5lP7lV2iN5fN5pG" not in source
+    core = (ROOT / "app/src/main/python/alvsia_core.py").read_text(encoding="utf-8")
+    assert "xG2qW5lP7lV2iN5fN5pG" not in core
+    assert "SM4 candidate material is not authorized/supplied" in core
+    assert "set_authorized_sm4_candidates" in core
 
 def test_menu_ids_are_unique_and_reachable():
     menus = MENUS.read_text(encoding="utf-8")
