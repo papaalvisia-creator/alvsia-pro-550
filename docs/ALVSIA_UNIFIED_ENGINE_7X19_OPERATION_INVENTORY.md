@@ -34,11 +34,11 @@ This inventory defines the internal operations retained behind the fixed **7 men
 - Internal operation declarations discovered: 89.
 - Operation IDs must be unique or explicitly documented as shared aliases; all must resolve to a registered provider.
 - No inventory row may be removed solely to reduce the visible submenu count.
-- A submenu may contain an internal operation selector/configuration area; that selector is part of the submenu's workspace and must not create a new navigation catalog entry.
+- A submenu has no user-visible internal operation selector or nested tool list. The Smart Engine detects the input and selects/runs compatible internal stages automatically; required configuration fields remain inside the same workspace.
 
 ## Verification required per operation
 
-1. Kotlin UI selection and action/config selection.
+1. Automatic input detection and internal route selection inside the owning Smart submenu; only required configuration fields are shown.
 2. Smart router maps the action to the correct legacy provider ID.
 3. Kotlin bridge passes the exact operation ID and the correct task/workspace context.
 4. Python/native implementation exists and has authorization coverage.
