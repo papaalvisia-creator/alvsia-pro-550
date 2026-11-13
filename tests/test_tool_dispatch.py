@@ -373,8 +373,11 @@ def test_reference_inspection_subtools_are_registered_and_read_only():
     menus = MENUS.read_text(encoding="utf-8")
     bridge = BRIDGE_IMPL.read_text(encoding="utf-8")
     helper = (ROOT / "app/src/main/python/alvsia_reference_tools.py").read_text(encoding="utf-8")
+    visible_groups = menus.split("fun forModule(moduleId: Int)", 1)[1].split("private fun moduleGroup", 1)[0]
+    internal_actions = menus.split("private fun legacyOperations", 1)[1]
     for sid in ("lua_format_probe", "anti_re_source_triage", "so_dump_audit"):
-        assert sid not in menus, f"{sid} must remain an internal Smart provider, not a public menu"
+        assert f'"{sid}"' not in visible_groups, f"{sid} must not become a separate submenu"
+        assert f'"{sid}"' in internal_actions, f"{sid} must remain available as an internal workspace operation"
         assert sid in bridge
     assert "probe_lua_file" in helper
     assert "scan_source_file" in helper
