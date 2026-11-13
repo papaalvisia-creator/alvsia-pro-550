@@ -129,7 +129,7 @@ object SmartEnginePlanner {
                 get("string_scan", "hash_scan") else listOf(primary)
             10 -> if (primary.id == "so_xor_scan")
                 get("so_xor_scan", "so_url_dump", "so_aes_probe") else listOf(primary)
-            11 -> if (primary.id == "frida_js_dump" && File(workDir, "frida_target.txt").isFile)
+            11 -> if (primary.id == "frida_spawn")
                 get("frida_js_dump", "frida_spawn") else listOf(primary)
             12 -> if (primary.id == "xor_selftest") listOf(primary)
                 else get("xor_selftest") + listOf(primary)
