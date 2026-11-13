@@ -875,6 +875,18 @@ class PakCrypto:
         )
 
     @staticmethod
+    def _encrypt_sm4_block(plaintext, file_path: PurePath, encryption_method: int) -> bytes:
+        """Inverse of _decrypt_sm4 (game SM4 variant, ECB per 16-byte block)."""
+        assert len(plaintext) % SM4.block_length() == 0
+        key = PakCrypto._derive_sm4_key(file_path, encryption_method)
+        sm4 = PakCrypto._sm4_context_for_key(key)
+        block_size = SM4.block_length()
+        return b''.join(
+            sm4.encrypt(plaintext[i:i + block_size])
+            for i in range(0, len(plaintext), block_size)
+        )
+
+    @staticmethod
     def decrypt_index(ciphertext, pak_info: TencentPakInfo) -> bytes:
         _sf57f815e306f = BASE_DIR / 'index_debug.txt'
         if pak_info.version > 7:
@@ -1057,13 +1069,31 @@ class PakCompression:
             try:
                 result = zlib.decompress(block)
             except zlib.error:
-                # Fallback: raw DEFLATE (no zlib/gzip header, negative wbits).
+                # Fallback 1: raw DEFLATE (no zlib/gzip header, negative wbits).
+                result = None
                 try:
                     result = zlib.decompress(block, wbits=-zlib.MAX_WBITS)
-                except zlib.error as exc:
+                except zlib.error:
+                    result = None
+                if result is None:
+                    # Fallback 2: game-written zlib frames keep the standard
+                    # 2-byte header and raw-DEFLATE body but store a non-standard
+                    # trailing checksum where the ADLER32 word normally lives
+                    # (verified against the entry SHA-1 content hash upstream).
+                    # Decode the DEFLATE body leniently and bound the output.
+                    body = block[2:] if len(block) > 6 else None
+                    if body is not None:
+                        try:
+                            dobj = zlib.decompressobj(wbits=-zlib.MAX_WBITS)
+                            result = dobj.decompress(body)
+                            if not dobj.eof:
+                                result = None
+                        except zlib.error:
+                            result = None
+                if result is None:
                     raise ValueError(
                         "decompression failed: block is neither valid zlib nor raw DEFLATE"
-                    ) from exc
+                    )
             if max_output_size and len(result) > int(max_output_size):
                 raise ValueError("decompressed block exceeds declared output limit")
             return result
@@ -1317,17 +1347,38 @@ class TencentPakFile:
             _s2c1f87975662 = bytes(pak_buffer[entry.offset:][:_se741c9e5b336])
             if entry.encrypted:
                 _s2c1f87975662 = PakCrypto.decrypt_block(_s2c1f87975662, file_path_for_crypto, entry.encryption_method)
+                # Word-padded cipher blocks decrypt to aligned_size bytes; the
+                # true plaintext is entry.size bytes (the writer zero-padded the
+                # plaintext before encryption). Trim so callers hash real data.
+                if len(_s2c1f87975662) > entry.size:
+                    _s2c1f87975662 = _s2c1f87975662[:entry.size]
             return _s2c1f87975662
         _sa2b725aa04a1 = []
         for _s233f3b8af19b in PakCrypto.generate_block_indices(len(entry.compressed_blocks), entry.encryption_method):
             _s352a9973d0a5 = entry.compressed_blocks[_s233f3b8af19b]
-            _se51624ae001c = PakCrypto.align_encrypted_content_size(_s352a9973d0a5.end - _s352a9973d0a5.start, entry.encryption_method)
+            _span = _s352a9973d0a5.end - _s352a9973d0a5.start
+            _se51624ae001c = PakCrypto.align_encrypted_content_size(_span, entry.encryption_method)
             _s3ab48815ace4 = bytes(pak_buffer[_s352a9973d0a5.start:][:_se51624ae001c])
             if entry.encrypted:
                 _s3ab48815ace4 = PakCrypto.decrypt_block(_s3ab48815ace4, file_path_for_crypto, entry.encryption_method)
+                # Decryptors require cipher-block-aligned lengths; the true
+                # compressed stream is the declared block span. Trim padding
+                # so the decompressor sees exactly the stored bytes.
+                if len(_s3ab48815ace4) > _span:
+                    _s3ab48815ace4 = _s3ab48815ace4[:_span]
             _sbe77522f0741 = PakCompression.decompress_block(_s3ab48815ace4, zstd_dict, entry.compression_method)
             _sa2b725aa04a1.append(_sbe77522f0741)
-        return b''.join(_sa2b725aa04a1)
+        _plain = b''.join(_sa2b725aa04a1)
+        # Cryptographic integrity gate: the index stores SHA-1 of the full
+        # plaintext. A wrong decrypt/decompress path must fail closed here
+        # instead of writing silently corrupted files.
+        expected_hash = bytes(entry.content_hash or b'')
+        if len(expected_hash) == 20 and len(_plain) == entry.uncompressed_size:
+            if SHA1.new(_plain).digest() != expected_hash:
+                raise ValueError(
+                    'PAK entry integrity check failed: SHA-1 mismatch for %s' % str(file_path_for_crypto)
+                )
+        return _plain
 
     def inject_files(self, inject_plan: list, output_pak: Path) -> None:
         """Inject new files into this PAK, producing a new PAK at output_pak."""

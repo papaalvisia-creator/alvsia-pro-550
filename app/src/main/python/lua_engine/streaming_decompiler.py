@@ -38,6 +38,27 @@ from .engine import validate_lua_source, _find_java
 STREAM_CHUNK_SIZE = 4 * 1024 * 1024  # 4 MiB
 MAX_INFLATED_BYTES = 4 * 1024 * 1024 * 1024  # 4 GiB hard cap
 
+_REGISTER_REF_RE = re.compile(r"_r(\d+)\b")
+
+
+def _max_register_index(source_text: str):
+    """Return the highest reconstructed register index, or None if none found.
+
+    Used as a semantic sanity gate: Lua 5.3 register operands are 8-bit
+    (0..255). A decompiled source that references registers >= 256 proves the
+    opcode stream was interpreted with the wrong opcode map (constants flagged
+    with the RK bit were read as registers).
+    """
+    try:
+        best = None
+        for match in _REGISTER_REF_RE.finditer(source_text):
+            value = int(match.group(1))
+            if best is None or value > best:
+                best = value
+        return best
+    except Exception:
+        return None
+
 
 def _comment_prefix_lua_magic(head: bytes) -> Optional[Tuple[int, str]]:
     """Find a Lua chunk after a textual comment/shebang-only prefix."""
@@ -322,6 +343,17 @@ def stream_decompile_lua53(input_path: Path, out_path: Path) -> Tuple[bool, str]
             ok, msg = validate_lua_source(source_text, expected_version="Lua 5.3")
             if not ok:
                 raise ValueError(f"source validation failed: {msg}")
+            # Register-overflow guard: a wrong opcode interpretation reconstructs
+            # instructions whose operand fields encode CONSTANTS (RK flag, index
+            # >= 256) as registers. Lua register operands are 8-bit (0..255), so
+            # any reconstructed register reference >= 256 proves the candidate
+            # misread the opcode stream. Such output is syntactically valid but
+            # semantically wrong and must NOT be reported as SUCCESS.
+            overflow = _max_register_index(source_text)
+            if overflow is not None and overflow >= 256:
+                raise ValueError(
+                    f"register overflow (_r{overflow} >= 256): opcode interpretation rejected"
+                )
             final = Path(out_path)
             final.parent.mkdir(parents=True, exist_ok=True)
             final.write_text(source_text, encoding="utf-8")
@@ -331,19 +363,60 @@ def stream_decompile_lua53(input_path: Path, out_path: Path) -> Tuple[bool, str]
         except Exception as exc:
             return False, f"{variant}: {str(exc)[:320]}"
 
-    ok, note = _try_candidate("standard", data)
-    if ok:
-        return True, note
-    failures.append(note)
-    del data
-    if note.startswith("lua53_total_budget_exceeded"):
-        return False, note
-    if __import__("time").monotonic() >= deadline:
-        return False, "all Lua 5.3 candidates stopped: total parser time budget exceeded"
+    # Mod-guard routing: when the protected-mod producer signature is present,
+    # the file is known to use the producer's rotated opcode map + XOR strings.
+    # The standard interpretation of such files yields syntactically valid but
+    # semantically wrong source (fake success), so the standard candidate is
+    # skipped and the known producer transform (BGMI) is authoritative.
+    modguard_routed = False
+    try:
+        from lua_engine.modguard import detect_mod_guard
+        _mg_probe = data
+        _mg = detect_mod_guard(_mg_probe)
+        modguard_routed = bool(_mg and _mg.get("detected"))
+        del _mg, _mg_probe
+    except Exception:
+        modguard_routed = False
+
+    if not modguard_routed:
+        ok, note = _try_candidate("standard", data)
+        if ok:
+            return True, note
+        failures.append(note)
+        if note.startswith("lua53_total_budget_exceeded"):
+            return False, note
+    else:
+        failures.append("standard candidate skipped: mod-guard signature detected (rotated producer)")
 
     # Existing BGMI/HePing normalizers remain enabled, but share the same
     # total deadline so a failed standard candidate cannot trigger an
     # unbounded chain of additional parser attempts.
+    #
+    # Mod-guard pre-clean: protected mod-tool writers append dead JMP tails to
+    # every proto and a plain-text banner after the chunk. Those bytes make the
+    # strict converters fail ("unexpected trailing bytes"). When the exact
+    # structural signature is detected, sanitize once and feed the patched
+    # chunk to the same normalizer chain. The detection is byte-exact and
+    # fail-closed: inputs without the signature are passed through untouched.
+    modguard_note = ""
+    sanitized_bytes = None
+    try:
+        from lua_engine.modguard import detect_mod_guard, sanitize_mod_guard
+        raw = Path(input_path).read_bytes()
+        detection = detect_mod_guard(raw)
+        if detection and detection.get("detected"):
+            patched, mg_report = sanitize_mod_guard(raw)
+            if mg_report.get("applied"):
+                sanitized_bytes = patched
+                modguard_note = (
+                    f"modguard: patched {mg_report.get('patched_protos')} dead tail(s), "
+                    f"split {mg_report.get('banner_bytes')} banner byte(s)"
+                )
+        del raw
+    except Exception as exc:
+        modguard_note = f"modguard unavailable: {type(exc).__name__}"
+        sanitized_bytes = None
+
     try:
         import gc
         from alvsia_private import LuaOpcodeConverter
@@ -353,8 +426,14 @@ def stream_decompile_lua53(input_path: Path, out_path: Path) -> Tuple[bool, str]
                 break
             try:
                 original = Path(input_path).read_bytes()
+                if sanitized_bytes is not None:
+                    original = sanitized_bytes
                 converted = LuaOpcodeConverter(variant=variant).convert_bytes(original)
-                del original
+                if modguard_note:
+                    note_with_mg = f"{modguard_note}; {variant} normalize"
+                    del original
+                else:
+                    del original
                 if __import__("time").monotonic() >= deadline:
                     del converted
                     gc.collect()

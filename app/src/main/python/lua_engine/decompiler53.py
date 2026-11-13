@@ -240,8 +240,15 @@ def load_proto(r: Reader, depth: int = 0) -> Proto:
         _abs_lines = [(r.int_(), r.int_()) for _ in range(abs_n)]
         p.lineinfo = _deltas
     else:
-        n = _read_count(r, "lineinfo", 4)
-        p.lineinfo = [r.int_() for _ in range(n)]
+        # Real Lua 5.3 debug format (lundump.c LoadDebug): lineinfo is an
+        # array of signed-BYTE deltas followed by the abslineinfo table
+        # (pc int + line int per entry). The previous 4-byte-int reading was
+        # a fixture bug: no real Lua 5.3 producer emits 4-byte line deltas,
+        # and every genuine 32-bit/64-bit chunk misparsed here.
+        n = _read_count(r, "line delta", 1)
+        p.lineinfo = [struct.unpack("b", r._read(1))[0] for _ in range(n)]
+        abs_n = _read_count(r, "absolute line", 8)
+        _abs_lines = [(r.int_(), r.int_()) for _ in range(abs_n)]
 
     # debug: locvars
     n = _read_count(r, "local variable", 9)
@@ -466,6 +473,26 @@ class Decompiler:
                         .replace("\r", "\\r")
                         .replace("\t", "\\t")
                         .replace('"', '\\"'))
+            # Byte-level escaping: recovered protected chunks can contain
+            # arbitrary non-UTF8 bytes (encrypted payloads, garbled names).
+            # Emit them as \xNN escapes so the output stays a clean, valid,
+            # decodable Lua text file instead of a binary blob with NULs.
+            needs_byte_escape = any(ord(ch) < 32 or ord(ch) > 126 for ch in escaped)
+            if needs_byte_escape:
+                out_chars = []
+                for ch in escaped:
+                    o = ord(ch)
+                    if o == 0 or o > 126:
+                        # Re-encode the original byte(s) of this character.
+                        try:
+                            raw = ch.encode("utf-8", "surrogateescape")
+                        except Exception:
+                            raw = b"?"
+                        for byte in raw:
+                            out_chars.append("\\x%02x" % byte)
+                    else:
+                        out_chars.append(ch)
+                escaped = "".join(out_chars)
             return f'"{escaped}"'
         return repr(v)
 
@@ -1031,7 +1058,7 @@ def decompile_bytes(
 
     header = [
         "-- Decompiled by ALVSIA PRO pure-Python Lua 5.3 decompiler",
-        f"-- Source: {proto.source or '?'}",
+        f"-- Source: {''.join(ch if 32 <= ord(ch) <= 126 else '?' for ch in (proto.source or '?'))}",
         "",
     ]
 

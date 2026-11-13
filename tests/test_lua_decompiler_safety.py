@@ -45,7 +45,8 @@ class Lua53BoundsTests(unittest.TestCase):
         data += struct.pack("<i", 0)     # constants
         data += struct.pack("<i", 1) + b"\x01\x00"  # upvalue: instack, idx
         data += struct.pack("<i", 0)     # nested prototypes
-        data += struct.pack("<i", 0)     # line info
+        data += struct.pack("<i", 0)     # line info (signed-byte deltas)
+        data += struct.pack("<i", 0)     # abslineinfo table (real Lua 5.3 debug format)
         data += struct.pack("<i", 0)     # local variables
         data += struct.pack("<i", 1) + b"\x05_ENV"   # upvalue name
         with tempfile.TemporaryDirectory() as td:
