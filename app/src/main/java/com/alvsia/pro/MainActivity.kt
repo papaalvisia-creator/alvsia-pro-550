@@ -454,7 +454,12 @@ class MainActivity : ComponentActivity() {
                                                                 taskId = taskId
                                                             )
                                                             combined.addAll(stageResult)
-                                                            if (stageResult.any { it.startsWith("X ") }) break
+                                                            // Independent read-only diagnostics continue so one detector failure
+                                                            // does not suppress other compatible analyses. Cryptographic self-tests
+                                                            // are hard gates: never run the transform if its known-answer test fails.
+                                                            if (stageResult.any { it.startsWith("X ") } &&
+                                                                stageRoute.operationId in setOf("xor_selftest", "dec_selftest")
+                                                            ) break
                                                         }
                                                         combined
                                                     } ?: listOf(
