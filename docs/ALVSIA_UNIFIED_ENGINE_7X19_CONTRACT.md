@@ -40,7 +40,7 @@ Base: feat/alvsia-smart-premium-v1-20261112
 | WORKSPACE & REPORT | SMART REBRAND | 9 | Auto/manual rebrand and brand scan |
 | ALVSIA PRIVATE | ALVSIA PRIVATE ENGINE | 19 | Sealed private providers: Lua parse/convert, PAK manifest, private crypto and analysis utilities |
 
-Total: 7 menus, 20 submenus, 19 legacy legacy module IDs + 1 new Smart Asset provider (ID 20). Every legacy module ID must appear exactly once in this mapping.
+Total: 7 menus, 20 submenus, 19 legacy module IDs + 1 new Smart Asset provider (ID 20). Every legacy module ID must appear exactly once in this mapping.
 
 ## Unified Engine architecture and implementation status
 
