@@ -44,7 +44,9 @@ assert len(private_ids) == 12, f"expected all 12 private operations, got {len(pr
 for sub_id in private_ids:
     assert f'"{sub_id}"' in bridge_impl, f"private operation missing from bridge: {sub_id}"
 assert "ALVSIA_SEALED_RUNTIME" in bridge_impl
-assert "operation.legacyModuleId" in main
+facade = (ROOT / "app/src/main/java/com/alvsia/pro/tool/UnifiedEngineFacade.kt").read_text(encoding="utf-8")
+assert "operation.legacyModuleId" in facade
+assert "UnifiedEngineFacade.resolve" in main
 assert "actions = sub.actions" in main and "onSelectAction" in main
 
 print("UNIFIED CATALOG: PASS (7 menus, 19 submenus, 19 legacy modules, 89 retained operations)")
