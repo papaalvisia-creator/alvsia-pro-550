@@ -28,8 +28,8 @@ class SharedWorkspaceHandoffTests(unittest.TestCase):
         tool = (ROOT / "app/src/main/java/com/alvsia/pro/ui/tool/ToolWorkspaceScreen.kt").read_text(encoding="utf-8")
         self.assertIn("var recentFiles by remember { mutableStateOf(UXStore.getRecentDisplayNames(ctx)) }", tool)
         self.assertIn("recentFiles = UXStore.getRecentDisplayNames(ctx)", tool)
-        self.assertIn("var isFav by remember(sub.id) { mutableStateOf(UXStore.isFavorite(ctx, sub.id)) }", tool)
-        self.assertIn("isFav = UXStore.isFavorite(ctx, sub.id)", tool)
+        self.assertIn("var isFav by remember(operation.id) { mutableStateOf(UXStore.isFavorite(ctx, operation.id)) }", tool)
+        self.assertIn("isFav = UXStore.isFavorite(ctx, operation.id)", tool)
 
     def test_shared_output_browser_does_not_offer_one_tap_recursive_delete(self):
         output = (ROOT / "app/src/main/java/com/alvsia/pro/ui/output/OutputBrowserScreen.kt").read_text(encoding="utf-8")
