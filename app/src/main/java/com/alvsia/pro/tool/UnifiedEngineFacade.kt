@@ -3,7 +3,7 @@ package com.alvsia.pro.tool
 /**
  * The single navigation-to-provider boundary for ALVSIA Unified Engine.
  *
- * The UI exposes only seven Smart menus and twenty submenu groups. Each
+ * The UI exposes seven Smart menus and the expanded Smart capability catalog. Legacy providers remain internal. Each
  * selected workspace action carries its stable legacy provider ID; this
  * facade validates the menu/provider relationship before ToolEngine executes
  * the operation through the shared bridge.
@@ -20,8 +20,8 @@ object UnifiedEngineFacade {
         1 to setOf(5, 15, 16, 18),
         2 to setOf(1, 2, 3, 14),
         3 to setOf(4),
-        4 to setOf(6, 12, 13),
-        5 to setOf(10, 11, 17, 20),
+        4 to setOf(6, 10, 12, 13, 14),
+        5 to setOf(6, 10, 11, 17),
         6 to setOf(7, 8, 9),
         7 to setOf(19)
     )
