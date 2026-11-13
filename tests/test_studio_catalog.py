@@ -59,7 +59,7 @@ class SmartCatalogTests(unittest.TestCase):
 
     def test_unified_facade_registers_each_legacy_provider_exactly_once(self):
         facade = (ROOT / "app/src/main/java/com/alvsia/pro/tool/UnifiedEngineFacade.kt").read_text(encoding="utf-8")
-        entries = re.findall(r'(\\d+) to setOf\\(([^)]*)\\)', facade)
+        entries = re.findall(r'(\d+) to setOf\(([^)]*)\)', facade)
         self.assertEqual(len(entries), 7)
         mapping = {int(menu): {int(x.strip()) for x in ids.split(",")} for menu, ids in entries}
         self.assertEqual(set(mapping), set(range(1, 8)))
