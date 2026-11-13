@@ -66,7 +66,7 @@ object SubMenus {
             id = "legacy_module_$moduleId",
             title = title,
             desc = desc,
-            guide = "Choose an operation in this workspace. Provider ID $moduleId stays internal.",
+            guide = "Smart Engine automatically selects the internal implementation. Provider ID $moduleId stays internal.",
             needsFile = actions.any { it.needsFile },
             legacyModuleId = moduleId,
             actions = actions
