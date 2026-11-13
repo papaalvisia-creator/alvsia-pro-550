@@ -337,7 +337,7 @@ class ToolEngine(private val context: Context) {
             return lines
         }
 
-        try {
+        // Smart Asset Engine stays local and isolated from the Python bridge.\n        if (moduleId == 20) {\n            onProgress?.invoke("SMART ASSET ANALYSIS", null)\n            lines.addAll(SmartAssetEngine.run(subId, inputPath, taskId))\n            return lines\n        }\n\n        try {
             File(WorkPaths.taskRoot(taskId), "sub_cmd.txt").writeText(subId)
         } catch (_: Exception) {
         }
