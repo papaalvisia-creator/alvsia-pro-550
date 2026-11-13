@@ -60,6 +60,33 @@ def decompile(input_path, output_dir, jars_dir=None) -> dict:
 
     # Recovery runs first so optional diagnostics can never delay or suppress
     # the primary decompilation result.
+    # Plain Lua source is already the decompiled artifact. Do not send
+    # source text through bytecode/protection recovery engines, because doing
+    # so can incorrectly turn a valid .lua file into a false failure.
+    try:
+        detected = detect(p)
+        if detected.get("format") == "lua-source":
+            candidate = out / (p.stem + "_decompiled.lua")
+            source = p.read_text(encoding="utf-8")
+            if not source.strip():
+                return _result(False, "decompile", error="Lua source file is empty")
+            candidate.write_text(source, encoding="utf-8")
+            from lua_engine import validate_lua_source
+            valid, msg = validate_lua_source(candidate)
+            if not valid:
+                candidate.unlink(missing_ok=True)
+                return _result(False, "decompile", error="Lua source validation failed: " + msg)
+            return _result(True, "decompile", out=str(candidate),
+                           selected_engine="source_passthrough",
+                           source_recovered=True, final_status="SUCCESS",
+                           output_bytes=candidate.stat().st_size,
+                           sha256=_sha256_file(candidate),
+                           validation=msg)
+    except Exception as exc:
+        # Fall through to the full recovery stack for ambiguous/malformed
+        # source-like inputs.
+        pass
+
     result = dict(run_lua_smart(p, out, jars_dir=jars_dir) or {})
     result.update({"module": "lua", "operation": "decompile"})
     if not result.get("ok") or not result.get("out"):
