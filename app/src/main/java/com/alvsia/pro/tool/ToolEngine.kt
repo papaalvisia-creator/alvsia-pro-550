@@ -428,7 +428,7 @@ class ToolEngine(private val context: Context) {
         // Only these actions are designed to run without a selected input file.
         // Decrypt (13), String Recover (15), and Export Report (8) all require input.
         if (moduleId == 7 && subId == "clear_work") return false
-        return subId !in setOf("frida_js_dump", "frida_spawn", "xor_batch")
+        return subId !in setOf("frida_js_dump", "frida_spawn", "xor_batch", "xor_selftest", "dec_selftest")
     }
 
     private fun mirrorMsvToOut(moduleId: Int, taskId: String, lines: MutableList<String>) {
