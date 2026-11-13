@@ -8,7 +8,7 @@ package com.alvsia.pro.tool
  */
 object SmartModuleRouter {
     fun backendModule(visibleModuleId: Int, subId: String, legacyModuleId: Int? = null): Int {
-        if (legacyModuleId != null && legacyModuleId in 1..19) return legacyModuleId
+        if (legacyModuleId != null && legacyModuleId in 1..20) return legacyModuleId
         return when (visibleModuleId) {
         1 -> when {
             subId.startsWith("lua_protect") || subId == "lua_vm_protect" ||
