@@ -13,7 +13,8 @@ from smart_data_engine import execute
 with tempfile.TemporaryDirectory() as td:
     root = Path(td)
     sample = root / "libfixture.bin"
-    synthetic_key = "aA0bB1cC2dD3eE4fF5gG"\n    sample.write_bytes(b"\x00" * 41 + synthetic_key.encode("ascii") + b"\x00" * 32)
+    synthetic_key = "aA0bB1cC2dD3eE4fF5gG"
+    sample.write_bytes(b"\x00" * 41 + synthetic_key.encode("ascii") + b"\x00" * 32)
     result = execute("sm4", sample, root / "OUT", work_dir=root / "WORK")
     assert result.get("ok"), result
     assert result.get("counts", {}).get("SM4_SECRET_NEW") == 1, result
