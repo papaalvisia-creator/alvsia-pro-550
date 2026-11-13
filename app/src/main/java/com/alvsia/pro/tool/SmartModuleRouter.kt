@@ -8,7 +8,7 @@ package com.alvsia.pro.tool
  */
 object SmartModuleRouter {
     fun backendModule(visibleModuleId: Int, subId: String, legacyModuleId: Int? = null): Int {
-        if (legacyModuleId != null && legacyModuleId in 1..20) return legacyModuleId
+        if (legacyModuleId != null && legacyModuleId in 1..19) return legacyModuleId
         return when (visibleModuleId) {
         1 -> when {
             subId.startsWith("lua_protect") || subId == "lua_vm_protect" ||
@@ -49,6 +49,21 @@ object SmartModuleRouter {
         visibleModuleId == 2 && subId == "pak_deep_auto" -> "pak_deep_auto"
         visibleModuleId == 3 && subId == "obb_smart_inspect" -> "obb_info"
         visibleModuleId == 4 && subId == "data_auto_recover" -> "dec_auto"
+        // Expanded capability aliases map to existing, tested backend operations.
+        visibleModuleId == 2 && subId == "asset_extract" -> "pak_full_unpack"
+        visibleModuleId == 2 && subId == "asset_integrity" -> "pak_deep_integrity_audit"
+        visibleModuleId == 2 && subId == "asset_rebuild" -> "pak_repack_full"
+        visibleModuleId == 2 && subId == "asset_inject" -> "pak_inject"
+        visibleModuleId == 4 && subId == "crypto_probe" -> "pak_deep_auto"
+        visibleModuleId == 4 && subId == "transform_probe" -> "dec_auto"
+        visibleModuleId == 4 && subId == "crypto_sm4" -> "dec_sm4"
+        visibleModuleId == 4 && subId == "crypto_zstd" -> "pak_deep_zstd"
+        visibleModuleId == 4 && subId == "crypto_selftest" -> "dec_selftest"
+        visibleModuleId == 5 && subId == "binary_strings" -> "string_scan"
+        visibleModuleId == 5 && subId == "binary_hash" -> "hash_scan"
+        visibleModuleId == 5 && subId == "binary_endpoints" -> "so_url_dump"
+        visibleModuleId == 5 && subId == "binary_xor_probe" -> "so_xor_scan"
+        visibleModuleId == 5 && subId == "binary_behavior_triage" -> "anti_re_source_triage"
         visibleModuleId == 5 && subId == "so_url_dump" -> "so_url_dump"
         else -> subId
     }
