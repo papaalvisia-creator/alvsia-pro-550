@@ -26,7 +26,7 @@ object SubMenus {
         else -> "Module $moduleId"
     }
 
-    /** Exactly 19 visible submenu groups across the seven Smart menus. */
+    /** 20 visible submenu groups across the seven Smart menus: 19 legacy providers + Smart Asset Engine. */
     fun forModule(moduleId: Int): List<SubTool> = when (moduleId) {
         1 -> listOf(
             moduleGroup(5, "SMART LUA DECOMPILER", "Detect, analyze, decompile and convert Lua formats"),
@@ -59,6 +59,27 @@ object SubMenus {
         7 -> listOf(moduleGroup(19, "ALVSIA PRIVATE ENGINE", "Owner-only sealed providers and private analysis utilities"))
         else -> emptyList()
     }
+
+    private fun assetGroup(): SubTool = SubTool(
+        id = "smart_asset_modding_engine",
+        title = "SMART ASSET MODDING ENGINE",
+        desc = "UE-style asset fingerprinting, contextual ID discovery, safe mapping patches and validation",
+        guide = "Smart Engine analyzes the asset automatically; modification requires user-supplied same-length mappings.",
+        needsFile = true,
+        legacyModuleId = 20,
+        actions = listOf(
+            SubTool("asset_fingerprint", "Asset Fingerprint", "Format, entropy, markers and SHA-256 evidence",
+                "Select asset/binary → OUT/SMART_ASSET/*.asset_fingerprint.json", legacyModuleId = 20),
+            SubTool("asset_scan_ids", "Asset ID Discovery", "Find likely asset/skin/material/weapon identifiers",
+                "Select asset/binary → OUT/SMART_ASSET/*.asset_ids.txt", legacyModuleId = 20),
+            SubTool("asset_context", "Asset Context Map", "Find contextual references with offsets and neighboring bytes",
+                "Select asset/binary → OUT/SMART_ASSET/*.asset_context.jsonl", legacyModuleId = 20),
+            SubTool("asset_patch", "Safe Asset Mapping", "Apply only user-supplied equal-length hex mappings",
+                "Create WORK/asset_patch_map.txt as old_hex=new_hex → OUT/SMART_ASSET/*.asset_patched", legacyModuleId = 20),
+            SubTool("asset_validate", "Asset Validation", "Read-only post-change structural evidence and hash",
+                "Select asset/binary → OUT/SMART_ASSET/*.asset_validate.json", legacyModuleId = 20)
+        )
+    )
 
     private fun moduleGroup(moduleId: Int, title: String, desc: String): SubTool {
         val actions = legacyOperations(moduleId).map { it.copy(legacyModuleId = moduleId) }
