@@ -178,6 +178,24 @@ def test_private_module_is_one_group_with_all_sealed_operations():
         assert f'"{sid}"' in bridge or f'"{sid}"' in router, f"private operation not dispatchable: {sid}"
     assert "ALVSIA_SEALED_RUNTIME" in bridge
 
+def test_all_89_legacy_operations_reach_a_bridge_dispatch():
+    menus = MENUS.read_text(encoding="utf-8")
+    bridge = BRIDGE.read_text(encoding="utf-8") + "\\n" + BRIDGE_IMPL.read_text(encoding="utf-8")
+    section = menus.split("private fun legacyOperations", 1)[1]
+    operation_ids = re.findall(r'SubTool\\(\\s*"([A-Za-z0-9_]+)"', section)
+    assert len(operation_ids) == 89
+    assert len(set(operation_ids)) == 89
+    dynamic_dispatch = {"pak_delete_entry": 'if mid == 3 or "delete" in sid:'}
+    missing = [
+        sid for sid in operation_ids
+        if f'"{sid}"' not in bridge and sid not in dynamic_dispatch
+    ]
+    assert not missing, f"legacy operations without bridge dispatch: {missing}"
+    for sid, route in dynamic_dispatch.items():
+        assert sid in operation_ids
+        assert route in bridge
+
+
 def test_engine_surfaces_bridge_failures():
     engine = ENGINE.read_text(encoding="utf-8")
     bridge = BRIDGE.read_text(encoding="utf-8") + "\n" + BRIDGE_IMPL.read_text(encoding="utf-8")
