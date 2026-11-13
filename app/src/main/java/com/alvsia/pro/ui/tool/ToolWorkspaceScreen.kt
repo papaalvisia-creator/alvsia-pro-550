@@ -103,7 +103,7 @@ fun ToolWorkspaceScreen(
     var selectedSize by remember { mutableStateOf<Long?>(null) }
     var sizeRejected by remember { mutableStateOf(false) }
     var logMode by remember(operation.id) { mutableStateOf("simple") }
-    var confirmClearWorkspace by remember(sub.id) { mutableStateOf(false) }
+    var confirmClearWorkspace by remember(operation.id) { mutableStateOf(false) }
     val errorLine = logs.firstOrNull { it.startsWith("X ") }
     val successLine = logs.firstOrNull { it.startsWith("OK ") }
     val simpleSummary = when {
