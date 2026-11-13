@@ -333,30 +333,25 @@ SIMPLE2_DECRYPT_KEY = bytes.fromhex('E55B4ED1')
 SIMPLE2_BLOCK_SIZE = 4
 SM4_SECRET_4 = 'eb691efea914241317a8'
 SM4_SECRET_2 = 'Q0hVTKey$as*1ZFlQCiA'
-SM4_SECRET_NEW = [
-    'xG2qW5lP7lV2iN5fN5pG',  # [0]
-    'xT1cJ6dL5wC0kK1rB4dK',  # [1]
-    'qC4jS5bZ6fL5xE6nD4zA',  # [2]
-    'gD4jQ2aL3bS3lC3xT0iW',  # [3]
-    'xU1yQ8wE9zY3gZ3bT5aE',  # [4]
-    'uQ3cO2dX7xY4xU7gH7iS',  # [5]
-    'gW1fR0jK6wQ4oN0oK1kZ',  # [6]
-    'aJ4pV7iZ7pU4wP2aC2cZ',  # [7]
-    'cX6jT3cM2oT3vK0kJ1qN',  # [8]
-    'iT2vS0cS6yT6cZ1sE1lO',  # [9]
-    'hM1pH9iY8wM9hT4lN5uJ',  # [10]
-    'kG6bC8jK0fL0dE4sH4mL',  # [11]
-    'dB6lB3vE0eZ8wM8rI0aC',  # [12]
-    'tP7sP7nI9rA2vQ4cV5yQ',  # [13]
-    'aT0cL1yN4pT3sZ7eM2vY',  # [14]
-    'uV6fU8fC9zN3mP5dH8mN',  # [15]
-    'rT6aQ6oZ1yM0gO5tO1aN',  # [16]
-    'jU5bH7lQ0fM9hK2kI0oF',  # [17]
-    'iQ0eM0mJ7uT0kV6kL5zY',  # [18]
-    'wD2rP3lP9xF4mE1eC5jS',  # [19] — missing from original; needed for flag ≥50
-    'rG0lR2rZ5vM6mW5lM1rR',  # [20] — missing from original
-    'fO3kW1fE6eD0pU1kY7xK',  # [21] — missing from original
-]
+# New/variant SM4 candidates are never embedded in the public source tree.
+# They must be supplied by an authorized caller for the corresponding PAK.
+from sm4_secret_registry import SM4_SECRET_NEW
+_SM4_AUTHORIZED_CANDIDATES = ()
+
+def set_authorized_sm4_candidates(candidates) -> bool:
+    global _SM4_AUTHORIZED_CANDIDATES
+    values = tuple(candidates or ())
+    if not all(isinstance(key, str) and 1 <= len(key) <= 64 for key in values):
+        return False
+    _SM4_AUTHORIZED_CANDIDATES = values
+    PakCrypto._derive_sm4_key.cache_clear()
+    return True
+
+def clear_authorized_sm4_candidates() -> None:
+    global _SM4_AUTHORIZED_CANDIDATES
+    _SM4_AUTHORIZED_CANDIDATES = ()
+    PakCrypto._derive_sm4_key.cache_clear()
+
 EM_SIMPLE1 = 1
 EM_SIMPLE2 = 16
 EM_SM4_2 = 2
@@ -850,11 +845,17 @@ class PakCrypto:
         elif encryption_method == EM_SM4_4:
             _sbd281f3d3181 = SM4_SECRET_4
         elif encryption_method == EM_UNKNOWN_17:
-            _s2b8e7b87d9f2 = (encryption_method - EM_SM4_NEW_BASE) % len(SM4_SECRET_NEW)
-            _sbd281f3d3181 = SM4_SECRET_NEW[_s2b8e7b87d9f2]
+            candidates = _SM4_AUTHORIZED_CANDIDATES
+            if not candidates:
+                raise RuntimeError('SM4 candidate material is not authorized/supplied')
+            _s2b8e7b87d9f2 = (encryption_method - EM_SM4_NEW_BASE) % len(candidates)
+            _sbd281f3d3181 = candidates[_s2b8e7b87d9f2]
         else:
-            _s2b8e7b87d9f2 = (encryption_method - EM_SM4_NEW_BASE) % len(SM4_SECRET_NEW)
-            _sbd281f3d3181 = f'{SM4_SECRET_NEW[_s2b8e7b87d9f2]}{encryption_method}'
+            candidates = _SM4_AUTHORIZED_CANDIDATES
+            if not candidates:
+                raise RuntimeError('SM4 candidate material is not authorized/supplied')
+            _s2b8e7b87d9f2 = (encryption_method - EM_SM4_NEW_BASE) % len(candidates)
+            _sbd281f3d3181 = f'{candidates[_s2b8e7b87d9f2]}{encryption_method}'
         return SHA1.new(str(_s5faefbac755f + _sbd281f3d3181).encode()).digest()[:SM4.key_length()]
 
     @staticmethod
