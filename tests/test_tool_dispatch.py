@@ -180,9 +180,9 @@ def test_private_module_is_one_group_with_all_sealed_operations():
 
 def test_all_89_legacy_operations_reach_a_bridge_dispatch():
     menus = MENUS.read_text(encoding="utf-8")
-    bridge = BRIDGE.read_text(encoding="utf-8") + "\\n" + BRIDGE_IMPL.read_text(encoding="utf-8")
+    bridge = BRIDGE.read_text(encoding="utf-8") + "\n" + BRIDGE_IMPL.read_text(encoding="utf-8")
     section = menus.split("private fun legacyOperations", 1)[1]
-    operation_ids = re.findall(r'SubTool\\(\\s*"([A-Za-z0-9_]+)"', section)
+    operation_ids = re.findall(r'SubTool\(\s*"([A-Za-z0-9_]+)"', section)
     assert len(operation_ids) == 89
     assert len(set(operation_ids)) == 89
     dynamic_dispatch = {"pak_delete_entry": 'if mid == 3 or "delete" in sid:'}
