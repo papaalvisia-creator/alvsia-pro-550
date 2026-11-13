@@ -3,7 +3,7 @@
 Baseline source: legacy `main` branch `app/src/main/java/com/alvsia/pro/tool/SubMenus.kt`.
 Status: inventory only; each operation still requires source-to-runtime reachability and real-output verification before it can be marked integrated.
 
-This inventory defines the internal operations retained behind the fixed **7 menu / 19 submenu** UI. These operation IDs are not additional menus or submenus.
+This inventory defines the internal operations retained behind the fixed **7 menu / 20 submenu** UI. These operation IDs are not additional menus or submenus.
 
 | Legacy ID | Legacy module | Unified menu | Fixed submenu | Internal operation IDs |
 |---:|---|---|---|---|
@@ -25,12 +25,12 @@ This inventory defines the internal operations retained behind the fixed **7 men
 | 16 | Lua Inject | SMART LUA | SMART LUA INJECT | `lua_patch_byte`, `lua_inject_hook`, `lua_mod_repack` |
 | 17 | Anti-RE Audit | SMART ANALYSIS | SMART ANTI-RE AUDIT | `audit_apk`, `audit_lua`, `audit_so`, `anti_re_source_triage` |
 | 18 | Lua Protector | SMART LUA | SMART LUA PROTECT | `lua_smart_protect`, `lua_smart_protect_strong`, `lua_protect_encrypt`, `lua_protect_decrypt`, `lua_vm_protect` |
-| 19 | ALVSIA Private Tool | ALVSIA PRIVATE | ALVSIA PRIVATE ENGINE | `priv_zuc_decrypt`, `priv_aes_scan`, `priv_xor_recover`, `priv_lua_parse`, `priv_lua_convert`, `priv_lua_heping`, `priv_compress_fit`, `priv_apk_audit`, `priv_apk_manifest`, `priv_str_recover`, `priv_entropy_map`, `priv_pak_manifest` |
+| 19 | ALVSIA Private Tool | ALVSIA PRIVATE | ALVSIA PRIVATE ENGINE | `priv_zuc_decrypt`, `priv_aes_scan`, `priv_xor_recover`, `priv_lua_parse`, `priv_lua_convert`, `priv_lua_heping`, `priv_compress_fit`, `priv_apk_audit`, `priv_apk_manifest`, `priv_str_recover`, `priv_entropy_map`, `priv_pak_manifest` |\n| 20 | Smart Asset Engine | SMART ANALYSIS | SMART ASSET MODDING ENGINE | `asset_fingerprint`, `asset_scan_ids`, `asset_context`, `asset_patch`, `asset_validate` |
 
 ## Inventory checks
 
-- Legacy module IDs discovered: 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19.
-- Unique legacy modules: 19.
+- Legacy module IDs discovered: 1..19. New Smart Asset provider: 20.
+- Unique legacy modules: 19 + 1 new Smart Asset provider.
 - Internal operation declarations discovered: 89.
 - Operation IDs must be unique or explicitly documented as shared aliases; all must resolve to a registered provider.
 - No inventory row may be removed solely to reduce the visible submenu count.
