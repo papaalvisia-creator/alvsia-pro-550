@@ -178,14 +178,14 @@ fun ToolWorkspaceScreen(
                 Text("← BACK", color = AlvisiaCyan, fontWeight = FontWeight.Bold, fontSize = 12.sp)
             }
             // Favorites star
-            var isFav by remember(operation.id) { mutableStateOf(UXStore.isFavorite(ctx, operation.id)) }
+            var isFav by remember(sub.id) { mutableStateOf(UXStore.isFavorite(ctx, sub.id)) }
             Text(
                 text = if (isFav) "★" else "☆",
                 color = if (isFav) Color(0xFFFFD700) else AlvisiaSilver.copy(alpha = 0.4f),
                 fontSize = 18.sp,
                 modifier = Modifier.clickable {
-                    UXStore.toggleFavorite(ctx, operation.id)
-                    isFav = UXStore.isFavorite(ctx, operation.id)
+                    UXStore.toggleFavorite(ctx, sub.id)
+                    isFav = UXStore.isFavorite(ctx, sub.id)
                 }
             )
         }
