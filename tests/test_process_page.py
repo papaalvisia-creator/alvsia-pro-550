@@ -33,7 +33,7 @@ class UnifiedProcessPageTests(unittest.TestCase):
         self.assertIn("SmartEnginePlanner.resolve", source)
         self.assertIn("fun resolve(", planner)
         for provider_id in range(1, 20):
-            self.assertRegex(planner, rf"(?m)^\\s*{provider_id}\\s*->")
+            self.assertIn(f"            {provider_id} ->", planner)
         self.assertIn("detection?.suggestedSubtool", planner)
         self.assertIn("actions.associateBy", planner)
 
