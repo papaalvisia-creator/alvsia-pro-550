@@ -57,6 +57,7 @@ class SmartCatalogTests(unittest.TestCase):
         self.assertIn("onSelectAction", main)
         self.assertIn("SmartEnginePlanner.plan(sub, operation", main)
         self.assertIn("for ((index, stageRoute) in routes.withIndex())", main)
+        self.assertIn('stageRoute.operationId in setOf("xor_selftest", "dec_selftest")', main)
         self.assertIn("engine.runSub(", main)
         workspace = (ROOT / "app/src/main/java/com/alvsia/pro/ui/tool/ToolWorkspaceScreen.kt").read_text(encoding="utf-8")
         self.assertNotIn("SELECT OPERATION", workspace)
