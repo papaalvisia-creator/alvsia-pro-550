@@ -2,7 +2,7 @@
 
 Status: Approved implementation target
 Date: 2026-11-13
-Branch: feat/alvsia-unified-engine-7x19-20261113
+Branch: feat/alvsia-unified-engine-7x22-20261113
 Base: feat/alvsia-smart-premium-v1-20261112
 
 ## Non-negotiable product contract
@@ -73,7 +73,7 @@ Total: 7 menus, 19 submenus, 19 legacy module IDs. Every legacy module ID must a
 - Run real input-to-output fixtures for PAK, OBB, Lua, data, SO, and private providers; static catalog coverage is not functional proof.
 - Keep operations read-only where appropriate and require atomic output plus evidence before reporting success.
 
-Each of the 19 visible submenus is one complete Smart Engine. Its 89 retained implementations are orchestrated internally through automatic detection, routing and compatible pipeline stages. The user sees one submenu workspace and one RUN action—not a second layer of tools. Configuration inputs are shown only when the chosen route requires them.
+Each of the 22 visible submenus is one complete Smart Engine. Its 89 retained implementations are orchestrated internally through automatic detection, routing and compatible pipeline stages. The user sees one submenu workspace and one RUN action—not a second layer of tools. Configuration inputs are shown only when the chosen route requires them.
 
 ## Required provider contract
 
@@ -106,3 +106,7 @@ No provider may return success solely because a process exited with code 0. Succ
 - Live server, autostart, panel, login, permission, TLS pin, or production data changes.
 - Merging this branch into main or merging PR #19 without separate approval.
 - Claiming full functionality based only on catalog coverage, static tests, or a green Gradle build.
+
+
+### Expanded Smart capabilities
+The public catalog now contains three additional Smart capability submenus without adding a new top-level menu: **SMART ASSET MODDING ENGINE**, **SMART CRYPTO & COMPRESSION ENGINE**, and **SMART BINARY FORENSICS ENGINE**. They orchestrate existing validated providers internally; no legacy operation picker is exposed. User-provided keys/configuration remain separate from any research-source secrets.
