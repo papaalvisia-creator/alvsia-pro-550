@@ -7,7 +7,7 @@ from __future__ import annotations
 from __future__ import annotations
 import os, re, struct, subprocess, shutil, hashlib, json, sys, zipfile, fnmatch, tempfile, zlib, time, uuid, threading, platform, getpass, urllib.request, urllib.error
 from dataclasses import dataclass, field
-from pathlib import Path, PurePath
+from pathlib import Path, PurePath, PurePosixPath
 from functools import lru_cache
 from collections import Counter
 from typing import List, Dict, Tuple, Optional, Any, Union
