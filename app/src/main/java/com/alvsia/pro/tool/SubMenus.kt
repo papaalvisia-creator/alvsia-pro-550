@@ -67,24 +67,24 @@ object SubMenus {
     private fun capabilityGroup(id: String, title: String, desc: String): SubTool {
         val actions = when (id) {
             "smart_asset_modding" -> listOf(
-                SubTool("pak_full_unpack", "Asset Extract", "Extract the container before asset analysis", "Smart Engine route", legacyModuleId = 1),
-                SubTool("pak_deep_integrity_audit", "Asset Integrity", "Validate archive slots and payload fingerprints", "Smart Engine route", legacyModuleId = 14),
-                SubTool("pak_repack_full", "Asset Rebuild", "Rebuild an edited asset tree", "Smart Engine route", legacyModuleId = 2),
-                SubTool("pak_inject", "Asset Inject", "Inject authorized edited files", "Smart Engine route", legacyModuleId = 2)
+                SubTool("asset_extract", "Asset Extract", "Extract the container before asset analysis", "Smart Engine route", legacyModuleId = 1),
+                SubTool("asset_integrity", "Asset Integrity", "Validate archive slots and payload fingerprints", "Smart Engine route", legacyModuleId = 14),
+                SubTool("asset_rebuild", "Asset Rebuild", "Rebuild an edited asset tree", "Smart Engine route", legacyModuleId = 2),
+                SubTool("asset_inject", "Asset Inject", "Inject authorized edited files", "Smart Engine route", legacyModuleId = 2)
             )
             "smart_crypto_compression" -> listOf(
-                SubTool("pak_deep_auto", "Crypto/Compression Probe", "Rank supported encryption and compression candidates", "Smart Engine route", legacyModuleId = 14),
-                SubTool("dec_auto", "Transform Probe", "Probe supported transforms and validate output", "Smart Engine route", legacyModuleId = 13),
-                SubTool("dec_sm4", "SM4 Adapter", "Use an explicitly supplied user/project key", "Smart Engine route", legacyModuleId = 13),
-                SubTool("pak_deep_zstd", "Zstandard Adapter", "Detect and decompress supported Zstandard payloads", "Smart Engine route", legacyModuleId = 14),
-                SubTool("dec_selftest", "Crypto Self-Test", "Verify built-in cryptographic known-answer vectors", "Smart Engine route", needsFile = false, legacyModuleId = 13)
+                SubTool("crypto_probe", "Crypto/Compression Probe", "Rank supported encryption and compression candidates", "Smart Engine route", legacyModuleId = 14),
+                SubTool("transform_probe", "Transform Probe", "Probe supported transforms and validate output", "Smart Engine route", legacyModuleId = 13),
+                SubTool("crypto_sm4", "SM4 Adapter", "Use an explicitly supplied user/project key", "Smart Engine route", legacyModuleId = 13),
+                SubTool("crypto_zstd", "Zstandard Adapter", "Detect and decompress supported Zstandard payloads", "Smart Engine route", legacyModuleId = 14),
+                SubTool("crypto_selftest", "Crypto Self-Test", "Verify built-in cryptographic known-answer vectors", "Smart Engine route", needsFile = false, legacyModuleId = 13)
             )
             "smart_binary_forensics" -> listOf(
-                SubTool("string_scan", "Contextual Strings", "Recover printable strings with location evidence", "Smart Engine route", legacyModuleId = 6),
-                SubTool("hash_scan", "Binary Fingerprint", "Produce cryptographic fingerprints for evidence correlation", "Smart Engine route", legacyModuleId = 6),
-                SubTool("so_url_dump", "Endpoint Evidence", "Extract embedded URL/string evidence from native binaries", "Smart Engine route", legacyModuleId = 10),
-                SubTool("so_xor_scan", "Obfuscation Probe", "Rank readable candidates from bounded XOR probing", "Smart Engine route", legacyModuleId = 10),
-                SubTool("anti_re_source_triage", "Behavior Triage", "Static-only encoded payload and dynamic-execution indicators", "Smart Engine route", legacyModuleId = 17)
+                SubTool("binary_strings", "Contextual Strings", "Recover printable strings with location evidence", "Smart Engine route", legacyModuleId = 6),
+                SubTool("binary_hash", "Binary Fingerprint", "Produce cryptographic fingerprints for evidence correlation", "Smart Engine route", legacyModuleId = 6),
+                SubTool("binary_endpoints", "Endpoint Evidence", "Extract embedded URL/string evidence from native binaries", "Smart Engine route", legacyModuleId = 10),
+                SubTool("binary_xor_probe", "Obfuscation Probe", "Rank readable candidates from bounded XOR probing", "Smart Engine route", legacyModuleId = 10),
+                SubTool("binary_behavior_triage", "Behavior Triage", "Static-only encoded payload and dynamic-execution indicators", "Smart Engine route", legacyModuleId = 17)
             )
             else -> emptyList()
         }
