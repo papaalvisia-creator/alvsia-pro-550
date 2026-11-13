@@ -55,7 +55,11 @@ class SmartCatalogTests(unittest.TestCase):
         self.assertIn("UnifiedEngineFacade.resolve", main)
         self.assertIn("actions = sub.actions", main)
         self.assertIn("onSelectAction", main)
-        self.assertIn("engine.runSub(dispatchModuleId, dispatchSubId", main)
+        self.assertIn("SmartEnginePlanner.plan(sub, operation", main)
+        self.assertIn("for ((index, stageRoute) in routes.withIndex())", main)
+        self.assertIn("engine.runSub(", main)
+        workspace = (ROOT / "app/src/main/java/com/alvsia/pro/ui/tool/ToolWorkspaceScreen.kt").read_text(encoding="utf-8")
+        self.assertNotIn("SELECT OPERATION", workspace)
 
     def test_unified_facade_registers_each_legacy_provider_exactly_once(self):
         facade = (ROOT / "app/src/main/java/com/alvsia/pro/tool/UnifiedEngineFacade.kt").read_text(encoding="utf-8")
