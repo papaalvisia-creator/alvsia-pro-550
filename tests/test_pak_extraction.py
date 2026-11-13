@@ -169,7 +169,7 @@ def test_unpack_refuses_skipped_entries_and_output_count_mismatch():
         with tempfile.TemporaryDirectory() as td:
             result = core.run_pak_unpack("synthetic.pak", Path(td) / "out")
             assert not result["ok"]
-            assert "output file count mismatch" in result["error"]
+            assert "incomplete PAK extraction" in result["error"] and "on_disk=1" in result["error"]
     finally:
         core.TencentPakFile = original_class
         core._alvsia_require_operation = original_require
