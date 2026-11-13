@@ -1735,7 +1735,23 @@ class TencentPakFile:
                 stats['skipped_files'] += len(entries)
                 _failure(dir_text, ValueError('directory contains an embedded NUL'))
                 continue
-            current_out_path = (safe_root / dir_text).resolve()
+            # Normalize PAK directory records before joining them to the
+            # validated mount root. Some valid indexes encode the root as
+            # "."/"" or "/" and must not be treated as host-absolute paths.
+            dir_norm = dir_text.replace("\\", "/")
+            dir_parts = tuple(
+                part for part in dir_norm.split("/")
+                if part not in ("", ".")
+            )
+            if any(part == ".." for part in dir_norm.split("/")):
+                stats['skipped_directories'] += 1
+                stats['skipped_files'] += len(entries)
+                _failure(dir_text, ValueError('unsafe PAK directory path'))
+                continue
+            current_out_path = (
+                safe_root / Path(*dir_parts)
+                if dir_parts else safe_root
+            ).resolve()
             try:
                 current_out_path.relative_to(safe_root)
                 current_out_path.mkdir(parents=True, exist_ok=True)
