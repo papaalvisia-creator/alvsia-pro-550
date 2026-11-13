@@ -102,10 +102,13 @@ jobs:
           python3 tests/test_vm_protect_roundtrip.py
 
       - name: Strict reference corpus gate
+        env:
+          CORPUS_REPO_TOKEN: ${{ secrets.CORPUS_REPO_TOKEN }}
         run: |
           set -euo pipefail
+          test -n "$CORPUS_REPO_TOKEN" || { echo "ERROR: CORPUS_REPO_TOKEN secret is required to access the private reference corpus"; exit 1; }
           rm -rf "$RUNNER_TEMP/alvsia-reference-corpus"
-          git clone --depth 1 https://github.com/papaalvisia-creator/kumpulan-source-tool.git "$RUNNER_TEMP/alvsia-reference-corpus"
+          git clone --depth 1 "https://x-access-token:${CORPUS_REPO_TOKEN}@github.com/papaalvisia-creator/kumpulan-source-tool.git" "$RUNNER_TEMP/alvsia-reference-corpus"
           python3 -m pip install --disable-pip-version-check gmalg zstandard
           test -s "$RUNNER_TEMP/alvsia-reference-corpus/samples/pak/game_patch_4.7.0.21752.pak"
           test -s "$RUNNER_TEMP/alvsia-reference-corpus/samples/pak/game_patch_4.7.0.21756.pak"
