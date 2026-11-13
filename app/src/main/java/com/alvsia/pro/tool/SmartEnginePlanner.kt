@@ -109,4 +109,38 @@ object SmartEnginePlanner {
         }
         return selected
     }
+    /**
+     * Build a short, safe pipeline for the selected Smart submenu.
+     * Mutating alternatives remain singular; only compatible diagnostics and
+     * built-in self-tests are chained automatically.
+     */
+    fun plan(submenu: SubTool, primary: SubTool, workDir: File): List<SubTool> {
+        val actions = submenu.actions.associateBy { it.id }
+        fun get(vararg ids: String): List<SubTool> = ids.mapNotNull { actions[it] }
+        val provider = submenu.legacyModuleId ?: primary.legacyModuleId ?: 0
+        val stages = when (provider) {
+            // Full PAK unpack already owns its extraction/index validation pipeline.
+            1, 2, 3, 5, 7, 8, 9, 16, 17, 18, 19 -> listOf(primary)
+            4 -> if (primary.id == "obb_unzip")
+                get("obb_info", "obb_integrity_audit", "obb_unzip") else listOf(primary)
+            6 -> if (primary.id == "string_scan")
+                get("string_scan", "hash_scan") else listOf(primary)
+            10 -> if (primary.id == "so_xor_scan")
+                get("so_xor_scan", "so_url_dump", "so_aes_probe") else listOf(primary)
+            11 -> if (primary.id == "frida_js_dump" && File(workDir, "frida_target.txt").isFile)
+                get("frida_js_dump", "frida_spawn") else listOf(primary)
+            12 -> if (primary.id == "xor_selftest") listOf(primary)
+                else get("xor_selftest") + listOf(primary)
+            13 -> if (primary.id == "dec_selftest") listOf(primary)
+                else get("dec_selftest") + listOf(primary)
+            14 -> if (primary.id == "pak_deep_auto")
+                get("pak_deep_integrity_audit", "pak_deep_auto") else listOf(primary)
+            15 -> if (primary.id == "str_xref" || File(workDir, "xref_query.txt").isFile)
+                get("str_recover", "str_constant_pool", "str_xref")
+                else get("str_recover", "str_constant_pool")
+            else -> listOf(primary)
+        }
+        return stages.distinctBy { it.id }.ifEmpty { listOf(primary) }
+    }
+
 }
