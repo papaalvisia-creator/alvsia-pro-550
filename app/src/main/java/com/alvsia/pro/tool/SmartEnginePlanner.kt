@@ -27,6 +27,29 @@ object SmartEnginePlanner {
         fun choose(vararg ids: String): SubTool =
             ids.firstNotNullOfOrNull { byId[it] } ?: actions.first()
 
+        // Expanded Smart capabilities are orchestration surfaces over validated
+        // providers. They intentionally do not expose the underlying operation list.
+        val capabilitySelected = when (submenu.id) {
+            "smart_asset_modding" -> when {
+                name.contains("rebuild") || name.contains("repack") -> choose("pak_repack_full")
+                name.contains("inject") || hasFiles("MOD") -> choose("pak_inject")
+                name.contains("integrity") -> choose("pak_deep_integrity_audit")
+                else -> choose("pak_full_unpack")
+            }
+            "smart_crypto_compression" -> when {
+                name.contains("zstd") || name.contains("zstandard") -> choose("pak_deep_zstd")
+                name.contains("sm4") -> choose("dec_sm4")
+                else -> choose("pak_deep_auto", "dec_auto")
+            }
+            "smart_binary_forensics" -> when {
+                name.endsWith(".so") || name.endsWith(".bin") -> choose("so_url_dump", "string_scan")
+                name.contains("audit") -> choose("anti_re_source_triage")
+                else -> choose("string_scan")
+            }
+            else -> null
+        }
+        if (capabilitySelected != null) return capabilitySelected
+
         // A format detector can nominate an implementation only inside this
         // submenu. Cross-menu suggestions are deliberately ignored.
         val detected = detection?.suggestedSubtool?.let { byId[it] }
@@ -143,7 +166,23 @@ object SmartEnginePlanner {
         val actions = submenu.actions.associateBy { it.id }
         fun get(vararg ids: String): List<SubTool> = ids.mapNotNull { actions[it] }
         val provider = submenu.legacyModuleId ?: primary.legacyModuleId ?: 0
-        val stages = when (provider) {
+        val stages = when (submenu.id) {
+            "smart_asset_modding" -> when (primary.id) {
+                "pak_full_unpack" -> get("pak_full_unpack", "pak_deep_integrity_audit")
+                "pak_repack_full", "pak_inject" -> get(primary.id, "pak_deep_integrity_audit")
+                else -> listOf(primary)
+            }
+            "smart_crypto_compression" -> when (primary.id) {
+                "pak_deep_auto" -> get("pak_deep_auto", "pak_deep_zstd")
+                "dec_auto" -> get("dec_selftest", "dec_auto")
+                else -> listOf(primary)
+            }
+            "smart_binary_forensics" -> when (primary.id) {
+                "string_scan" -> get("string_scan", "hash_scan")
+                "so_url_dump" -> get("so_url_dump", "so_xor_scan")
+                else -> listOf(primary)
+            }
+            else -> when (provider) {
             // Full PAK unpack already owns its extraction/index validation pipeline.
             1, 2, 3, 5, 7, 8, 9, 16, 17, 18, 19 -> listOf(primary)
             4 -> if (primary.id == "obb_unzip")
@@ -166,6 +205,7 @@ object SmartEnginePlanner {
                 else -> listOf(primary)
             }
             else -> listOf(primary)
+        }
         }
         return stages.distinctBy { it.id }.ifEmpty { listOf(primary) }
     }
