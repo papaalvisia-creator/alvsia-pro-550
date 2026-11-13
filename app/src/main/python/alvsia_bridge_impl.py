@@ -140,7 +140,31 @@ def run_tool(module_id, sub_id, input_path, out_root, engine_dir, jars_dir):
                         archive_kind=archive_kind,
                     )
                 if not isinstance(_adapter, dict) or not _adapter.get("ok"):
-                    return "\\n".join(lines + ["X UNIFIED ADAPTER: " + str((_adapter or {}).get("error", "operation failed"))[:900]])
+                    failure_lines = ["X UNIFIED ADAPTER: " + str((_adapter or {}).get("error", "operation failed"))[:900]]
+                    if isinstance(_adapter, dict):
+                        stats = _adapter.get("stats")
+                        if isinstance(stats, dict):
+                            failures = stats.get("failures") or []
+                            if failures:
+                                failure_lines.append("PAK DIAGNOSTICS:")
+                                for item in failures[:8]:
+                                    if isinstance(item, dict):
+                                        failure_lines.append(
+                                            "  - %s: %s" % (
+                                                str(item.get("path", "?"))[:240],
+                                                str(item.get("error", "?"))[:500],
+                                            )
+                                        )
+                            if stats.get("expected_files") is not None:
+                                failure_lines.append(
+                                    "PAK COUNTS: expected=%s written=%s skipped=%s on_disk=%s" % (
+                                        stats.get("expected_files", "?"),
+                                        stats.get("written_files", "?"),
+                                        stats.get("skipped_files", "?"),
+                                        stats.get("on_disk", "?"),
+                                    )
+                                )
+                    return "\\n".join(lines + failure_lines)
                 lines.append("OK SMART ENGINE module=%s operation=%s" % (
                     _adapter.get("module", "?"), _adapter.get("operation", "?")))
                 if _adapter.get("out"):
