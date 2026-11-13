@@ -1757,8 +1757,20 @@ class TencentPakFile:
                     _failure(relative_name, ValueError('unsafe PAK filename'))
                     continue
                 normalized_name = file_text.replace('\\', '/')
-                rel_candidate = PurePosixPath(str(dir_path).replace('\\', '/')) / normalized_name
-                if rel_candidate.is_absolute() or any(part in ('', '.', '..') for part in rel_candidate.parts):
+                # A root-level PAK directory is commonly represented as "." or
+                # an empty PurePath. Do not reject that legitimate root component.
+                dir_norm = str(dir_path).replace('\\', '/').strip('/')
+                base_parts = () if dir_norm in ('', '.') else tuple(
+                    part for part in dir_norm.split('/') if part not in ('', '.')
+                )
+                name_parts = tuple(part for part in normalized_name.split('/') if part not in ('', '.'))
+                rel_parts = base_parts + name_parts
+                rel_candidate = PurePosixPath(*rel_parts)
+                if (
+                    rel_candidate.is_absolute()
+                    or not rel_parts
+                    or any(part == '..' for part in rel_parts)
+                ):
                     stats['skipped_files'] += 1
                     _failure(relative_name, ValueError('unsafe PAK relative path'))
                     continue
