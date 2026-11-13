@@ -54,6 +54,9 @@ planner = (ROOT / "app/src/main/java/com/alvsia/pro/tool/SmartEnginePlanner.kt")
 assert "SELECT OPERATION" not in workspace, "legacy operations must not appear as a nested picker"
 assert "showActionPicker" not in workspace
 assert "SmartEnginePlanner.resolve" in workspace
+assert "fun plan(" in planner
+assert "SmartEnginePlanner.plan(sub, operation" in main
+assert "for ((index, stageRoute) in routes.withIndex())" in main
 for provider_id in range(1, 20):
     assert f"            {provider_id} ->" in planner, f"Smart planner missing provider {provider_id}"
 assert "detection?.suggestedSubtool" in planner
