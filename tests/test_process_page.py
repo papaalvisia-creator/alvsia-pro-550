@@ -9,7 +9,7 @@ SCREEN = ROOT / "app/src/main/java/com/alvsia/pro/ui/tool/ToolWorkspaceScreen.kt
 class UnifiedProcessPageTests(unittest.TestCase):
     def test_simple_and_advanced_log_modes_are_available(self):
         source = SCREEN.read_text(encoding="utf-8")
-        self.assertIn('var logMode by remember(sub.id) { mutableStateOf("simple") }', source)
+        self.assertIn('var logMode by remember(operation.id) { mutableStateOf("simple") }', source)
         self.assertIn('onClick = { logMode = "simple" }', source)
         self.assertIn('onClick = { logMode = "advanced" }', source)
         self.assertIn('if (logMode == "advanced")', source)
@@ -19,7 +19,7 @@ class UnifiedProcessPageTests(unittest.TestCase):
     def test_destructive_workspace_clear_requires_explicit_confirmation(self):
         source = SCREEN.read_text(encoding="utf-8")
         self.assertIn('var confirmClearWorkspace by remember(sub.id) { mutableStateOf(false) }', source)
-        self.assertIn('if (sub.id == "clear_work")', source)
+        self.assertIn('if (operation.id == "clear_work")', source)
         self.assertIn('if (confirmClearWorkspace)', source)
         self.assertIn('This action permanently removes files in WORK and OUT', source)
         self.assertIn('Text("CANCEL"', source)
@@ -30,7 +30,7 @@ class UnifiedProcessPageTests(unittest.TestCase):
         self.assertIn("WorkPaths.dirWork()", source)
         self.assertIn("WorkPaths.dirOut()", source)
         self.assertIn('ClipData.newPlainText("ALVSIA log", logs.joinToString("\\n"))', source)
-        self.assertIn('"LOG_${sub.id}_${System.currentTimeMillis()}.txt"', source)
+        self.assertIn('"LOG_${operation.id}_${System.currentTimeMillis()}.txt"', source)
 
 
 if __name__ == "__main__":
