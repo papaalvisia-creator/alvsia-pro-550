@@ -39,8 +39,7 @@ object SmartEnginePlanner {
                 else -> choose("pak_repack_full")
             }
             3 -> choose("pak_delete_entry")
-            4 -> if (name.endsWith(".obb") || name.endsWith(".zip")) choose("obb_unzip")
-                 else choose("obb_rezip", "obb_unzip")
+            4 -> choose("obb_unzip")
             5 -> detected ?: if (detection?.type == FileMagic.FileType.PLAIN_TEXT || name.endsWith(".lua"))
                 choose("lua_analyze", "lua_decompile") else choose("lua_decompile")
             6 -> if (name.contains("global-metadata")) choose("metadata_v39_decode")
@@ -51,6 +50,7 @@ object SmartEnginePlanner {
             10 -> when {
                 hasConfig("patch_config.txt") -> choose("so_patch_url")
                 hasConfig("xor_keys.txt") -> choose("so_multi_xor")
+                hasConfig("so_folder.txt") -> choose("sm4_find_all")
                 name.endsWith(".dmp") -> choose("so_dump_audit")
                 else -> detected ?: choose("so_xor_scan")
             }
@@ -66,7 +66,11 @@ object SmartEnginePlanner {
                 else -> choose("xor_single_byte")
             }
             13 -> choose("dec_auto")
-            14 -> if (name.endsWith(".so")) choose("sm4_keyfind") else choose("pak_deep_auto")
+            14 -> when {
+                name.endsWith(".so") -> choose("sm4_keyfind")
+                name.contains("integrity") -> choose("pak_deep_integrity_audit")
+                else -> choose("pak_deep_auto")
+            }
             15 -> if (hasConfig("xref_query.txt")) choose("str_xref")
                  else choose("str_recover")
             16 -> when {
@@ -81,14 +85,24 @@ object SmartEnginePlanner {
                 name.endsWith(".lua") || name.endsWith(".luac") -> choose("audit_lua")
                 else -> choose("anti_re_source_triage", "audit_apk")
             }
-            18 -> if (detection?.type == FileMagic.FileType.ALVLUA1_PROTECTED || name.endsWith(".alvlua"))
-                choose("lua_protect_decrypt")
-                else choose("lua_smart_protect", "lua_protect_encrypt")
+            18 -> when {
+                detection?.type == FileMagic.FileType.ALVLUA1_PROTECTED || name.endsWith(".alvlua") ->
+                    choose("lua_protect_decrypt")
+                hasConfig("lua_protect_key.txt") -> choose("lua_protect_encrypt")
+                name.endsWith(".strong.lua") -> choose("lua_smart_protect_strong")
+                name.endsWith(".vm.lua") -> choose("lua_vm_protect")
+                else -> choose("lua_smart_protect")
+            }
             19 -> when {
+                hasConfig("zuc_config.txt") -> choose("priv_zuc_decrypt")
+                hasConfig("compress_config.txt") -> choose("priv_compress_fit")
+                name.contains("heping") -> choose("priv_lua_heping")
+                name.contains("bgmi") -> choose("priv_lua_convert")
                 name.endsWith(".apk") -> choose("priv_apk_audit")
                 name.endsWith(".pak") -> choose("priv_pak_manifest")
                 name.endsWith(".luac") -> choose("priv_lua_parse")
                 name.endsWith(".so") -> choose("priv_aes_scan")
+                name.endsWith(".bin") -> choose("priv_xor_recover")
                 else -> choose("priv_entropy_map")
             }
             else -> detected ?: actions.first()
