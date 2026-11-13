@@ -278,8 +278,8 @@ fun ToolWorkspaceScreen(
                         Column {
                             Text("DETECTED: ${det.label}",
                                 color = AlvisiaCyan, fontSize = 10.sp, fontWeight = FontWeight.Bold)
-                            if (det.suggestedSubtool != null && det.suggestedSubtool != operation.id) {
-                                Text("Suggested: ${det.suggestedSubtool}",
+                            if (det.suggestedSubtool != null) {
+                                Text("Smart Engine selected the matching internal route automatically",
                                     color = AlvisiaSilver.copy(alpha = 0.7f), fontSize = 9.sp)
                             }
                             if (det.isLargeFile) {
