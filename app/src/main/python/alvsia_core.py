@@ -1747,13 +1747,24 @@ class TencentPakFile:
             for file_name, entry in entries.items():
                 file_text = str(file_name)
                 relative_name = str(PurePath(dir_path) / file_text).replace('\\', '/')
-                if not file_text or '\x00' in file_text or file_text in ('.', '..') or '/' in file_text or '\\' in file_text:
+                # Some valid PAK indexes store the full relative filename in
+                # the entry name instead of splitting it into directory records.
+                # Treat separators as path components, but keep extraction strictly
+                # beneath the validated mount root.
+                if not file_text or '\x00' in file_text or file_text in ('.', '..'):
                     stats['skipped_files'] += 1
                     _failure(relative_name, ValueError('unsafe PAK filename'))
                     continue
-                target = (current_out_path / file_text).resolve()
+                normalized_name = file_text.replace('\\', '/')
+                rel_candidate = PurePosixPath(str(dir_path).replace('\\', '/')) / normalized_name
+                if rel_candidate.is_absolute() or any(part in ('', '.', '..') for part in rel_candidate.parts):
+                    stats['skipped_files'] += 1
+                    _failure(relative_name, ValueError('unsafe PAK relative path'))
+                    continue
+                target = (safe_root / Path(*rel_candidate.parts)).resolve()
                 try:
                     target.relative_to(safe_root)
+                    target.parent.mkdir(parents=True, exist_ok=True)
                     self._write_to_disk(target, entry)
                     if not target.is_file():
                         raise OSError('extractor returned without creating a regular file')
