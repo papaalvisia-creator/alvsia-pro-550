@@ -81,6 +81,25 @@ def test_dump_accepts_nested_entry_names_and_keeps_them_inside_root(tmp_path, mo
     assert (tmp_path / "out" / "Game" / "Assets" / "Lua" / "BRPlayerCharacterBase.lua").read_bytes() == b"hello"
 
 
+
+def test_dump_accepts_root_level_entry(tmp_path, monkeypatch):
+    pak = object.__new__(core.TencentPakFile)
+    pak._mount_point = PurePath()
+    pak._index = {
+        PurePath(): {
+            "root.bin": SimpleNamespace(uncompressed_size=4),
+        }
+    }
+    pak._index_parse_stats = {"file_entries": 1, "loaded_directories": 1}
+    pak._write_to_disk = lambda target, entry: Path(target).write_bytes(b"root")
+    monkeypatch.setattr(core, "BASE_DIR", tmp_path / "debug")
+
+    stats = pak.dump(tmp_path / "out")
+
+    assert stats["ok"] is True
+    assert stats["written_files"] == 1
+    assert (tmp_path / "out" / "root.bin").read_bytes() == b"root"
+
 def test_dump_rejects_nested_entry_path_escape(tmp_path, monkeypatch):
     pak = object.__new__(core.TencentPakFile)
     pak._mount_point = PurePath()
