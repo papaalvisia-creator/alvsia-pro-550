@@ -32,9 +32,14 @@ class UnifiedProcessPageTests(unittest.TestCase):
         self.assertNotIn("showActionPicker", source)
         self.assertIn("SmartEnginePlanner.resolve", source)
         self.assertIn("fun resolve(", planner)
+        self.assertIn("fun plan(", planner)
+        self.assertIn("SmartEnginePlanner.plan(sub, operation", (ROOT / "app/src/main/java/com/alvsia/pro/MainActivity.kt").read_text(encoding="utf-8"))
+        self.assertIn("for ((index, stageRoute) in routes.withIndex())", (ROOT / "app/src/main/java/com/alvsia/pro/MainActivity.kt").read_text(encoding="utf-8"))
         for provider_id in range(1, 20):
             self.assertIn(f"            {provider_id} ->", planner)
         self.assertIn("detection?.suggestedSubtool", planner)
+        engine = (ROOT / "app/src/main/java/com/alvsia/pro/tool/ToolEngine.kt").read_text(encoding="utf-8")
+        self.assertIn('"xor_selftest", "dec_selftest"', engine)
         self.assertIn("actions.associateBy", planner)
 
     def test_existing_run_config_and_log_export_paths_remain(self):
