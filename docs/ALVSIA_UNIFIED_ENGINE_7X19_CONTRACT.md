@@ -42,18 +42,33 @@ Base: feat/alvsia-smart-premium-v1-20261112
 
 Total: 7 menus, 19 submenus, 19 legacy module IDs. Every legacy module ID must appear exactly once in this mapping.
 
-## Required implementation architecture
+## Unified Engine architecture and implementation status
 
-`UI (7/19)`
-→ `UnifiedEngineFacade`
-→ `SmartRouter`
-→ `ProviderRegistry (legacy IDs 1..19 + modern providers)`
-→ `Adapters / domain engines`
-→ `PipelineExecutor`
-→ `ArtifactValidator`
-→ `Atomic Output + Report`
+### Implemented on this branch
 
-The visible submenu is a capability group, not a loss of its original operations. Its internal operation selector/configuration must expose all still-supported legacy actions without creating additional submenu navigation entries.
+`UI (7 menus / 19 submenu groups)`
+→ `UnifiedEngineFacade.resolve(menuId, action)`
+→ `ToolEngine.runSub(providerModuleId, operationId, ...)`
+→ `PythonBridgeRunner`
+→ `alvsia_bridge_impl.run_tool`
+→ `existing domain/provider implementation`
+→ `validated result/log + workspace output`
+
+- `SubMenus.kt` groups the 19 stable legacy module IDs exactly once.
+- Each of the 89 legacy operation declarations is retained as an action inside its owning submenu workspace.
+- `UnifiedEngineFacade.kt` validates the visible-menu/provider relationship before dispatch.
+- `MainActivity` sends the resolved provider ID and operation ID through the shared `ToolEngine.runSub` entry point.
+- The Python bridge remains the central operation dispatcher; the old module IDs are internal provider identities, not visible navigation entries.
+
+### Remaining work before calling the full Unified Engine complete
+
+- Formalize a typed provider registry for all 19 modules and their 89 operations; the current facade mapping is the first routing boundary, not yet the complete provider metadata registry.
+- Consolidate common progress, cancellation, resource limits, error classification, and output postconditions across all providers.
+- Audit each adapter's authorization scope and verify that every operation reaches the correct implementation.
+- Run real input-to-output fixtures for PAK, OBB, Lua, data, SO, and private providers; static catalog coverage is not functional proof.
+- Keep operations read-only where appropriate and require atomic output plus evidence before reporting success.
+
+The visible submenu is a capability group, not a loss of its original operations. Its internal operation selector/configuration exposes the retained actions without creating additional submenu navigation entries.
 
 ## Required provider contract
 
