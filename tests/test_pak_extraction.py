@@ -68,6 +68,7 @@ def test_write_is_atomic_and_checks_decompressed_size():
         compressed_blocks=[SimpleNamespace(start=0, end=len(compressed))],
         encrypted=False,
         uncompressed_size=len(plain),
+        compression_block_size=0,
     )
     with tempfile.TemporaryDirectory() as td:
         dest = Path(td) / "sample.lua"
@@ -82,6 +83,7 @@ def test_write_is_atomic_and_checks_decompressed_size():
             compressed_blocks=[SimpleNamespace(start=0, end=len(b"corrupt"))],
             encrypted=False,
             uncompressed_size=100,
+            compression_block_size=0,
         )
         pak._file_content = memoryview(b"corrupt")
         dest.write_bytes(b"keep-prior-file-if-operation-fails")
