@@ -49,4 +49,13 @@ assert "action.legacyModuleId" in facade
 assert "UnifiedEngineFacade.resolve" in main
 assert "actions = sub.actions" in main and "onSelectAction" in main
 
-print("UNIFIED CATALOG: PASS (7 menus, 19 submenus, 19 legacy modules, 89 retained operations)")
+workspace = (ROOT / "app/src/main/java/com/alvsia/pro/ui/tool/ToolWorkspaceScreen.kt").read_text(encoding="utf-8")
+planner = (ROOT / "app/src/main/java/com/alvsia/pro/tool/SmartEnginePlanner.kt").read_text(encoding="utf-8")
+assert "SELECT OPERATION" not in workspace, "legacy operations must not appear as a nested picker"
+assert "showActionPicker" not in workspace
+assert "SmartEnginePlanner.resolve" in workspace
+for provider_id in range(1, 20):
+    assert f"            {provider_id} ->" in planner, f"Smart planner missing provider {provider_id}"
+assert "detection?.suggestedSubtool" in planner
+
+print("UNIFIED CATALOG: PASS (7 menus, 19 submenus, 19 legacy providers, 89 retained internal operations; no nested operation picker)")
