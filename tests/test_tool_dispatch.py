@@ -144,8 +144,8 @@ def test_frida_spawn_preserves_full_package_name():
 
 def test_smart_lua_groups_all_four_legacy_lua_modules():
     menus = MENUS.read_text(encoding="utf-8")
-    lua_menu = menus.split("1 -> listOf(", 1)[1].split("\\n        2 -> listOf(", 1)[0]
-    module_ids = [int(x) for x in re.findall(r'moduleGroup\\(\\s*(\\d+)\\s*,', lua_menu)]
+    lua_menu = menus.split("1 -> listOf(", 1)[1].split("\n        2 -> listOf(", 1)[0]
+    module_ids = [int(x) for x in re.findall(r'moduleGroup\(\s*(\d+)\s*,', lua_menu)]
     assert module_ids == [5, 15, 16, 18], f"SMART LUA must group legacy modules 5/15/16/18, got {module_ids}"
     legacy = menus.split("private fun legacyOperations", 1)[1]
     for operation in ("lua_decompile", "str_recover", "lua_patch_byte", "lua_smart_protect",
@@ -167,12 +167,12 @@ def test_private_module_is_one_group_with_all_sealed_operations():
     menus = MENUS.read_text(encoding="utf-8")
     catalog = CATALOG.read_text(encoding="utf-8")
     router = ROUTER.read_text(encoding="utf-8")
-    bridge = BRIDGE.read_text(encoding="utf-8") + "\\n" + BRIDGE_IMPL.read_text(encoding="utf-8")
+    bridge = BRIDGE.read_text(encoding="utf-8") + "\n" + BRIDGE_IMPL.read_text(encoding="utf-8")
     assert '7 -> "ALVSIA PRIVATE"' in menus
     assert 'ToolItem(7, "ALVSIA PRIVATE"' in catalog
     assert 'moduleGroup(19, "ALVSIA PRIVATE ENGINE"' in menus
-    private_section = menus.split("19 -> listOf(", 1)[1].split("\\n    )", 1)[0]
-    expected = re.findall(r'SubTool\\(\\s*"([^"]+)"', private_section)
+    private_section = menus.split("19 -> listOf(", 1)[1].split("\n    )", 1)[0]
+    expected = re.findall(r'SubTool\(\s*"([^"]+)"', private_section)
     assert len(expected) == 12, f"expected all 12 private actions, got {expected}"
     for sid in expected:
         assert f'"{sid}"' in bridge or f'"{sid}"' in router, f"private operation not dispatchable: {sid}"
