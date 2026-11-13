@@ -31,6 +31,7 @@ class UnifiedProcessPageTests(unittest.TestCase):
         self.assertNotIn("SELECT OPERATION", source)
         self.assertNotIn("showActionPicker", source)
         self.assertIn("SmartEnginePlanner.resolve", source)
+        self.assertIn("if (operation.needsFile || actions.any { it.needsFile })", source)
         self.assertIn("fun resolve(", planner)
         self.assertIn("fun plan(", planner)
         self.assertIn("SmartEnginePlanner.plan(sub, operation", (ROOT / "app/src/main/java/com/alvsia/pro/MainActivity.kt").read_text(encoding="utf-8"))
