@@ -101,6 +101,32 @@ jobs:
           python3 -m pytest -q tests/test_lua_orchestrator.py
           python3 tests/test_vm_protect_roundtrip.py
 
+      - name: Strict reference corpus gate
+        run: |
+          set -euo pipefail
+          rm -rf "$RUNNER_TEMP/alvsia-reference-corpus"
+          git clone --depth 1 https://github.com/papaalvisia-creator/kumpulan-source-tool.git "$RUNNER_TEMP/alvsia-reference-corpus"
+          python3 -m pip install --disable-pip-version-check gmalg zstandard
+          test -s "$RUNNER_TEMP/alvsia-reference-corpus/samples/pak/game_patch_4.7.0.21752.pak"
+          test -s "$RUNNER_TEMP/alvsia-reference-corpus/samples/pak/game_patch_4.7.0.21756.pak"
+          test -s "$RUNNER_TEMP/alvsia-reference-corpus/samples/lua/PUBG_(4.7.0)_All-Orginal-Lua.zip"
+          test -s "$RUNNER_TEMP/alvsia-reference-corpus/ALVSIAPRO_SRC/LUA/BRPlayerCharacterBase.lua"
+          python3 "$RUNNER_TEMP/alvsia-reference-corpus/tools/run_strict_engine_research.py" \
+            --app-python "$GITHUB_WORKSPACE/app/src/main/python" \
+            --pak-dir "$RUNNER_TEMP/alvsia-reference-corpus/samples/pak" \
+            --lua-zip "$RUNNER_TEMP/alvsia-reference-corpus/samples/lua/PUBG_(4.7.0)_All-Orginal-Lua.zip" \
+            --source-lua "$RUNNER_TEMP/alvsia-reference-corpus/ALVSIAPRO_SRC/LUA/BRPlayerCharacterBase.lua" \
+            --out "$RUNNER_TEMP/alvsia-reference-corpus-gate"
+
+      - name: Upload strict corpus evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ALVSIA-strict-reference-corpus-evidence
+          path: ${{ runner.temp }}/alvsia-reference-corpus-gate/**
+          if-no-files-found: error
+          retention-days: 30
+
       - name: Prepare sealed release
         run: |
           set -euo pipefail
