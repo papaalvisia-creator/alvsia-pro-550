@@ -26,7 +26,7 @@ object SubMenus {
         else -> "Module $moduleId"
     }
 
-    /** Exactly 19 visible submenu groups across the seven Smart menus. */
+    /** 22 visible Smart submenu groups across the same seven top-level menus. */
     fun forModule(moduleId: Int): List<SubTool> = when (moduleId) {
         1 -> listOf(
             moduleGroup(5, "SMART LUA DECOMPILER", "Detect, analyze, decompile and convert Lua formats"),
@@ -38,18 +38,21 @@ object SubMenus {
             moduleGroup(1, "SMART PAK UNPACK", "Full extraction, index, quick info and CSV"),
             moduleGroup(2, "SMART PAK REBUILD", "Repack, inject, encrypt and restore"),
             moduleGroup(3, "SMART PAK COMPACT", "Delete entries and compact archives"),
-            moduleGroup(14, "SMART PAK DEEP ENGINE", "Deep crypto/compression probes, integrity and supported key scans")
+            moduleGroup(14, "SMART PAK DEEP ENGINE", "Deep crypto/compression probes, integrity and supported key scans"),
+            capabilityGroup("smart_asset_modding", "SMART ASSET MODDING ENGINE", "UE4 asset intelligence, contextual binary modification, dependency-aware rebuild and validation")
         )
         3 -> listOf(moduleGroup(4, "SMART OBB ENGINE", "Inspect, extract, rebuild and integrity validation"))
         4 -> listOf(
             moduleGroup(6, "SMART FILE SCAN & METADATA", "Strings, hashes and validated metadata decoding"),
             moduleGroup(12, "SMART XOR ENGINE", "Single-byte, multi-key, LuaS and batch XOR operations"),
-            moduleGroup(13, "SMART DECRYPT ENGINE", "AES, SM4, SIMPLE1 and explicitly labelled compatibility transforms")
+            moduleGroup(13, "SMART DECRYPT ENGINE", "AES, SM4, SIMPLE1 and explicitly labelled compatibility transforms"),
+            capabilityGroup("smart_crypto_compression", "SMART CRYPTO & COMPRESSION ENGINE", "Automatic crypto/compression fingerprinting, candidate routing and output validation")
         )
         5 -> listOf(
             moduleGroup(10, "SMART SO ANALYZER", "Native library strings, URLs, crypto patterns and safe patch operations"),
             moduleGroup(11, "SMART JNI TRACE", "JNI observation scripts and Frida command generation"),
-            moduleGroup(17, "SMART ANTI-RE AUDIT", "APK, Lua, SO and source triage reports")
+            moduleGroup(17, "SMART ANTI-RE AUDIT", "APK, Lua, SO and source triage reports"),
+            capabilityGroup("smart_binary_forensics", "SMART BINARY FORENSICS ENGINE", "Contextual binary structure, strings, entropy, URLs, signatures and anomaly evidence")
         )
         6 -> listOf(
             moduleGroup(7, "SMART WORKSPACE", "Workspace lifecycle and safe cleanup"),
@@ -58,6 +61,36 @@ object SubMenus {
         )
         7 -> listOf(moduleGroup(19, "ALVSIA PRIVATE ENGINE", "Owner-only sealed providers and private analysis utilities"))
         else -> emptyList()
+    }
+
+    /** New public Smart capabilities deliberately reuse validated legacy providers internally. */
+    private fun capabilityGroup(id: String, title: String, desc: String): SubTool {
+        val actions = when (id) {
+            "smart_asset_modding" -> listOf(
+                SubTool("pak_full_unpack", "Asset Extract", "Extract the container before asset analysis", "Smart Engine route", legacyModuleId = 1),
+                SubTool("pak_deep_integrity_audit", "Asset Integrity", "Validate archive slots and payload fingerprints", "Smart Engine route", legacyModuleId = 14),
+                SubTool("pak_repack_full", "Asset Rebuild", "Rebuild an edited asset tree", "Smart Engine route", legacyModuleId = 2),
+                SubTool("pak_inject", "Asset Inject", "Inject authorized edited files", "Smart Engine route", legacyModuleId = 2)
+            )
+            "smart_crypto_compression" -> listOf(
+                SubTool("pak_deep_auto", "Crypto/Compression Probe", "Rank supported encryption and compression candidates", "Smart Engine route", legacyModuleId = 14),
+                SubTool("dec_auto", "Transform Probe", "Probe supported transforms and validate output", "Smart Engine route", legacyModuleId = 13),
+                SubTool("dec_sm4", "SM4 Adapter", "Use an explicitly supplied user/project key", "Smart Engine route", legacyModuleId = 13),
+                SubTool("pak_deep_zstd", "Zstandard Adapter", "Detect and decompress supported Zstandard payloads", "Smart Engine route", legacyModuleId = 14),
+                SubTool("dec_selftest", "Crypto Self-Test", "Verify built-in cryptographic known-answer vectors", "Smart Engine route", needsFile = false, legacyModuleId = 13)
+            )
+            "smart_binary_forensics" -> listOf(
+                SubTool("string_scan", "Contextual Strings", "Recover printable strings with location evidence", "Smart Engine route", legacyModuleId = 6),
+                SubTool("hash_scan", "Binary Fingerprint", "Produce cryptographic fingerprints for evidence correlation", "Smart Engine route", legacyModuleId = 6),
+                SubTool("so_url_dump", "Endpoint Evidence", "Extract embedded URL/string evidence from native binaries", "Smart Engine route", legacyModuleId = 10),
+                SubTool("so_xor_scan", "Obfuscation Probe", "Rank readable candidates from bounded XOR probing", "Smart Engine route", legacyModuleId = 10),
+                SubTool("anti_re_source_triage", "Behavior Triage", "Static-only encoded payload and dynamic-execution indicators", "Smart Engine route", legacyModuleId = 17)
+            )
+            else -> emptyList()
+        }
+        return SubTool(id = id, title = title, desc = desc,
+            guide = "Smart Engine automatically detects, routes, validates and records evidence; no operation picker is exposed.",
+            needsFile = actions.any { it.needsFile }, actions = actions)
     }
 
     private fun moduleGroup(moduleId: Int, title: String, desc: String): SubTool {
