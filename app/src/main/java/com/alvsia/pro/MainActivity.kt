@@ -382,7 +382,7 @@ class MainActivity : ComponentActivity() {
                             )
                             activeOperation = initialOperation
                             activeTaskId = TaskCenter.tasks.lastOrNull {
-                                it.moduleId == moduleId && it.subId == initialOperation.id
+                                it.moduleId == moduleId && it.subId == group.id
                             }?.id
                             screen = "tool"
                         }
@@ -399,16 +399,20 @@ class MainActivity : ComponentActivity() {
                                 actions = sub.actions, selectedAction = operation,
                                 onSelectAction = { action ->
                                     activeOperation = action
-                                    activeTaskId = TaskCenter.tasks.lastOrNull { it.moduleId == moduleId && it.subId == action.id }?.id
+                                    activeTaskId = TaskCenter.tasks.lastOrNull { it.moduleId == moduleId && it.subId == sub.id }?.id
                                 },
                                 running = task?.status == TaskStatus.RUNNING, logs = task?.logs ?: emptyList(),
                                 onBack = { activeTaskId = null; activeOperation = null; screen = "submenu" },
                                 onRun = { uri, extra ->
-                                    // All actions in a submenu route to their stable legacy provider ID.
-                                    val route = UnifiedEngineFacade.resolve(moduleId, operation)
+                                    // One visible submenu starts one Smart Engine task. The planner
+                                    // chains only compatible internal stages behind this single RUN.
+                                    WorkPaths.bindApp(ctx)
+                                    val plannedActions = SmartEnginePlanner.plan(sub, operation, WorkPaths.dirWork())
+                                    val routes = plannedActions.map { UnifiedEngineFacade.resolve(moduleId, it) }
+                                    val route = routes.first()
                                     val dispatchModuleId = route.providerModuleId
-                                    val dispatchSubId = route.operationId
-                                    val taskId = TaskCenter.start(moduleId, route.operationId, route.operationTitle, uri?.lastPathSegment?.substringAfterLast("/") ?: "", null)
+                                    val dispatchSubId = routes.joinToString(",") { it.operationId }
+                                    val taskId = TaskCenter.start(moduleId, sub.id, sub.title, uri?.lastPathSegment?.substringAfterLast("/") ?: "", null)
                                     activeTaskId = taskId
                                     // Raise process importance for the lifetime of this real tool run.
                                     // This does not replace or disable any engine; it protects long
@@ -416,37 +420,52 @@ class MainActivity : ComponentActivity() {
                                     ToolExecutionService.begin(this@MainActivity)
                                     RuntimeExitDiagnostics.markToolStart(this@MainActivity, moduleId, operation.id)
                                     RuntimeExitDiagnostics.checkpoint(this@MainActivity, moduleId, operation.id, taskId, "STAGING INPUT", null)
-                                    TaskCenter.update(taskId, stage = "STAGING INPUT", logs = listOf("> preparing ${operation.id}..."))
+                                    TaskCenter.update(taskId, stage = "STAGING INPUT", logs = listOf("> preparing ${sub.title} Smart Engine..."))
                                     lifecycleScope.launch {
                                         try {
                                             val result = withContext(Dispatchers.IO) {
                                                 try {
                                                     withTimeoutOrNull(20 * 60 * 1000L) {
-                                                        engine.runSub(dispatchModuleId, dispatchSubId, uri, extra, onProgress = { stage, progress ->
-                                                            TaskCenter.update(
-                                                                taskId,
-                                                                stage = stage,
-                                                                progress = progress,
-                                                                clearProgress = progress == null
+                                                        val combined = mutableListOf<String>()
+                                                        for ((index, stageRoute) in routes.withIndex()) {
+                                                            combined.add("SMART ENGINE STAGE ${index + 1}/${routes.size}: ${stageRoute.operationTitle}")
+                                                            val stageResult = engine.runSub(
+                                                                stageRoute.providerModuleId,
+                                                                stageRoute.operationId,
+                                                                uri,
+                                                                extra,
+                                                                onProgress = { stage, progress ->
+                                                                    val stageLabel = "ENGINE ${index + 1}/${routes.size} · $stage"
+                                                                    TaskCenter.update(
+                                                                        taskId,
+                                                                        stage = stageLabel,
+                                                                        progress = progress,
+                                                                        clearProgress = progress == null
+                                                                    )
+                                                                    RuntimeExitDiagnostics.checkpoint(
+                                                                        this@MainActivity,
+                                                                        stageRoute.providerModuleId,
+                                                                        operation.id,
+                                                                        taskId,
+                                                                        stageLabel,
+                                                                        progress
+                                                                    )
+                                                                },
+                                                                taskId = taskId
                                                             )
-                                                            RuntimeExitDiagnostics.checkpoint(
-                                                                this@MainActivity,
-                                                                dispatchModuleId,
-                                                                operation.id,
-                                                                taskId,
-                                                                stage,
-                                                                progress
-                                                            )
-                                                        }, taskId = taskId)
+                                                            combined.addAll(stageResult)
+                                                            if (stageResult.any { it.startsWith("X ") }) break
+                                                        }
+                                                        combined
                                                     } ?: listOf(
                                                         "X TOOL EXECUTION TIMEOUT: 20-minute watchdog expired",
-                                                        "diagnostic: menu_module=${moduleId}; dispatch_module=${dispatchModuleId}; subtool=${dispatchSubId}",
+                                                        "diagnostic: menu_module=${moduleId}; dispatch_module=${dispatchModuleId}; stages=${dispatchSubId}",
                                                         "The selected input is preserved; retry is safe."
                                                     )
                                                 }
                                                 catch (t: Throwable) {
                                                     val root = t.cause ?: t
-                                                    listOf("X TOOL EXECUTION FAILED: ${root.javaClass.simpleName}: ${root.message ?: "no detail"}", "diagnostic: module=${dispatchModuleId}; subtool=${dispatchSubId}", "Input file is preserved; no successful output is claimed.")
+                                                    listOf("X TOOL EXECUTION FAILED: ${root.javaClass.simpleName}: ${root.message ?: "no detail"}", "diagnostic: module=${dispatchModuleId}; stages=${dispatchSubId}", "Input file is preserved; no successful output is claimed.")
                                                 }
                                             }
                                             val success = result.any { it.startsWith("OK ") } && result.none { it.startsWith("X ") }
@@ -461,10 +480,10 @@ class MainActivity : ComponentActivity() {
                                             TaskCenter.complete(taskId, success, result)
                                             ToolExecutionService.end(this@MainActivity)
                                             RuntimeExitDiagnostics.markToolEnd(this@MainActivity)
-                                            val detail = "${operation.id}: " + (result.firstOrNull { it.startsWith("X ") } ?: if (success) "operation completed" else "operation needs review")
+                                            val detail = "${sub.title}: " + (result.firstOrNull { it.startsWith("X ") } ?: if (success) "engine completed" else "engine needs review")
                                             try {
-                                                TelegramNotifier.notifyModuleStatus(this@MainActivity, operation.title, if (success) "SUCCESS" else "ATTENTION", detail.take(200))
-                                                val scanLike = operation.id.contains("scan", ignoreCase = true) || operation.title.contains("scan", ignoreCase = true)
+                                                TelegramNotifier.notifyModuleStatus(this@MainActivity, sub.title, if (success) "SUCCESS" else "ATTENTION", detail.take(200))
+                                                val scanLike = routes.any { it.operationId.contains("scan", ignoreCase = true) } || sub.title.contains("scan", ignoreCase = true)
                                                 if (scanLike) {
                                                     val scanCounts = mapOf(
                                                         "success" to result.count { it.startsWith("OK ") },
@@ -476,7 +495,7 @@ class MainActivity : ComponentActivity() {
                                                 TelegramNotifier.notify(this@MainActivity, if (success) "TOOL_OK" else "TOOL_ERROR", detail.take(200), license)
                                             } catch (_: Throwable) { }
                                         } catch (t: Throwable) {
-                                            TaskCenter.complete(taskId, false, listOf("X UNEXPECTED TOOL FAILURE: ${t.javaClass.simpleName}: ${t.message ?: "no detail"}", "diagnostic: module=${moduleId}; subtool=${operation.id}", "Input file is preserved where staging completed."))
+                                            TaskCenter.complete(taskId, false, listOf("X UNEXPECTED TOOL FAILURE: ${t.javaClass.simpleName}: ${t.message ?: "no detail"}", "diagnostic: module=${moduleId}; submenu=${sub.id}", "Input file is preserved where staging completed."))
                                             ToolExecutionService.end(this@MainActivity)
                                             RuntimeExitDiagnostics.markToolEnd(this@MainActivity)
                                         }
