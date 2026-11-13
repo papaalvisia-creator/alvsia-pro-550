@@ -2,7 +2,7 @@ name: Module catalog consistency
 
 on:
   push:
-    branches: [main]
+    branches: [main, feat/alvsia-smart-premium-v1-20261112]
     paths:
       - "tests/test_module_catalog_consistency.py"
       - "app/src/main/java/com/alvsia/pro/tool/ToolCatalog.kt"
