@@ -47,18 +47,23 @@ Total: 7 menus, 19 submenus, 19 legacy module IDs. Every legacy module ID must a
 ### Implemented on this branch
 
 `UI (7 menus / 19 submenu groups)`
-→ `UnifiedEngineFacade.resolve(menuId, action)`
-→ `ToolEngine.runSub(providerModuleId, operationId, ...)`
+→ `SmartEnginePlanner.resolve/plan(submenu, detected input, workspace context)`
+→ `UnifiedEngineFacade.resolve(menuId, internal stage)`
+→ `one TaskCenter task / ToolEngine.runSub(shared taskId, immutable input snapshot)`
 → `PythonBridgeRunner`
 → `alvsia_bridge_impl.run_tool`
 → `existing domain/provider implementation`
-→ `validated result/log + workspace output`
+→ `validated stage results + one workspace output/report`
 
 - `SubMenus.kt` groups the 19 stable legacy module IDs exactly once.
-- Each of the 89 legacy operation declarations is retained as an action inside its owning submenu workspace.
-- `UnifiedEngineFacade.kt` validates the visible-menu/provider relationship before dispatch.
-- `MainActivity` sends the resolved provider ID and operation ID through the shared `ToolEngine.runSub` entry point.
-- The Python bridge remains the central operation dispatcher; the old module IDs are internal provider identities, not visible navigation entries.
+- All 89 legacy operation declarations remain internal capabilities owned by their original submenu; none is deleted.
+- There is no user-visible operation picker, nested tool list, or extra submenu inside the workspace.
+- `SmartEnginePlanner.kt` selects the internal route from the detected input, file name and workspace context; compatible read-only diagnostics and built-in self-tests can run as stages of one Smart Engine task.
+- Mutating alternatives remain singular and fail closed; the planner does not blindly run every destructive operation.
+- `UnifiedEngineFacade.kt` validates the visible-menu/provider relationship for every internal stage.
+- `MainActivity` executes the planned stages under one TaskCenter task and one task ID. `ToolEngine` reuses the same verified immutable input snapshot across stages to avoid repeatedly copying large files.
+- Internal configuration fields may appear when required by the selected automatic route; they are not additional tools or navigation entries.
+- The Python bridge remains the central operation dispatcher; the old module IDs and 89 operation IDs are internal provider identities, not visible navigation entries.
 
 ### Remaining work before calling the full Unified Engine complete
 
@@ -68,7 +73,7 @@ Total: 7 menus, 19 submenus, 19 legacy module IDs. Every legacy module ID must a
 - Run real input-to-output fixtures for PAK, OBB, Lua, data, SO, and private providers; static catalog coverage is not functional proof.
 - Keep operations read-only where appropriate and require atomic output plus evidence before reporting success.
 
-The visible submenu is a capability group, not a loss of its original operations. Its internal operation selector/configuration exposes the retained actions without creating additional submenu navigation entries.
+Each of the 19 visible submenus is one complete Smart Engine. Its 89 retained implementations are orchestrated internally through automatic detection, routing and compatible pipeline stages. The user sees one submenu workspace and one RUN action—not a second layer of tools. Configuration inputs are shown only when the chosen route requires them.
 
 ## Required provider contract
 
@@ -88,7 +93,7 @@ No provider may return success solely because a process exited with code 0. Succ
 
 1. Inventory every legacy operation and its current Kotlin/Python/asset/native implementation.
 2. Build an explicit operation-to-provider registry; flag missing, duplicate, placeholder, or unreachable operations.
-3. Implement the 7/19 catalog and nested action selection without increasing the visible submenu count.
+3. Implement the 7/19 catalog with automatic internal routing and no nested action selector or additional tool list.
 4. Route all operations through the Unified Engine facade; keep adapters for compatible legacy implementations.
 5. Rebuild only broken or unsafe providers; preserve correct algorithms and stable IDs.
 6. Add contract tests for complete 1..19 coverage, unique submenu IDs, operation reachability, authorization scopes, and output validation.
