@@ -194,7 +194,7 @@ def main():
     for test in tests:
         test()
         print("PASS", test.__name__)
-    print("PAK EXTRACTION REGRESSION: PASS (5/5; marker-only authorization rejected)")
+    print("PAK EXTRACTION REGRESSION: PASS (6/6; marker-only authorization rejected)")
 
 
 if __name__ == "__main__":
