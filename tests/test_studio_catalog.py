@@ -51,7 +51,7 @@ class SmartCatalogTests(unittest.TestCase):
         main = MAIN.read_text(encoding="utf-8")
         self.assertIn("legacyModuleId: Int? = null", router)
         facade = (ROOT / "app/src/main/java/com/alvsia/pro/tool/UnifiedEngineFacade.kt").read_text(encoding="utf-8")
-        self.assertIn("operation.legacyModuleId", facade)
+        self.assertIn("action.legacyModuleId", facade)
         self.assertIn("UnifiedEngineFacade.resolve", main)
         self.assertIn("actions = sub.actions", main)
         self.assertIn("onSelectAction", main)
