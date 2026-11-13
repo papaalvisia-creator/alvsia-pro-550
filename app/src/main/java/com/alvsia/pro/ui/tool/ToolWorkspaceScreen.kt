@@ -71,6 +71,12 @@ private fun selectedSizeBytes(context: Context, uri: Uri): Long? = try {
     }
 } catch (_: Exception) { null }
 
+private fun selectedDisplayName(context: Context, uri: Uri): String? = try {
+    context.contentResolver.query(uri, arrayOf(android.provider.OpenableColumns.DISPLAY_NAME), null, null, null)?.use { c ->
+        if (c.moveToFirst() && !c.isNull(0)) c.getString(0) else null
+    }
+} catch (_: Exception) { null }
+
 /**
  * ALVSIA PRO 5.5.2 — ToolWorkspaceScreen (UX Sprint 1 rewrite)
  *
@@ -130,7 +136,8 @@ fun ToolWorkspaceScreen(
     fun autoResolve(selectedUri: Uri?, detection: FileMagic.DetectionResult?) {
         if (selectedUri == null) return
         WorkPaths.bindApp(ctx)
-        val selectedName = selectedUri.lastPathSegment?.substringAfterLast('/') ?: ""
+        val selectedName = selectedDisplayName(ctx, selectedUri)
+            ?: selectedUri.lastPathSegment?.substringAfterLast('/') ?: ""
         val resolved = SmartEnginePlanner.resolve(sub, actions, detection, selectedName, WorkPaths.dirWork())
         if (resolved.id != operation.id) onSelectAction(resolved)
     }
