@@ -87,7 +87,34 @@ object RaspEngine {
         // devices. Security is not disabled: the next tool dispatch re-runs the
         // complete gate, while this periodic loop resumes immediately after the run.
         if (ToolExecutionService.isActive()) {
-            threatLevel = 0
+            // Keep a lightweight high-confidence guard active during long native/Python
+            // tool runs. The full RASP matrix remains paused to avoid CPU/I/O contention,
+            // but debugger/hook/integrity signals are still checked continuously.
+            val activeHard = mutableListOf<String>()
+            if (Debug.isDebuggerConnected() || Debug.waitingForDebugger()) activeHard += "jdwp_connected_active"
+            try {
+                val nativeFlags = NativeGuard.scanFlags()
+                if (nativeFlags and 0x01 != 0) activeHard += "n_tracer_pid_active"
+                if (nativeFlags and 0x02 != 0) activeHard += "n_maps_frida_active"
+                if (nativeFlags and 0x40 != 0) activeHard += "n_self_hash_mismatch_active"
+            } catch (_: Throwable) { }
+            try {
+                AntiHook.signals().filter { it.startsWith("maps:") }.forEach { activeHard += "antihook_$it" }
+            } catch (_: Throwable) { }
+            try {
+                RuntimeMappingGuard.signals(ctx).forEach { activeHard += "mapping_$it" }
+            } catch (_: Throwable) { }
+            if (activeHard.isNotEmpty()) {
+                threatLevel = activeHard.size * 10
+                val detail = activeHard.distinct().joinToString("|")
+                try { ThreatReport.emit(ctx, "ACTIVE_TOOL_THREAT", detail, license) } catch (_: Throwable) { }
+                try {
+                    SessionGate.onThreat()
+                    RamToolVault.wipeAll()
+                } catch (_: Throwable) { }
+            } else {
+                threatLevel = 0
+            }
             return
         }
 
