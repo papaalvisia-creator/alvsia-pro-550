@@ -21,7 +21,6 @@ object SmartEnginePlanner {
         val byId = actions.associateBy { it.id }
         val provider = submenu.legacyModuleId ?: actions.first().legacyModuleId ?: 0
         val name = inputName.orEmpty().lowercase()
-        fun hasConfig(file: String) = File(workDir, file).isFile && File(workDir, file).length() > 0L
         fun hasFiles(path: String): Boolean = File(workDir, path).let { dir ->
             dir.isDirectory && !dir.list().isNullOrEmpty()
         }
@@ -34,7 +33,7 @@ object SmartEnginePlanner {
         val selected = when (provider) {
             1 -> choose("pak_full_unpack")
             2 -> when {
-                hasConfig("pak_encrypt.request") -> choose("pak_encrypt")
+                name.contains(".encrypt.") -> choose("pak_encrypt")
                 name.contains("simple1") || name.endsWith(".enc.pak") -> choose("pak_decrypt_restore")
                 else -> choose("pak_repack_full")
             }
@@ -46,21 +45,20 @@ object SmartEnginePlanner {
                  else choose("string_scan")
             7 -> choose("clear_work")
             8 -> choose("export_report")
-            9 -> if (hasConfig("rebrand_config.txt")) choose("rebrand_manual") else choose("rebrand_auto")
+            9 -> if (name.contains(".manual.")) choose("rebrand_manual") else if (name.contains(".scan.")) choose("rebrand_scan") else choose("rebrand_auto")
             10 -> when {
-                hasConfig("patch_config.txt") -> choose("so_patch_url")
-                hasConfig("xor_keys.txt") -> choose("so_multi_xor")
-                hasConfig("so_folder.txt") -> choose("sm4_find_all")
+                name.contains(".patchurl.") -> choose("so_patch_url")
+                name.contains(".multixor.") -> choose("so_multi_xor")
+                name.contains(".sm4scan.") -> choose("sm4_find_all")
                 name.endsWith(".dmp") -> choose("so_dump_audit")
                 else -> detected ?: choose("so_xor_scan")
             }
             11 -> when {
                 name.endsWith(".so") -> choose("frida_jni_hook")
-                hasConfig("frida_target.txt") -> choose("frida_spawn")
-                else -> choose("frida_js_dump", "frida_jni_hook")
+                else -> choose("frida_spawn", "frida_js_dump", "frida_jni_hook")
             }
             12 -> when {
-                hasConfig("xor_key.txt") -> choose("xor_custom_key")
+                name.contains(".xor.custom") -> choose("xor_custom_key")
                 hasFiles("BATCH") -> choose("xor_batch")
                 name.endsWith(".luas") -> choose("xor_luas_strip")
                 else -> choose("xor_single_byte")
@@ -68,14 +66,15 @@ object SmartEnginePlanner {
             13 -> choose("dec_auto")
             14 -> when {
                 name.endsWith(".so") -> choose("sm4_keyfind")
+                name.contains(".aes.") -> choose("pak_deep_aes")
+                name.contains(".zuc.") -> choose("pak_deep_zuc")
+                name.contains(".sm4.") -> choose("pak_deep_sm4")
                 name.contains("integrity") -> choose("pak_deep_integrity_audit")
                 else -> choose("pak_deep_auto")
             }
-            15 -> if (hasConfig("xref_query.txt")) choose("str_xref")
-                 else choose("str_recover")
+            15 -> if (name.contains(".xref.")) choose("str_xref") else choose("str_recover")
             16 -> when {
-                hasConfig("lua_patch.json") -> choose("lua_patch_byte")
-                hasConfig("lua_hook.lua") -> choose("lua_inject_hook")
+                name.contains(".hook.") -> choose("lua_inject_hook")
                 hasFiles("MOD") -> choose("lua_mod_repack")
                 else -> choose("lua_patch_byte")
             }
@@ -88,16 +87,19 @@ object SmartEnginePlanner {
             18 -> when {
                 detection?.type == FileMagic.FileType.ALVLUA1_PROTECTED || name.endsWith(".alvlua") ->
                     choose("lua_protect_decrypt")
-                hasConfig("lua_protect_key.txt") -> choose("lua_protect_encrypt")
+                name.contains(".encrypt.") -> choose("lua_protect_encrypt")
                 name.endsWith(".strong.lua") -> choose("lua_smart_protect_strong")
                 name.endsWith(".vm.lua") -> choose("lua_vm_protect")
                 else -> choose("lua_smart_protect")
             }
             19 -> when {
-                hasConfig("zuc_config.txt") -> choose("priv_zuc_decrypt")
-                hasConfig("compress_config.txt") -> choose("priv_compress_fit")
+                name.contains(".zuc.enc") -> choose("priv_zuc_decrypt")
+                name.contains(".compress.") -> choose("priv_compress_fit")
                 name.contains("heping") -> choose("priv_lua_heping")
                 name.contains("bgmi") -> choose("priv_lua_convert")
+                name.contains(".manifest.apk") -> choose("priv_apk_manifest")
+                name.contains(".strings.") -> choose("priv_str_recover")
+                name.contains(".xor.") -> choose("priv_xor_recover")
                 name.endsWith(".apk") -> choose("priv_apk_audit")
                 name.endsWith(".pak") -> choose("priv_pak_manifest")
                 name.endsWith(".luac") -> choose("priv_lua_parse")
