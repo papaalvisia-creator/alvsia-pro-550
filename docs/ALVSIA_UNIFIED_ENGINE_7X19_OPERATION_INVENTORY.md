@@ -44,3 +44,7 @@ This inventory defines the internal operations retained behind the fixed **7 men
 4. Python/native implementation exists and has authorization coverage.
 5. Output/report is produced and validated; source input remains unchanged.
 6. Regression test covers success, malformed input, cancellation/timeout, and failure without fake output.
+
+
+### Expanded Smart capabilities
+The public catalog now contains three additional Smart capability submenus without adding a new top-level menu: **SMART ASSET MODDING ENGINE**, **SMART CRYPTO & COMPRESSION ENGINE**, and **SMART BINARY FORENSICS ENGINE**. They orchestrate existing validated providers internally; no legacy operation picker is exposed. User-provided keys/configuration remain separate from any research-source secrets.
