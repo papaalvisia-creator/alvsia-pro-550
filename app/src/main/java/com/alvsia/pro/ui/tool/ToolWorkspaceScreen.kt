@@ -51,6 +51,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.alvsia.pro.tool.FileMagic
+import com.alvsia.pro.tool.SmartEnginePlanner
 import com.alvsia.pro.tool.SubTool
 import com.alvsia.pro.tool.UXStore
 import com.alvsia.pro.tool.WorkPaths
