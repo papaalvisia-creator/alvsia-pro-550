@@ -59,6 +59,47 @@ def test_dump_counts_unexpected_decompression_errors(tmp_path, monkeypatch):
     assert "content size" in stats["failures"][0]["error"]
 
 
+def test_dump_accepts_nested_entry_names_and_keeps_them_inside_root(tmp_path, monkeypatch):
+    pak = object.__new__(core.TencentPakFile)
+    pak._mount_point = PurePath()
+    pak._index = {
+        PurePath("Game"): {
+            "Assets/Lua/BRPlayerCharacterBase.lua": SimpleNamespace(uncompressed_size=5),
+        }
+    }
+    pak._index_parse_stats = {"file_entries": 1, "loaded_directories": 1}
+
+    def writer(target, entry):
+        Path(target).write_bytes(b"hello")
+
+    pak._write_to_disk = writer
+    monkeypatch.setattr(core, "BASE_DIR", tmp_path / "debug")
+    stats = pak.dump(tmp_path / "out")
+
+    assert stats["ok"] is True
+    assert stats["written_files"] == 1
+    assert (tmp_path / "out" / "Game" / "Assets" / "Lua" / "BRPlayerCharacterBase.lua").read_bytes() == b"hello"
+
+
+def test_dump_rejects_nested_entry_path_escape(tmp_path, monkeypatch):
+    pak = object.__new__(core.TencentPakFile)
+    pak._mount_point = PurePath()
+    pak._index = {
+        PurePath("Game"): {
+            "../outside.bin": SimpleNamespace(uncompressed_size=3),
+        }
+    }
+    pak._index_parse_stats = {"file_entries": 1, "loaded_directories": 1}
+    pak._write_to_disk = lambda target, entry: Path(target).write_bytes(b"bad")
+    monkeypatch.setattr(core, "BASE_DIR", tmp_path / "debug")
+
+    stats = pak.dump(tmp_path / "out")
+
+    assert stats["ok"] is False
+    assert stats["written_files"] == 0
+    assert stats["skipped_files"] == 1
+    assert not (tmp_path / "outside.bin").exists()
+
 def test_run_pak_unpack_rejects_empty_index(tmp_path, monkeypatch):
     class EmptyPak:
         def __init__(self, _path):
