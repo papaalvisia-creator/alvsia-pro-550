@@ -205,7 +205,7 @@ def test_tool_argument_and_storage_contracts():
     assert runner.count('getMethod("get", Any::class.java)') == 2
     assert 'getMethod("get", String::class.java)' not in runner
     assert "moduleId !in listOf(7, 13, 15)" not in engine
-    assert 'return subId !in setOf("frida_js_dump", "frida_spawn", "xor_batch")' in engine
+    assert 'return subId !in setOf("frida_js_dump", "frida_spawn", "xor_batch", "xor_selftest", "dec_selftest")' in engine
     config_schema = (ROOT / "app/src/main/java/com/alvsia/pro/tool/SubToolConfig.kt").read_text(encoding="utf-8")
     assert '"frida_js_dump", "frida_spawn" -> listOf(' in config_schema
     assert '"frida_jni_hook", "frida_spawn" -> listOf(' not in config_schema
