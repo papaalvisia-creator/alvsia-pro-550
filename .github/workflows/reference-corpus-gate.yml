@@ -1,5 +1,8 @@
 name: ALVSIA Reference Corpus Runtime Gate
 
+env:
+  REFERENCE_CORPUS_REV: a5b889e3477b7e5b8fb22060cb24f248f3dfe757
+
 on:
   push:
     branches:
@@ -26,7 +29,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: papaalvisia-creator/kumpulan-source-tool
-          ref: main
+          ref: ${{ env.REFERENCE_CORPUS_REV }}
           path: reference-corpus
 
       - name: Set up Python
