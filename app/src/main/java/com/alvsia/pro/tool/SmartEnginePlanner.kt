@@ -27,6 +27,29 @@ object SmartEnginePlanner {
         fun choose(vararg ids: String): SubTool =
             ids.firstNotNullOfOrNull { byId[it] } ?: actions.first()
 
+        // Expanded Smart capabilities are orchestration surfaces over validated
+        // providers. They intentionally do not expose the underlying operation list.
+        val capabilitySelected = when (submenu.id) {
+            "smart_asset_modding" -> when {
+                name.contains("rebuild") || name.contains("repack") -> choose("asset_rebuild")
+                name.contains("inject") || hasFiles("MOD") -> choose("asset_inject")
+                name.contains("integrity") -> choose("asset_integrity")
+                else -> choose("asset_extract")
+            }
+            "smart_crypto_compression" -> when {
+                name.contains("zstd") || name.contains("zstandard") -> choose("crypto_zstd")
+                name.contains("sm4") -> choose("crypto_sm4")
+                else -> choose("crypto_probe", "transform_probe")
+            }
+            "smart_binary_forensics" -> when {
+                name.endsWith(".so") || name.endsWith(".bin") -> choose("binary_endpoints", "binary_strings")
+                name.contains("audit") -> choose("binary_behavior_triage")
+                else -> choose("binary_strings")
+            }
+            else -> null
+        }
+        if (capabilitySelected != null) return capabilitySelected
+
         // A format detector can nominate an implementation only inside this
         // submenu. Cross-menu suggestions are deliberately ignored.
         val detected = detection?.suggestedSubtool?.let { byId[it] }
@@ -115,7 +138,7 @@ object SmartEnginePlanner {
                 name.endsWith(".vm.lua") -> choose("lua_vm_protect")
                 else -> choose("lua_smart_protect")
             }
-            20 -> choose("asset_fingerprint", "asset_scan_ids", "asset_context", "asset_validate")\n            19 -> when {
+            19 -> when {
                 name.contains(".zuc.enc") -> choose("priv_zuc_decrypt")
                 name.contains(".compress.") -> choose("priv_compress_fit")
                 name.contains("heping") -> choose("priv_lua_heping")
@@ -143,7 +166,23 @@ object SmartEnginePlanner {
         val actions = submenu.actions.associateBy { it.id }
         fun get(vararg ids: String): List<SubTool> = ids.mapNotNull { actions[it] }
         val provider = submenu.legacyModuleId ?: primary.legacyModuleId ?: 0
-        val stages = when (provider) {
+        val stages = when (submenu.id) {
+            "smart_asset_modding" -> when (primary.id) {
+                "asset_extract" -> get("asset_extract", "asset_integrity")
+                "asset_rebuild", "asset_inject" -> get(primary.id, "asset_integrity")
+                else -> listOf(primary)
+            }
+            "smart_crypto_compression" -> when (primary.id) {
+                "crypto_probe" -> get("crypto_probe", "crypto_zstd")
+                "transform_probe" -> get("crypto_selftest", "transform_probe")
+                else -> listOf(primary)
+            }
+            "smart_binary_forensics" -> when (primary.id) {
+                "string_scan" -> get("binary_strings", "binary_hash")
+                "so_url_dump" -> get("binary_endpoints", "binary_xor_probe")
+                else -> listOf(primary)
+            }
+            else -> when (provider) {
             // Full PAK unpack already owns its extraction/index validation pipeline.
             1, 2, 3, 5, 7, 8, 9, 16, 17, 18, 19 -> listOf(primary)
             4 -> if (primary.id == "obb_unzip")
@@ -166,6 +205,7 @@ object SmartEnginePlanner {
                 else -> listOf(primary)
             }
             else -> listOf(primary)
+        }
         }
         return stages.distinctBy { it.id }.ifEmpty { listOf(primary) }
     }
