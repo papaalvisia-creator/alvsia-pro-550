@@ -169,6 +169,20 @@ class ToolEngine(private val context: Context) {
             notes.add("X Selected file exceeds the 5 GB per-file import limit")
             return "" to notes
         }
+        // All stages in one Smart Engine task share the same immutable IN snapshot.
+        // Reusing it avoids copying a multi-GB source once per internal implementation.
+        val snapshot = File(WorkPaths.taskModuleIn(taskId, moduleId), safe)
+        if (snapshot.isFile && snapshot.length() > 0L) {
+            val snapshotHash = try { sha256(snapshot) } catch (_: Exception) { "" }
+            if (snapshotHash.isNotBlank()) {
+                notes.add("OK INPUT reused from same Smart Engine task -> ${snapshot.absolutePath}")
+                notes.add("size ${snapshot.length()} bytes")
+                notes.add("SHA-256 ${snapshotHash}")
+                notes.add("OK all pipeline stages share the verified immutable input snapshot")
+                onProgress?.invoke("INPUT VERIFIED", null)
+                return snapshot.absolutePath to notes
+            }
+        }
         val staged = File(WorkPaths.taskModuleWork(taskId, moduleId), "in_${System.currentTimeMillis()}_$safe")
         onProgress?.invoke("STAGING INPUT", 0)
         val sourceHash = copyUri(uri, staged, onProgress)
