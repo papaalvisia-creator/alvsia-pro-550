@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Guard the seven-menu / expanded-submenu Unified Engine contract."""
+"""Guard the exact seven-menu / twenty-two-submenu Unified Engine contract."""
 from pathlib import Path
 import re
 
@@ -31,7 +31,7 @@ assert icon_ids == expected_ids
 
 group_section = submenus.split("fun forModule(moduleId: Int)", 1)[1].split("private fun moduleGroup", 1)[0]
 legacy_ids = [int(x) for x in re.findall(r'moduleGroup\(\s*(\d+)\s*,', group_section)]
-assert len(legacy_ids) == 19, f"expected exactly 19 legacy submenu groups, got {len(legacy_ids)}"
+assert len(legacy_ids) == 19, f"expected exactly 19 legacy submenu providers, got {len(legacy_ids)}"
 assert sorted(legacy_ids) == list(range(1, 20)), f"legacy module coverage mismatch: {legacy_ids}"
 
 legacy_section = submenus.split("private fun legacyOperations", 1)[1]
@@ -57,8 +57,18 @@ assert "SmartEnginePlanner.resolve" in workspace
 assert "fun plan(" in planner
 assert "SmartEnginePlanner.plan(sub, operation" in main
 assert "for ((index, stageRoute) in routes.withIndex())" in main
-for provider_id in range(1, 21):
+for provider_id in range(1, 20):
     assert f"            {provider_id} ->" in planner, f"Smart planner missing provider {provider_id}"
-assert "detection?.suggestedSubtool" in planner\nasset_section = group_section\nassert "SMART ASSET MODDING ENGINE" in submenus\nassert "asset_fingerprint" in submenus\nassert "asset_patch" in submenus\nassert "legacyModuleId = 20" in submenus\nassert "20 -> choose" in planner\nassert "providerModuleId" in facade
+assert "detection?.suggestedSubtool" in planner
 
-print("UNIFIED CATALOG: PASS (7 menus, 20 submenus: 19 legacy providers + Smart Asset provider, 89 retained legacy operations; no nested operation picker)")
+capability_ids = re.findall(r'capabilityGroup\("([^"]+)"', group_section)
+assert sorted(capability_ids) == [
+    "smart_asset_modding",
+    "smart_binary_forensics",
+    "smart_crypto_compression",
+], f"expanded capability coverage mismatch: {capability_ids}"
+assert "SMART ASSET MODDING ENGINE" in submenus
+assert "SMART CRYPTO & COMPRESSION ENGINE" in submenus
+assert "SMART BINARY FORENSICS ENGINE" in submenus
+
+print("UNIFIED CATALOG: PASS (7 menus, 22 visible submenus, 19 legacy providers, 89 retained internal operations; no nested operation picker)")
