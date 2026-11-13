@@ -31,20 +31,20 @@ object SmartEnginePlanner {
         // providers. They intentionally do not expose the underlying operation list.
         val capabilitySelected = when (submenu.id) {
             "smart_asset_modding" -> when {
-                name.contains("rebuild") || name.contains("repack") -> choose("pak_repack_full")
-                name.contains("inject") || hasFiles("MOD") -> choose("pak_inject")
-                name.contains("integrity") -> choose("pak_deep_integrity_audit")
-                else -> choose("pak_full_unpack")
+                name.contains("rebuild") || name.contains("repack") -> choose("asset_rebuild")
+                name.contains("inject") || hasFiles("MOD") -> choose("asset_inject")
+                name.contains("integrity") -> choose("asset_integrity")
+                else -> choose("asset_extract")
             }
             "smart_crypto_compression" -> when {
-                name.contains("zstd") || name.contains("zstandard") -> choose("pak_deep_zstd")
-                name.contains("sm4") -> choose("dec_sm4")
-                else -> choose("pak_deep_auto", "dec_auto")
+                name.contains("zstd") || name.contains("zstandard") -> choose("crypto_zstd")
+                name.contains("sm4") -> choose("crypto_sm4")
+                else -> choose("crypto_probe", "transform_probe")
             }
             "smart_binary_forensics" -> when {
-                name.endsWith(".so") || name.endsWith(".bin") -> choose("so_url_dump", "string_scan")
-                name.contains("audit") -> choose("anti_re_source_triage")
-                else -> choose("string_scan")
+                name.endsWith(".so") || name.endsWith(".bin") -> choose("binary_endpoints", "binary_strings")
+                name.contains("audit") -> choose("binary_behavior_triage")
+                else -> choose("binary_strings")
             }
             else -> null
         }
@@ -168,18 +168,18 @@ object SmartEnginePlanner {
         val provider = submenu.legacyModuleId ?: primary.legacyModuleId ?: 0
         val stages = when (submenu.id) {
             "smart_asset_modding" -> when (primary.id) {
-                "pak_full_unpack" -> get("pak_full_unpack", "pak_deep_integrity_audit")
-                "pak_repack_full", "pak_inject" -> get(primary.id, "pak_deep_integrity_audit")
+                "pak_full_unpack" -> get("asset_extract", "asset_integrity")
+                "pak_repack_full", "pak_inject" -> get(primary.id, "asset_integrity")
                 else -> listOf(primary)
             }
             "smart_crypto_compression" -> when (primary.id) {
-                "pak_deep_auto" -> get("pak_deep_auto", "pak_deep_zstd")
-                "dec_auto" -> get("dec_selftest", "dec_auto")
+                "pak_deep_auto" -> get("crypto_probe", "crypto_zstd")
+                "dec_auto" -> get("crypto_selftest", "transform_probe")
                 else -> listOf(primary)
             }
             "smart_binary_forensics" -> when (primary.id) {
-                "string_scan" -> get("string_scan", "hash_scan")
-                "so_url_dump" -> get("so_url_dump", "so_xor_scan")
+                "string_scan" -> get("binary_strings", "binary_hash")
+                "so_url_dump" -> get("binary_endpoints", "binary_xor_probe")
                 else -> listOf(primary)
             }
             else -> when (provider) {
