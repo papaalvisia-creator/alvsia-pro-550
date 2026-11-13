@@ -83,7 +83,7 @@ private fun selectedDisplayName(context: Context, uri: Uri): String? = try {
  * New features:
  *  • Inline Config Editor — renders form fields for subtools that need config files
  *  • Recent Files carousel — 1 tap to reuse last 10 files
- *  • Auto-Detect file → suggest subtool (shows detection banner)
+ *  • Auto-Detect file → automatic internal routing (no nested operation picker)
  *  • Color-coded log — green=OK, red=X, yellow=info, blue=header
  *  • Output preview inline — shows first 30 lines of text output after RUN
  *  • COPY / SAVE / OPEN FOLDER buttons on log
