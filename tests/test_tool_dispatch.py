@@ -142,18 +142,15 @@ def test_frida_spawn_preserves_full_package_name():
         assert "-f com.tencent " not in output, output
 
 
-def test_smart_lua_exposes_exactly_four_engines():
+def test_smart_lua_groups_all_four_legacy_lua_modules():
     menus = MENUS.read_text(encoding="utf-8")
-    lua_menu = menus.split("1 -> listOf(", 1)[1].split("\n        2 -> listOf(", 1)[0]
-    ids = re.findall(r'SubTool\(\s*"([a-zA-Z0-9_]+)"', lua_menu)
-    assert ids == [
-        "lua_decompile", "lua_smart_protect", "lua_compile", "lua_patch_byte"
-    ], f"SMART LUA must expose exactly four engines, got {ids}"
-    for internal in ("lua_analyze", "lua_smart_protect_strong",
-                     "lua_protect_encrypt", "lua_vm_protect",
-                     "lua_inject_hook", "lua_mod_repack"):
-        assert internal not in ids, f"{internal} must remain internal to Smart Lua"
-
+    lua_menu = menus.split("1 -> listOf(", 1)[1].split("\\n        2 -> listOf(", 1)[0]
+    module_ids = [int(x) for x in re.findall(r'moduleGroup\\(\\s*(\\d+)\\s*,', lua_menu)]
+    assert module_ids == [5, 15, 16, 18], f"SMART LUA must group legacy modules 5/15/16/18, got {module_ids}"
+    legacy = menus.split("private fun legacyOperations", 1)[1]
+    for operation in ("lua_decompile", "str_recover", "lua_patch_byte", "lua_smart_protect",
+                      "lua_smart_protect_strong", "lua_protect_encrypt", "lua_vm_protect"):
+        assert f'"{operation}"' in legacy, f"legacy Lua operation missing: {operation}"
 
 def test_catalog_contains_compact_smart_modules():
     catalog = CATALOG.read_text(encoding="utf-8")
@@ -166,19 +163,20 @@ def test_catalog_contains_compact_smart_modules():
     assert 'ToolItem(7, "ALVSIA PRIVATE"' in catalog
 
 
-def test_private_module_is_compact_and_dispatchable():
+def test_private_module_is_one_group_with_all_sealed_operations():
     menus = MENUS.read_text(encoding="utf-8")
     catalog = CATALOG.read_text(encoding="utf-8")
     router = ROUTER.read_text(encoding="utf-8")
-    bridge = BRIDGE.read_text(encoding="utf-8") + "\n" + BRIDGE_IMPL.read_text(encoding="utf-8")
+    bridge = BRIDGE.read_text(encoding="utf-8") + "\\n" + BRIDGE_IMPL.read_text(encoding="utf-8")
     assert '7 -> "ALVSIA PRIVATE"' in menus
     assert 'ToolItem(7, "ALVSIA PRIVATE"' in catalog
-    expected = ["priv_lua_parse", "priv_lua_convert", "priv_pak_manifest"]
+    assert 'moduleGroup(19, "ALVSIA PRIVATE ENGINE"' in menus
+    private_section = menus.split("19 -> listOf(", 1)[1].split("\\n    )", 1)[0]
+    expected = re.findall(r'SubTool\\(\\s*"([^"]+)"', private_section)
+    assert len(expected) == 12, f"expected all 12 private actions, got {expected}"
     for sid in expected:
-        assert f'"{sid}"' in menus
-        assert f'"{sid}"' in bridge or f'"{sid}"' in router
-    assert "sealed runtime required" in menus.lower() or "private" in menus.lower()
-
+        assert f'"{sid}"' in bridge or f'"{sid}"' in router, f"private operation not dispatchable: {sid}"
+    assert "ALVSIA_SEALED_RUNTIME" in bridge
 
 def test_engine_surfaces_bridge_failures():
     engine = ENGINE.read_text(encoding="utf-8")
