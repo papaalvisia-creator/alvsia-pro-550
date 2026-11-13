@@ -168,13 +168,13 @@ object SmartEnginePlanner {
         val provider = submenu.legacyModuleId ?: primary.legacyModuleId ?: 0
         val stages = when (submenu.id) {
             "smart_asset_modding" -> when (primary.id) {
-                "pak_full_unpack" -> get("asset_extract", "asset_integrity")
-                "pak_repack_full", "pak_inject" -> get(primary.id, "asset_integrity")
+                "asset_extract" -> get("asset_extract", "asset_integrity")
+                "asset_rebuild", "asset_inject" -> get(primary.id, "asset_integrity")
                 else -> listOf(primary)
             }
             "smart_crypto_compression" -> when (primary.id) {
-                "pak_deep_auto" -> get("crypto_probe", "crypto_zstd")
-                "dec_auto" -> get("crypto_selftest", "transform_probe")
+                "crypto_probe" -> get("crypto_probe", "crypto_zstd")
+                "transform_probe" -> get("crypto_selftest", "transform_probe")
                 else -> listOf(primary)
             }
             "smart_binary_forensics" -> when (primary.id) {
