@@ -91,7 +91,11 @@ object SmartEnginePlanner {
                 name.contains("integrity") -> choose("pak_deep_integrity_audit")
                 else -> choose("pak_deep_auto")
             }
-            15 -> if (name.contains(".xref.")) choose("str_xref") else choose("str_recover")
+            15 -> when {
+                name.contains(".constants.") -> choose("str_constant_pool")
+                name.contains(".xref.") -> choose("str_xref")
+                else -> choose("str_recover")
+            }
             16 -> when {
                 name.contains(".hook.") -> choose("lua_inject_hook")
                 hasFiles("MOD") -> choose("lua_mod_repack")
@@ -156,9 +160,11 @@ object SmartEnginePlanner {
                 else get("dec_selftest") + listOf(primary)
             14 -> if (primary.id == "pak_deep_auto")
                 get("pak_deep_integrity_audit", "pak_deep_auto") else listOf(primary)
-            15 -> if (primary.id == "str_xref" || File(workDir, "xref_query.txt").isFile)
-                get("str_recover", "str_constant_pool", "str_xref")
-                else get("str_recover", "str_constant_pool")
+            15 -> when (primary.id) {
+                "str_xref" -> get("str_recover", "str_xref")
+                "str_constant_pool" -> listOf(primary)
+                else -> listOf(primary)
+            }
             else -> listOf(primary)
         }
         return stages.distinctBy { it.id }.ifEmpty { listOf(primary) }
