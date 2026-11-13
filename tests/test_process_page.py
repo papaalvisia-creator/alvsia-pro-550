@@ -18,7 +18,7 @@ class UnifiedProcessPageTests(unittest.TestCase):
 
     def test_destructive_workspace_clear_requires_explicit_confirmation(self):
         source = SCREEN.read_text(encoding="utf-8")
-        self.assertIn('var confirmClearWorkspace by remember(sub.id) { mutableStateOf(false) }', source)
+        self.assertIn('var confirmClearWorkspace by remember(operation.id) { mutableStateOf(false) }', source)
         self.assertIn('if (operation.id == "clear_work")', source)
         self.assertIn('if (confirmClearWorkspace)', source)
         self.assertIn('This action permanently removes files in WORK and OUT', source)
