@@ -2890,6 +2890,7 @@ def run_pak_unpack(pak_path, out_dir, authorization_operation='pak.unpack'):
         written = int(stats.get('written_files', 0))
         skipped = int(stats.get('skipped_files', 0))
         actual_on_disk = sum(1 for p in out_dir.rglob('*') if p.is_file())
+        stats["on_disk"] = actual_on_disk
         if expected <= 0:
             return {
                 'ok': False,
