@@ -24,6 +24,19 @@ class UnifiedProcessPageTests(unittest.TestCase):
         self.assertIn('This action permanently removes files in WORK and OUT', source)
         self.assertIn('Text("CANCEL"', source)
 
+
+    def test_smart_submenu_has_no_nested_operation_picker_and_auto_routes(self):
+        source = SCREEN.read_text(encoding="utf-8")
+        planner = (ROOT / "app/src/main/java/com/alvsia/pro/tool/SmartEnginePlanner.kt").read_text(encoding="utf-8")
+        self.assertNotIn("SELECT OPERATION", source)
+        self.assertNotIn("showActionPicker", source)
+        self.assertIn("SmartEnginePlanner.resolve", source)
+        self.assertIn("fun resolve(", planner)
+        for provider_id in range(1, 20):
+            self.assertRegex(planner, rf"(?m)^\\s*{provider_id}\\s*->")
+        self.assertIn("detection?.suggestedSubtool", planner)
+        self.assertIn("actions.associateBy", planner)
+
     def test_existing_run_config_and_log_export_paths_remain(self):
         source = SCREEN.read_text(encoding="utf-8")
         self.assertIn("onRun(uri, null)", source)
