@@ -32,5 +32,5 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - name: Validate 19-module catalog consistency
+      - name: Validate 7x22 Smart catalog consistency
         run: python3 tests/test_module_catalog_consistency.py
