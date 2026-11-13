@@ -37,7 +37,7 @@ import com.alvsia.pro.sec.Tamper
 import com.alvsia.pro.sec.ThreatReport
 import com.alvsia.pro.sec.TelegramNotifier
 import com.alvsia.pro.sec.TacticalNotifier
-import com.alvsia.pro.tool.SmartModuleRouter
+import com.alvsia.pro.tool.UnifiedEngineFacade
 import com.alvsia.pro.tool.SubMenus
 import com.alvsia.pro.tool.SubTool
 import com.alvsia.pro.tool.ToolCatalog
@@ -399,9 +399,10 @@ class MainActivity : ComponentActivity() {
                                 onBack = { activeTaskId = null; activeOperation = null; screen = "submenu" },
                                 onRun = { uri, extra ->
                                     // All actions in a submenu route to their stable legacy provider ID.
-                                    val dispatchModuleId = SmartModuleRouter.backendModule(moduleId, operation.id, operation.legacyModuleId)
-                                    val dispatchSubId = SmartModuleRouter.normalizedSubId(moduleId, operation.id)
-                                    val taskId = TaskCenter.start(moduleId, operation.id, operation.title, uri?.lastPathSegment?.substringAfterLast("/") ?: "", null)
+                                    val route = UnifiedEngineFacade.resolve(moduleId, operation)
+                                    val dispatchModuleId = route.providerModuleId
+                                    val dispatchSubId = route.operationId
+                                    val taskId = TaskCenter.start(moduleId, route.operationId, route.operationTitle, uri?.lastPathSegment?.substringAfterLast("/") ?: "", null)
                                     activeTaskId = taskId
                                     // Raise process importance for the lifetime of this real tool run.
                                     // This does not replace or disable any engine; it protects long
