@@ -201,6 +201,8 @@ def test_tool_argument_and_storage_contracts():
     assert 'ult.pak_deep_zuc(ip, dest_pakd, key_hex, iv_hex)' in bridge
     assert "WorkPaths.dirWork()" in workspace
     assert "WorkPaths.dirOut()" in output_browser
+    assert "All stages in one Smart Engine task share the same immutable IN snapshot" in engine
+    assert "all pipeline stages share the verified immutable input snapshot" in engine
     assert "explicitTrue" in runner
     assert runner.count('getMethod("get", Any::class.java)') == 2
     assert 'getMethod("get", String::class.java)' not in runner
