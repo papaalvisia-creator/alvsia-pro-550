@@ -37,10 +37,22 @@ object SmartEnginePlanner {
                 name.contains("simple1") || name.endsWith(".enc.pak") -> choose("pak_decrypt_restore")
                 else -> choose("pak_repack_full")
             }
-            3 -> choose("pak_delete_entry")
+            3 -> if (name.contains(".empty.")) choose("pak_delete_all") else choose("pak_delete_entry")
             4 -> choose("obb_unzip")
-            5 -> detected ?: if (detection?.type == FileMagic.FileType.PLAIN_TEXT || name.endsWith(".lua"))
-                choose("lua_analyze", "lua_decompile") else choose("lua_decompile")
+            5 -> when {
+                name.contains(".constants.") -> choose("lua_constants")
+                name.contains(".clean.") -> choose("lua_clean_source")
+                name.contains(".multixor.") -> choose("lua_multi_xor")
+                name.contains(".xor.") -> choose("lua_xor_crypt")
+                name.contains("bgmi") || name.contains("pubg") -> choose("pubg_lua_convert")
+                name.contains("t24") -> choose("t24_lua_decompile")
+                detection?.suggestedSubtool == "lua_vm_deobfuscate" -> choose("lua_vm_deobfuscate")
+                detection?.suggestedSubtool == "lua_format_probe" -> choose("lua_format_probe")
+                detected != null -> detected
+                detection?.type == FileMagic.FileType.PLAIN_TEXT || name.endsWith(".lua") ->
+                    choose("lua_analyze", "lua_decompile")
+                else -> choose("lua_decompile")
+            }
             6 -> if (name.contains("global-metadata")) choose("metadata_v39_decode")
                  else choose("string_scan")
             7 -> choose("clear_work")
@@ -63,7 +75,14 @@ object SmartEnginePlanner {
                 name.endsWith(".luas") -> choose("xor_luas_strip")
                 else -> choose("xor_single_byte")
             }
-            13 -> choose("dec_auto")
+            13 -> when {
+                name.contains(".aes.cbc") -> choose("dec_aes_cbc")
+                name.contains(".aes.ecb") -> choose("dec_aes_ecb")
+                name.contains(".zuc.enc") -> choose("dec_zuc")
+                name.contains(".sm4.enc") -> choose("dec_sm4")
+                name.contains(".simple1.enc") -> choose("dec_simple1")
+                else -> choose("dec_auto")
+            }
             14 -> when {
                 name.endsWith(".so") -> choose("sm4_keyfind")
                 name.contains(".aes.") -> choose("pak_deep_aes")
