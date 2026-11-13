@@ -97,7 +97,6 @@ fun ToolWorkspaceScreen(
 ) {
     val ctx = LocalContext.current
     val operation = selectedAction
-    var showActionPicker by remember(operation.id) { mutableStateOf(false) }
     var uri by remember { mutableStateOf<Uri?>(null) }
     var detectionResult by remember { mutableStateOf<FileMagic.DetectionResult?>(null) }
     var selectedSize by remember { mutableStateOf<Long?>(null) }
@@ -127,12 +126,21 @@ fun ToolWorkspaceScreen(
     }
     var recentFiles by remember { mutableStateOf(UXStore.getRecentDisplayNames(ctx)) }
 
+    fun autoResolve(selectedUri: Uri?, detection: FileMagic.DetectionResult?) {
+        if (selectedUri == null) return
+        WorkPaths.bindApp(ctx)
+        val selectedName = selectedUri.lastPathSegment?.substringAfterLast('/') ?: ""
+        val resolved = SmartEnginePlanner.resolve(sub, actions, detection, selectedName, WorkPaths.dirWork())
+        if (resolved.id != operation.id) onSelectAction(resolved)
+    }
+
     LaunchedEffect(initialUri) {
         if (initialUri != null) {
             uri = initialUri
             selectedSize = selectedSizeBytes(ctx, initialUri)
             sizeRejected = selectedSize?.let { it > MAX_DIRECT_FILE_BYTES } == true
             detectionResult = FileMagic.detect(ctx, initialUri)
+            autoResolve(initialUri, detectionResult)
             UXStore.addRecent(ctx, initialUri)
             recentFiles = UXStore.getRecentDisplayNames(ctx)
         }
@@ -148,6 +156,7 @@ fun ToolWorkspaceScreen(
             UXStore.addRecent(ctx, u)
             recentFiles = UXStore.getRecentDisplayNames(ctx)
             detectionResult = FileMagic.detect(ctx, u)
+            autoResolve(u, detectionResult)
         }
     }
 
@@ -180,14 +189,8 @@ fun ToolWorkspaceScreen(
             )
         }
         Text(moduleTitle, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 15.sp)
-        Text(sub.title, color = AlvisiaCyan, fontSize = 13.sp)
-        Text(operation.title, color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-        Text(operation.guide, color = AlvisiaSilver.copy(alpha = 0.6f), fontSize = 10.sp)
-        if (actions.size > 1) {
-            TextButton(onClick = { showActionPicker = true }) {
-                Text("SELECT OPERATION  ▾", color = AlvisiaCyan, fontSize = 10.sp, fontWeight = FontWeight.Bold)
-            }
-        }
+        Text(sub.title, color = AlvisiaCyan, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+        Text(sub.desc, color = AlvisiaSilver.copy(alpha = 0.65f), fontSize = 10.sp)
         Spacer(Modifier.height(8.dp))
 
         // ── Recent Files carousel ───────────────────────────────────────
@@ -211,10 +214,12 @@ fun ToolWorkspaceScreen(
                             .border(1.dp, AlvisiaBlue.copy(alpha = 0.3f), RoundedCornerShape(8.dp))
                             .padding(horizontal = 8.dp, vertical = 4.dp)
                             .clickable {
-                                uri = Uri.parse(uriStr)
-                                selectedSize = selectedSizeBytes(ctx, Uri.parse(uriStr))
+                                val recentUri = Uri.parse(uriStr)
+                                uri = recentUri
+                                selectedSize = selectedSizeBytes(ctx, recentUri)
                                 sizeRejected = selectedSize?.let { it > MAX_DIRECT_FILE_BYTES } == true
-                                detectionResult = FileMagic.detect(ctx, Uri.parse(uriStr))
+                                detectionResult = FileMagic.detect(ctx, recentUri)
+                                autoResolve(recentUri, detectionResult)
                             }
                     )
                 }
@@ -498,35 +503,7 @@ fun ToolWorkspaceScreen(
                 }
             }
         }
-        if (showActionPicker) {
-            AlertDialog(
-                onDismissRequest = { showActionPicker = false },
-                title = { Text("Choose operation") },
-                text = {
-                    LazyColumn {
-                        items(actions) { action ->
-                            TextButton(
-                                onClick = {
-                                    onSelectAction(action)
-                                    showActionPicker = false
-                                },
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Text(
-                                    action.title,
-                                    color = if (action.id == operation.id) AlvisiaCyan else AlvisiaSilver
-                                )
-                            }
-                        }
-                    }
-                },
-                confirmButton = {
-                    TextButton(onClick = { showActionPicker = false }) {
-                        Text("CLOSE", color = AlvisiaCyan)
-                    }
-                }
-            )
-        }
+
         if (confirmClearWorkspace) {
             AlertDialog(
                 onDismissRequest = { confirmClearWorkspace = false },
