@@ -521,7 +521,7 @@ def test_private_module_uses_dedicated_workspace_paths():
 if __name__ == "__main__":
     tests = (
         test_python_auth_normalizes_java_string_and_lua_avoids_art_oom,
-        test_sm4_47_modders_authoritative_secret_set,
+        test_sm4_registry_contains_no_embedded_secret_material,
         test_menu_ids_are_unique_and_reachable,
         test_catalog_contains_compact_smart_modules,
         test_smart_lua_groups_all_four_legacy_lua_modules,
