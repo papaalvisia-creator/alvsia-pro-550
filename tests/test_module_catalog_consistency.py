@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Guard the exact seven-menu / nineteen-submenu Unified Engine contract."""
+"""Guard the seven-menu / expanded-submenu Unified Engine contract."""
 from pathlib import Path
 import re
 
@@ -31,7 +31,7 @@ assert icon_ids == expected_ids
 
 group_section = submenus.split("fun forModule(moduleId: Int)", 1)[1].split("private fun moduleGroup", 1)[0]
 legacy_ids = [int(x) for x in re.findall(r'moduleGroup\(\s*(\d+)\s*,', group_section)]
-assert len(legacy_ids) == 19, f"expected exactly 19 submenu groups, got {len(legacy_ids)}"
+assert len(legacy_ids) == 19, f"expected exactly 19 legacy submenu groups, got {len(legacy_ids)}"
 assert sorted(legacy_ids) == list(range(1, 20)), f"legacy module coverage mismatch: {legacy_ids}"
 
 legacy_section = submenus.split("private fun legacyOperations", 1)[1]
@@ -59,6 +59,6 @@ assert "SmartEnginePlanner.plan(sub, operation" in main
 assert "for ((index, stageRoute) in routes.withIndex())" in main
 for provider_id in range(1, 20):
     assert f"            {provider_id} ->" in planner, f"Smart planner missing provider {provider_id}"
-assert "detection?.suggestedSubtool" in planner
+assert "detection?.suggestedSubtool" in planner\nasset_section = group_section\nassert "SMART ASSET MODDING ENGINE" in submenus\nassert "asset_fingerprint" in submenus\nassert "asset_patch" in submenus\nassert "legacyModuleId = 20" in submenus\nassert "20 -> choose" in planner\nassert "providerModuleId" in facade
 
-print("UNIFIED CATALOG: PASS (7 menus, 19 submenus, 19 legacy providers, 89 retained internal operations; no nested operation picker)")
+print("UNIFIED CATALOG: PASS (7 menus, 20 submenus: 19 legacy providers + Smart Asset provider, 89 retained legacy operations; no nested operation picker)")
