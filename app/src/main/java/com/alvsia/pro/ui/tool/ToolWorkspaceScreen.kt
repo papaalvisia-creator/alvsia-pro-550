@@ -236,7 +236,7 @@ fun ToolWorkspaceScreen(
         }
 
         // ── File picker ────────────────────────────────────────────────
-        if (operation.needsFile) {
+        if (operation.needsFile || actions.any { it.needsFile }) {
             Button(
                 onClick = { picker.launch("*/*") },
                 colors = ButtonDefaults.buttonColors(containerColor = AlvisiaBlue),
