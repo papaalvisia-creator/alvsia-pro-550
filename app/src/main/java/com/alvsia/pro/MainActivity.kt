@@ -109,6 +109,7 @@ class MainActivity : ComponentActivity() {
                 var pendingInputUri by remember { mutableStateOf<Uri?>(null) }
                 var moduleReturnScreen by remember { mutableStateOf("home") }
                 var activeSub by remember { mutableStateOf<SubTool?>(null) }
+                var activeOperation by remember { mutableStateOf<SubTool?>(null) }
                 var activeTaskId by remember { mutableStateOf<String?>(null) }
                 val ctx = LocalContext.current
                 val hwid = remember { Hwid.deviceId(ctx) }
@@ -159,6 +160,7 @@ class MainActivity : ComponentActivity() {
                         "tool" -> {
                             activeTaskId = null
                             activeSub = null
+                            activeOperation = null
                             screen = "submenu"
                         }
                         "submenu" -> {
@@ -340,6 +342,7 @@ class MainActivity : ComponentActivity() {
                             pendingInputUri = null
                             moduleId = t.id
                             activeSub = null
+                            activeOperation = null
                             activeTaskId = null
                             screen = "submenu"
                         }
@@ -357,6 +360,7 @@ class MainActivity : ComponentActivity() {
                                     moduleReturnScreen = "studio"
                                     moduleId = t.id
                                     activeSub = null
+                                    activeOperation = null
                                     activeTaskId = null
                                     screen = "submenu"
                                 }
@@ -368,36 +372,44 @@ class MainActivity : ComponentActivity() {
                         moduleId = moduleId,
                         items = SubMenus.forModule(moduleId),
                         onBack = { screen = moduleReturnScreen },
-                        onSelect = { sub ->
-                            activeSub = sub
-                            activeTaskId = TaskCenter.tasks.lastOrNull { it.moduleId == moduleId && it.subId == sub.id }?.id
+                        onSelect = { group ->
+                            activeSub = group
+                            activeOperation = group.actions.firstOrNull()
+                            activeTaskId = group.actions.firstOrNull()?.let { action ->
+                                TaskCenter.tasks.lastOrNull { it.moduleId == moduleId && it.subId == action.id }?.id
+                            }
                             screen = "tool"
                         }
                     )
                     "tool" -> {
                         val sub = activeSub
+                        val operation = activeOperation
                         val task = TaskCenter.find(activeTaskId)
-                        if (sub == null) {
+                        if (sub == null || operation == null) {
                             LaunchedEffect(Unit) { screen = "submenu" }
                         } else {
                             ToolWorkspaceScreen(
                                 moduleTitle = SubMenus.title(moduleId), moduleId = moduleId, sub = sub,
+                                actions = sub.actions, selectedAction = operation,
+                                onSelectAction = { action ->
+                                    activeOperation = action
+                                    activeTaskId = TaskCenter.tasks.lastOrNull { it.moduleId == moduleId && it.subId == action.id }?.id
+                                },
                                 running = task?.status == TaskStatus.RUNNING, logs = task?.logs ?: emptyList(),
-                                onBack = { activeTaskId = null; screen = "submenu" },
+                                onBack = { activeTaskId = null; activeOperation = null; screen = "submenu" },
                                 onRun = { uri, extra ->
-                                                                        // Visible UI uses only Smart engines. Provider IDs are internal
-// and selected centrally so legacy implementations never become menus.
-val dispatchModuleId = SmartModuleRouter.backendModule(moduleId, sub.id)
-val dispatchSubId = SmartModuleRouter.normalizedSubId(moduleId, sub.id)
-val taskId = TaskCenter.start(moduleId, sub.id, sub.title, uri?.lastPathSegment?.substringAfterLast("/") ?: "", null)
+                                    // All actions in a submenu route to their stable legacy provider ID.
+                                    val dispatchModuleId = SmartModuleRouter.backendModule(moduleId, operation.id, operation.legacyModuleId)
+                                    val dispatchSubId = SmartModuleRouter.normalizedSubId(moduleId, operation.id)
+                                    val taskId = TaskCenter.start(moduleId, operation.id, operation.title, uri?.lastPathSegment?.substringAfterLast("/") ?: "", null)
                                     activeTaskId = taskId
                                     // Raise process importance for the lifetime of this real tool run.
                                     // This does not replace or disable any engine; it protects long
                                     // native/Python work from low-memory/background reclaim.
                                     ToolExecutionService.begin(this@MainActivity)
-                                    RuntimeExitDiagnostics.markToolStart(this@MainActivity, moduleId, sub.id)
-                                    RuntimeExitDiagnostics.checkpoint(this@MainActivity, moduleId, sub.id, taskId, "STAGING INPUT", null)
-                                    TaskCenter.update(taskId, stage = "STAGING INPUT", logs = listOf("> preparing ${sub.id}..."))
+                                    RuntimeExitDiagnostics.markToolStart(this@MainActivity, moduleId, operation.id)
+                                    RuntimeExitDiagnostics.checkpoint(this@MainActivity, moduleId, operation.id, taskId, "STAGING INPUT", null)
+                                    TaskCenter.update(taskId, stage = "STAGING INPUT", logs = listOf("> preparing ${operation.id}..."))
                                     lifecycleScope.launch {
                                         try {
                                             val result = withContext(Dispatchers.IO) {
@@ -413,7 +425,7 @@ val taskId = TaskCenter.start(moduleId, sub.id, sub.title, uri?.lastPathSegment?
                                                             RuntimeExitDiagnostics.checkpoint(
                                                                 this@MainActivity,
                                                                 dispatchModuleId,
-                                                                sub.id,
+                                                                operation.id,
                                                                 taskId,
                                                                 stage,
                                                                 progress
@@ -442,10 +454,10 @@ val taskId = TaskCenter.start(moduleId, sub.id, sub.title, uri?.lastPathSegment?
                                             TaskCenter.complete(taskId, success, result)
                                             ToolExecutionService.end(this@MainActivity)
                                             RuntimeExitDiagnostics.markToolEnd(this@MainActivity)
-                                            val detail = "${sub.id}: " + (result.firstOrNull { it.startsWith("X ") } ?: if (success) "operation completed" else "operation needs review")
+                                            val detail = "${operation.id}: " + (result.firstOrNull { it.startsWith("X ") } ?: if (success) "operation completed" else "operation needs review")
                                             try {
-                                                TelegramNotifier.notifyModuleStatus(this@MainActivity, sub.title, if (success) "SUCCESS" else "ATTENTION", detail.take(200))
-                                                val scanLike = sub.id.contains("scan", ignoreCase = true) || sub.title.contains("scan", ignoreCase = true)
+                                                TelegramNotifier.notifyModuleStatus(this@MainActivity, operation.title, if (success) "SUCCESS" else "ATTENTION", detail.take(200))
+                                                val scanLike = operation.id.contains("scan", ignoreCase = true) || operation.title.contains("scan", ignoreCase = true)
                                                 if (scanLike) {
                                                     val scanCounts = mapOf(
                                                         "success" to result.count { it.startsWith("OK ") },
@@ -457,7 +469,7 @@ val taskId = TaskCenter.start(moduleId, sub.id, sub.title, uri?.lastPathSegment?
                                                 TelegramNotifier.notify(this@MainActivity, if (success) "TOOL_OK" else "TOOL_ERROR", detail.take(200), license)
                                             } catch (_: Throwable) { }
                                         } catch (t: Throwable) {
-                                            TaskCenter.complete(taskId, false, listOf("X UNEXPECTED TOOL FAILURE: ${t.javaClass.simpleName}: ${t.message ?: "no detail"}", "diagnostic: module=${moduleId}; subtool=${sub.id}", "Input file is preserved where staging completed."))
+                                            TaskCenter.complete(taskId, false, listOf("X UNEXPECTED TOOL FAILURE: ${t.javaClass.simpleName}: ${t.message ?: "no detail"}", "diagnostic: module=${moduleId}; subtool=${operation.id}", "Input file is preserved where staging completed."))
                                             ToolExecutionService.end(this@MainActivity)
                                             RuntimeExitDiagnostics.markToolEnd(this@MainActivity)
                                         }
