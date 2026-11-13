@@ -115,7 +115,7 @@ object SmartEnginePlanner {
                 name.endsWith(".vm.lua") -> choose("lua_vm_protect")
                 else -> choose("lua_smart_protect")
             }
-            19 -> when {
+            20 -> choose("asset_fingerprint", "asset_scan_ids", "asset_context", "asset_validate")\n            19 -> when {
                 name.contains(".zuc.enc") -> choose("priv_zuc_decrypt")
                 name.contains(".compress.") -> choose("priv_compress_fit")
                 name.contains("heping") -> choose("priv_lua_heping")
