@@ -23,7 +23,7 @@ object SmartEnginePlanner {
         val name = inputName.orEmpty().lowercase()
         fun hasConfig(file: String) = File(workDir, file).isFile && File(workDir, file).length() > 0L
         fun hasFiles(path: String): Boolean = File(workDir, path).let { dir ->
-            dir.isDirectory && dir.walkTopDown().any { it.isFile }
+            dir.isDirectory && !dir.list().isNullOrEmpty()
         }
         fun choose(vararg ids: String): SubTool =
             ids.firstNotNullOfOrNull { byId[it] } ?: actions.first()
