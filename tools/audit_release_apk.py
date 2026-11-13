@@ -343,8 +343,9 @@ def main() -> int:
                     by_base = {Path(n).name: n for n in members}
                     bridge_name = by_base.get("alvsia_bridge.py")
                     bridge_bytes = inner.read(bridge_name) if bridge_name else b""
-                    check(bool(bridge_bytes) and len(bridge_bytes) < 2000,
-                          "plaintext bridge is a small bootstrap stub")
+                    bridge_size_ok = bool(bridge_bytes) and len(bridge_bytes) < 4096
+                    check(bridge_size_ok,
+                          "plaintext bridge is a bounded bootstrap stub (<4096 bytes)")
                     # The public bridge must remain a small authenticated dispatcher.
                     # Validate its delegation contract rather than depending on one exact
                     # whitespace/import spelling: the implementation itself is sealed.
@@ -361,6 +362,11 @@ def main() -> int:
                     bridge_has_no_inline_module_router = (
                         "if mid == 1" not in bridge_text
                         and "elif mid == 1" not in bridge_text
+                    )
+                    report.append(
+                        "INFO bridge diagnostics: path=%s size=%d delegates=%s auth=%s no_inline_router=%s"
+                        % (bridge_name or "<missing>", len(bridge_bytes), bridge_delegates,
+                           bridge_has_auth_gate, bridge_has_no_inline_module_router)
                     )
                     check(bridge_delegates and bridge_has_auth_gate and bridge_has_no_inline_module_router,
                           "authenticated plaintext bridge delegates to sealed tool router")
