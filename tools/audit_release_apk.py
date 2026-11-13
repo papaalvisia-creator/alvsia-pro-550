@@ -345,8 +345,25 @@ def main() -> int:
                     bridge_bytes = inner.read(bridge_name) if bridge_name else b""
                     check(bool(bridge_bytes) and len(bridge_bytes) < 2000,
                           "plaintext bridge is a small bootstrap stub")
-                    check(b"import alvsia_bridge_impl as impl" in bridge_bytes and b"if mid == 1" not in bridge_bytes,
-                          "tool routing is not shipped in plaintext bridge")
+                    # The public bridge must remain a small authenticated dispatcher.
+                    # Validate its delegation contract rather than depending on one exact
+                    # whitespace/import spelling: the implementation itself is sealed.
+                    bridge_text = bridge_bytes.decode("utf-8", errors="replace")
+                    bridge_delegates = (
+                        "alvsia_bridge_impl" in bridge_text
+                        and "impl.run_tool" in bridge_text
+                        and "def run_tool" in bridge_text
+                    )
+                    bridge_has_auth_gate = (
+                        "_authorized()" in bridge_text
+                        and "ALVSIA_APK_SESSION" in bridge_text
+                    )
+                    bridge_has_no_inline_module_router = (
+                        "if mid == 1" not in bridge_text
+                        and "elif mid == 1" not in bridge_text
+                    )
+                    check(bridge_delegates and bridge_has_auth_gate and bridge_has_no_inline_module_router,
+                          "authenticated plaintext bridge delegates to sealed tool router")
                     actual_sealed = {Path(n).name for n in members if n.lower().endswith(".alv")}
                     missing = sorted(EXPECTED_SEALED - actual_sealed)
                     unexpected = sorted(actual_sealed - EXPECTED_SEALED)
