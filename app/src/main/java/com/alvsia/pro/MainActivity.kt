@@ -38,6 +38,8 @@ import com.alvsia.pro.sec.ThreatReport
 import com.alvsia.pro.sec.TelegramNotifier
 import com.alvsia.pro.sec.TacticalNotifier
 import com.alvsia.pro.tool.UnifiedEngineFacade
+import com.alvsia.pro.tool.SmartEnginePlanner
+import com.alvsia.pro.tool.WorkPaths
 import com.alvsia.pro.tool.SubMenus
 import com.alvsia.pro.tool.SubTool
 import com.alvsia.pro.tool.ToolCatalog
@@ -374,10 +376,14 @@ class MainActivity : ComponentActivity() {
                         onBack = { screen = moduleReturnScreen },
                         onSelect = { group ->
                             activeSub = group
-                            activeOperation = group.actions.firstOrNull()
-                            activeTaskId = group.actions.firstOrNull()?.let { action ->
-                                TaskCenter.tasks.lastOrNull { it.moduleId == moduleId && it.subId == action.id }?.id
-                            }
+                            WorkPaths.bindApp(ctx)
+                            val initialOperation = SmartEnginePlanner.resolve(
+                                group, group.actions, null, null, WorkPaths.dirWork()
+                            )
+                            activeOperation = initialOperation
+                            activeTaskId = TaskCenter.tasks.lastOrNull {
+                                it.moduleId == moduleId && it.subId == initialOperation.id
+                            }?.id
                             screen = "tool"
                         }
                     )
