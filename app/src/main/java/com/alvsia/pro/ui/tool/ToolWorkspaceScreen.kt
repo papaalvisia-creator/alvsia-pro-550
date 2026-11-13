@@ -86,6 +86,9 @@ fun ToolWorkspaceScreen(
     moduleTitle: String,
     moduleId: Int,
     sub: SubTool,
+    actions: List<SubTool> = emptyList(),
+    selectedAction: SubTool = sub,
+    onSelectAction: (SubTool) -> Unit = {},
     running: Boolean,
     logs: List<String>,
     onBack: () -> Unit,
@@ -93,11 +96,13 @@ fun ToolWorkspaceScreen(
     initialUri: Uri? = null
 ) {
     val ctx = LocalContext.current
+    val operation = selectedAction
+    var showActionPicker by remember(operation.id) { mutableStateOf(false) }
     var uri by remember { mutableStateOf<Uri?>(null) }
     var detectionResult by remember { mutableStateOf<FileMagic.DetectionResult?>(null) }
     var selectedSize by remember { mutableStateOf<Long?>(null) }
     var sizeRejected by remember { mutableStateOf(false) }
-    var logMode by remember(sub.id) { mutableStateOf("simple") }
+    var logMode by remember(operation.id) { mutableStateOf("simple") }
     var confirmClearWorkspace by remember(sub.id) { mutableStateOf(false) }
     val errorLine = logs.firstOrNull { it.startsWith("X ") }
     val successLine = logs.firstOrNull { it.startsWith("OK ") }
@@ -116,8 +121,8 @@ fun ToolWorkspaceScreen(
     }
 
     // Inline config form state: map of field name → user input value
-    val configSchema = remember(sub.id) { subToolConfig(sub.id) }
-    val configValues = remember(sub.id) {
+    val configSchema = remember(operation.id) { subToolConfig(operation.id) }
+    val configValues = remember(operation.id) {
         mutableStateOf(configSchema.associate { it.field to (it.default ?: "") })
     }
     var recentFiles by remember { mutableStateOf(UXStore.getRecentDisplayNames(ctx)) }
@@ -163,20 +168,26 @@ fun ToolWorkspaceScreen(
                 Text("← BACK", color = AlvisiaCyan, fontWeight = FontWeight.Bold, fontSize = 12.sp)
             }
             // Favorites star
-            var isFav by remember(sub.id) { mutableStateOf(UXStore.isFavorite(ctx, sub.id)) }
+            var isFav by remember(operation.id) { mutableStateOf(UXStore.isFavorite(ctx, operation.id)) }
             Text(
                 text = if (isFav) "★" else "☆",
                 color = if (isFav) Color(0xFFFFD700) else AlvisiaSilver.copy(alpha = 0.4f),
                 fontSize = 18.sp,
                 modifier = Modifier.clickable {
-                    UXStore.toggleFavorite(ctx, sub.id)
-                    isFav = UXStore.isFavorite(ctx, sub.id)
+                    UXStore.toggleFavorite(ctx, operation.id)
+                    isFav = UXStore.isFavorite(ctx, operation.id)
                 }
             )
         }
         Text(moduleTitle, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 15.sp)
         Text(sub.title, color = AlvisiaCyan, fontSize = 13.sp)
-        Text(sub.guide, color = AlvisiaSilver.copy(alpha = 0.6f), fontSize = 10.sp)
+        Text(operation.title, color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+        Text(operation.guide, color = AlvisiaSilver.copy(alpha = 0.6f), fontSize = 10.sp)
+        if (actions.size > 1) {
+            TextButton(onClick = { showActionPicker = true }) {
+                Text("SELECT OPERATION  ▾", color = AlvisiaCyan, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+            }
+        }
         Spacer(Modifier.height(8.dp))
 
         // ── Recent Files carousel ───────────────────────────────────────
@@ -212,7 +223,7 @@ fun ToolWorkspaceScreen(
         }
 
         // ── File picker ────────────────────────────────────────────────
-        if (sub.needsFile) {
+        if (operation.needsFile) {
             Button(
                 onClick = { picker.launch("*/*") },
                 colors = ButtonDefaults.buttonColors(containerColor = AlvisiaBlue),
@@ -254,7 +265,7 @@ fun ToolWorkspaceScreen(
                         Column {
                             Text("DETECTED: ${det.label}",
                                 color = AlvisiaCyan, fontSize = 10.sp, fontWeight = FontWeight.Bold)
-                            if (det.suggestedSubtool != null && det.suggestedSubtool != sub.id) {
+                            if (det.suggestedSubtool != null && det.suggestedSubtool != operation.id) {
                                 Text("Suggested: ${det.suggestedSubtool}",
                                     color = AlvisiaSilver.copy(alpha = 0.7f), fontSize = 9.sp)
                             }
@@ -305,7 +316,7 @@ fun ToolWorkspaceScreen(
         Button(
             onClick = {
                 if (!running) {
-                    if (sub.id == "clear_work") {
+                    if (operation.id == "clear_work") {
                         confirmClearWorkspace = true
                     } else {
                         // Write inline config values to WORK/ files transparently
@@ -335,7 +346,7 @@ fun ToolWorkspaceScreen(
                     }
                 }
             },
-            enabled = !running && (!sub.needsFile || (uri != null && !sizeRejected)),
+            enabled = !running && (!operation.needsFile || (uri != null && !sizeRejected)),
             colors = ButtonDefaults.buttonColors(containerColor = AlvisiaBlue),
             shape = RoundedCornerShape(10.dp),
             modifier = Modifier.fillMaxWidth().height(44.dp)
@@ -379,7 +390,7 @@ fun ToolWorkspaceScreen(
                 onClick = {
                     WorkPaths.bindApp(ctx)
                     val outFile = File(WorkPaths.dirOut(),
-                        "LOG_${sub.id}_${System.currentTimeMillis()}.txt")
+                        "LOG_${operation.id}_${System.currentTimeMillis()}.txt")
                     outFile.parentFile?.mkdirs()
                     outFile.writeText(logs.joinToString("\n"))
                 },
@@ -486,6 +497,35 @@ fun ToolWorkspaceScreen(
                     Text("📂 OPEN FOLDER", color = AlvisiaCyan, fontSize = 10.sp, fontWeight = FontWeight.Bold)
                 }
             }
+        }
+        if (showActionPicker) {
+            AlertDialog(
+                onDismissRequest = { showActionPicker = false },
+                title = { Text("Choose operation") },
+                text = {
+                    LazyColumn {
+                        items(actions) { action ->
+                            TextButton(
+                                onClick = {
+                                    onSelectAction(action)
+                                    showActionPicker = false
+                                },
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Text(
+                                    action.title,
+                                    color = if (action.id == operation.id) AlvisiaCyan else AlvisiaSilver
+                                )
+                            }
+                        }
+                    }
+                },
+                confirmButton = {
+                    TextButton(onClick = { showActionPicker = false }) {
+                        Text("CLOSE", color = AlvisiaCyan)
+                    }
+                }
+            )
         }
         if (confirmClearWorkspace) {
             AlertDialog(
