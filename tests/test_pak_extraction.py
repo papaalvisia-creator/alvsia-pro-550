@@ -53,9 +53,9 @@ def test_explicit_zstd_frame_is_recovered_when_index_marks_zlib():
     except ImportError:
         raise AssertionError("zstandard dependency is required for PAK ZSTD support")
 
-    plain = b"ALVSIA ZSTD frame-magic fallback regression\\n" * 256
+    plain = b"ALVSIA ZSTD frame-magic fallback regression\n" * 256
     frame = zstd.ZstdCompressor(level=3).compress(plain)
-    assert frame[:4] == b"\\x28\\xb5\\x2f\\xfd"
+    assert frame[:4] == b"\x28\xb5\x2f\xfd"
 
     recovered = core.PakCompression.decompress_block(
         frame, None, core.CM_ZLIB, max_output_size=len(plain)
