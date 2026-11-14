@@ -9,6 +9,7 @@ on:
       - 'app/**'
       - 'tools/**'
       - 'tests/**'
+      - 'research/**'
       - 'build.gradle.kts'
       - 'settings.gradle.kts'
       - 'gradle/**'
@@ -19,6 +20,7 @@ on:
       - 'app/**'
       - 'tests/**'
       - 'tools/**'
+      - 'research/**'
       - 'settings.gradle.kts'
       - 'gradle/**'
   workflow_dispatch:
