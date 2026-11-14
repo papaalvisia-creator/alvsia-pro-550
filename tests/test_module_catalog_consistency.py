@@ -60,8 +60,17 @@ assert "for ((index, stageRoute) in routes.withIndex())" in main
 for provider_id in range(1, 21):
     assert f"            {provider_id} ->" in planner, f"Smart planner missing provider {provider_id}"
 assert "detection?.suggestedSubtool" in planner
-assert "assetGroup()" in group_section
-assert len(legacy_ids) + group_section.count("assetGroup()") == 20
+asset_group_calls = re.findall(r'(?m)^\s*assetGroup\(\)\s*
+assert "SMART ASSET MODDING ENGINE" in submenus
+assert "asset_smart" in submenus
+assert "legacyModuleId = 20" in submenus
+assert '20 -> choose("asset_smart")' in planner
+assert "providerModuleId" in facade
+
+print("UNIFIED CATALOG: PASS (7 menus, 20 submenus: 19 legacy providers + Smart Asset provider, 89 retained legacy operations; no nested operation picker)")
+, group_section)
+assert len(asset_group_calls) == 1
+assert len(legacy_ids) + len(asset_group_calls) == 20
 assert "SMART ASSET MODDING ENGINE" in submenus
 assert "asset_smart" in submenus
 assert "legacyModuleId = 20" in submenus
