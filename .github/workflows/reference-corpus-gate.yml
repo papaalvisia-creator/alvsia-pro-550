@@ -23,6 +23,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 120
     steps:
+      - name: Checkout ALVSIA Smart Engine
+        uses: actions/checkout@v4
+
       - name: Check private corpus credential
         id: corpus-auth
         env:
@@ -42,9 +45,6 @@ jobs:
               echo "**BLOCKED_AUTHORIZATION** — configure the repository Actions secret `REFERENCE_CORPUS_TOKEN` with read access to `papaalvisia-creator/kumpulan-source-tool`."
             } >> "$GITHUB_STEP_SUMMARY"
           fi
-
-      - name: Checkout ALVSIA Smart Engine
-        uses: actions/checkout@v4
 
       - name: Checkout reference corpus
         if: steps.corpus-auth.outputs.available == 'true'
