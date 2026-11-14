@@ -33,7 +33,6 @@ jobs:
           BIN="$WORK/target/release/unluac-cli"
           test -x "$BIN"
           "$BIN" --help >/dev/null
-          echo "ALVSIA_UNLUAC_RS_BIN=$BIN" >> "$GITHUB_ENV"
       - name: Compile Lua engine modules
         run: |
           python - <<'PY'
@@ -57,6 +56,8 @@ jobs:
       - name: Run large-file bounded-memory regression tests
         run: timeout 120s python -m unittest discover -s tests -p 'test_large_file_streaming.py' -v
       - name: Run native unluac-rs high-work fallback integration
-        run: timeout 180s python -m pytest -vv -ra tests/test_unluac_rs_native_fallback.py
+        run: |
+          ALVSIA_UNLUAC_RS_BIN="$RUNNER_TEMP/unluac-rs/target/release/unluac-cli" \
+            timeout 180s python -m pytest -vv -ra tests/test_unluac_rs_native_fallback.py
       - name: Run Program Intelligence regression suite
         run: timeout 120s python -m unittest discover -s tests -p 'test_lua_intelligence_core.py' -v
