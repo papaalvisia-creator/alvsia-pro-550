@@ -115,7 +115,7 @@ object SmartEnginePlanner {
                 name.endsWith(".vm.lua") -> choose("lua_vm_protect")
                 else -> choose("lua_smart_protect")
             }
-            20 -> choose("asset_fingerprint", "asset_scan_ids", "asset_context", "asset_validate")\n            19 -> when {
+            19 -> when {
                 name.contains(".zuc.enc") -> choose("priv_zuc_decrypt")
                 name.contains(".compress.") -> choose("priv_compress_fit")
                 name.contains("heping") -> choose("priv_lua_heping")
@@ -130,6 +130,7 @@ object SmartEnginePlanner {
                 name.endsWith(".bin") -> choose("priv_xor_recover")
                 else -> choose("priv_entropy_map")
             }
+            20 -> choose("asset_smart")
             else -> detected ?: actions.first()
         }
         return selected
