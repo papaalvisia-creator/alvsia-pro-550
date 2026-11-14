@@ -46,12 +46,6 @@ def test_real_pak_manifest_entry():
     )
 
 
-if __name__ == "__main__":
-    test_limits_and_detection()
-    test_real_pak_manifest_entry()
-    print("SMART PAK/LUA PIPELINE CONTRACT: PASS")
-
-
 
 def test_smart_pak_lua_processes_written_entries_when_other_entries_are_blocked(
     tmp_path, monkeypatch
@@ -126,3 +120,11 @@ def test_smart_pak_lua_reports_success_only_when_extraction_and_recovery_are_com
     assert result["ok"] is True
     assert result["final_status"] == "SUCCESS"
     assert result["decompile"]["success"] == 1
+
+
+if __name__ == "__main__":
+    test_limits_and_detection()
+    test_real_pak_manifest_entry()
+    print("SMART PAK/LUA PIPELINE CONTRACT: PASS")
+
+
