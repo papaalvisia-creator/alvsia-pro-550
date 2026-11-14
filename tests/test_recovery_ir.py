@@ -79,3 +79,16 @@ def test_planner_exposes_recovery_pipeline():
         "observe", "route", "lift_ir", "cfg_ssa", "reconstruct", "validate", "promote"
     ]
     assert plan["pipeline"][2]["state"] == "pending"
+
+
+def test_ssa_versions_register_writes_and_tracks_reads():
+    from recovery_ir import IRInstruction, build_ssa
+    rows = build_ssa([
+        IRInstruction(0, "LOADK", (0, 0)),
+        IRInstruction(1, "MOVE", (1, 0, 0)),
+        IRInstruction(2, "ADD", (0, 1, 2)),
+    ])
+    assert rows[0]["write"] == {"register": 0, "version": 1}
+    assert rows[1]["reads"][0] == {"register": 0, "version": 1}
+    assert rows[1]["write"] == {"register": 1, "version": 1}
+    assert rows[2]["write"] == {"register": 0, "version": 2}
