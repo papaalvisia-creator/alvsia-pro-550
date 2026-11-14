@@ -6,7 +6,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "app" / "src" / "main" / "python"))
 
-from alvsia_features import PUBG_XOR_KEY, PUBGLuaConverter
+from alvsia_features import PUBG_XOR_KEY, PUBGLuaConverter, run_pubg_lua_decrypt
 from lua_engine.bgmi import transform_bgmi_lua
 
 
@@ -59,3 +59,15 @@ def test_pubg_converter_enforces_file_size_cap_before_reading(tmp_path):
         handle.truncate(converter.MAX_INPUT_BYTES + 1)
     with pytest.raises(ValueError, match="32 MiB safety cap"):
         converter.convert_file(str(source))
+
+
+
+def test_manual_bgmi_transform_enforces_size_cap_before_buffering(tmp_path):
+    source = tmp_path / "oversized-bgmi.luac"
+    with source.open("wb") as handle:
+        handle.truncate(32 * 1024 * 1024 + 1)
+    result = run_pubg_lua_decrypt(
+        source, tmp_path / "out", key_hex="0011223344556677"
+    )
+    assert result["ok"] is False
+    assert "32 MiB safety cap" in result["error"]
