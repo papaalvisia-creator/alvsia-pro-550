@@ -2,9 +2,9 @@ name: ALVSIA release safety audit
 
 on:
   push:
-    branches: [main, release/5.5.2-19-module-redesign]
+    branches: [main, release/5.5.2-19-module-redesign, fix/engine-repair-20261114, feat/alvsia-capability-expansion-security-20261114-clean]
   pull_request:
-    branches: [main, feat/alvsia-smart-premium-v1-20261112]
+    branches: [main, feat/alvsia-smart-premium-v1-20261112, fix/engine-repair-20261114, feat/alvsia-capability-expansion-security-20261114-clean]
 
 permissions:
   contents: read

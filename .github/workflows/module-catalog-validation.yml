@@ -2,7 +2,7 @@ name: Module catalog consistency
 
 on:
   push:
-    branches: [main, feat/alvsia-smart-premium-v1-20261112]
+    branches: [main, feat/alvsia-smart-premium-v1-20261112, fix/engine-repair-20261114, feat/alvsia-capability-expansion-security-20261114-clean]
     paths:
       - "tests/test_module_catalog_consistency.py"
       - "app/src/main/java/com/alvsia/pro/tool/ToolCatalog.kt"
@@ -11,7 +11,7 @@ on:
       - "app/src/main/java/com/alvsia/pro/ui/profile/ProfileScreen.kt"
       - ".github/workflows/module-catalog-validation.yml"
   pull_request:
-    branches: [main, feat/alvsia-smart-premium-v1-20261112]
+    branches: [main, feat/alvsia-smart-premium-v1-20261112, fix/engine-repair-20261114, feat/alvsia-capability-expansion-security-20261114-clean]
     paths:
       - "tests/test_module_catalog_consistency.py"
       - "app/src/main/java/com/alvsia/pro/tool/ToolCatalog.kt"

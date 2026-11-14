@@ -1,9 +1,9 @@
 name: Android Security Validation
 on:
   push:
-    branches: [ main, feat/alvsia-smart-premium-v1-20261112, feat/alvsia-unified-engine-7x19-20261113, feat/alvsia-smart-premium-security-final-20261111, fix/task-output-routing-20261111, feat/combined-smart-lua-xop-release-20261110, feat/lua-intelligence-orchestrator-20261107, fix/chaquopy-python312-ci, fix/lua-normalization-fallback-20261103, release/5.5.2-19-module-redesign ]
+    branches: [main, feat/alvsia-smart-premium-v1-20261112, feat/alvsia-unified-engine-7x19-20261113, feat/alvsia-smart-premium-security-final-20261111, fix/task-output-routing-20261111, feat/combined-smart-lua-xop-release-20261110, feat/lua-intelligence-orchestrator-20261107, fix/chaquopy-python312-ci, fix/lua-normalization-fallback-20261103, release/5.5.2-19-module-redesign, fix/engine-repair-20261114, feat/alvsia-capability-expansion-security-20261114-clean]
   pull_request:
-    branches: [ main, feat/full-reference-source-registry-20261106, feat/alvsia-smart-premium-v1-20261112 ]
+    branches: [main, feat/full-reference-source-registry-20261106, feat/alvsia-smart-premium-v1-20261112, fix/engine-repair-20261114, feat/alvsia-capability-expansion-security-20261114-clean]
   workflow_dispatch:
 concurrency:
   group: android-validation-${{ github.ref }}

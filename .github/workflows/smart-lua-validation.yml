@@ -3,7 +3,7 @@ on:
   push:
     branches: [ feat/alvsia-program-intelligence-core-20261109, feat/smart-lua-recovery-fusion-20261109 ]
   pull_request:
-    branches: [ main, feat/full-reference-source-registry-20261106, feat/alvsia-smart-premium-v1-20261112 ]
+    branches: [main, feat/full-reference-source-registry-20261106, feat/alvsia-smart-premium-v1-20261112, fix/engine-repair-20261114, feat/alvsia-capability-expansion-security-20261114-clean]
 permissions:
   contents: read
 jobs:
