@@ -98,7 +98,7 @@ def test_large_declared_work_routes_to_bounded_streaming_path(monkeypatch):
         # Public OUT is source-only: partial/string recovery remains sealed internally.
         assert result.get("final_status") == "PARTIAL_STRING_RECOVERY", result
         assert result.get("artifact_kind") == "string_recovery", result
-        assert result.get("strings_recovered") is False, result
+        assert result.get("strings_recovered") is True, result
         assert result.get("source_recovered") is False, result
         assert result.get("publish_gate") == "BLOCKED", result
         assert result.get("ok") is False, result
