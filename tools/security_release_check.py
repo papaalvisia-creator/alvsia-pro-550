@@ -401,15 +401,6 @@ fail.extend(_artifact_hygiene_violations(ROOT))
 
 # Python source is scanned by AST above; release APK contents are
 # independently inspected by tools/audit_release_apk.py.
-if fail:
-    print("SECURITY SOURCE CHECK: FAIL")
-    print("\n".join("- " + x for x in fail))
-    sys.exit(1)
-print("SECURITY SOURCE CHECK: PASS")
-print(f"- protected Python modules scheduled for sealing: {len(required_modules)}")
-print("- AES-GCM decryption in Kotlin/native bridge; seed and cert digest not exposed to Python")
-print("- New-panel TLS CA/hostname validation, SessionGate HMAC/TTL, R8, VCS stripping checked")
-print("- CodeMagic release restricted to main; APK audit required")
 if __name__ == "__main__":
     if fail:
         print("SECURITY SOURCE CHECK: FAIL")
