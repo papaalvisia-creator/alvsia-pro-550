@@ -70,7 +70,6 @@ assert '20 -> choose("asset_smart")' in planner
 assert "providerModuleId" in facade
 
 print("UNIFIED CATALOG: PASS (7 menus, 20 submenus: 19 legacy providers + Smart Asset provider, 89 retained legacy operations; no nested operation picker)")
-, group_section)
 assert len(asset_group_calls) == 1
 assert len(legacy_ids) + len(asset_group_calls) == 20
 assert "SMART ASSET MODDING ENGINE" in submenus
