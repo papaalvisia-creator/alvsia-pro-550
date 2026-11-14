@@ -25,7 +25,8 @@ This inventory defines the internal operations retained behind the fixed **7 men
 | 16 | Lua Inject | SMART LUA | SMART LUA INJECT | `lua_patch_byte`, `lua_inject_hook`, `lua_mod_repack` |
 | 17 | Anti-RE Audit | SMART ANALYSIS | SMART ANTI-RE AUDIT | `audit_apk`, `audit_lua`, `audit_so`, `anti_re_source_triage` |
 | 18 | Lua Protector | SMART LUA | SMART LUA PROTECT | `lua_smart_protect`, `lua_smart_protect_strong`, `lua_protect_encrypt`, `lua_protect_decrypt`, `lua_vm_protect` |
-| 19 | ALVSIA Private Tool | ALVSIA PRIVATE | ALVSIA PRIVATE ENGINE | `priv_zuc_decrypt`, `priv_aes_scan`, `priv_xor_recover`, `priv_lua_parse`, `priv_lua_convert`, `priv_lua_heping`, `priv_compress_fit`, `priv_apk_audit`, `priv_apk_manifest`, `priv_str_recover`, `priv_entropy_map`, `priv_pak_manifest` |\n| 20 | Smart Asset Engine | SMART ANALYSIS | SMART ASSET MODDING ENGINE | `asset_fingerprint`, `asset_scan_ids`, `asset_context`, `asset_patch`, `asset_validate` |
+| 19 | ALVSIA Private Tool | ALVSIA PRIVATE | ALVSIA PRIVATE ENGINE | `priv_zuc_decrypt`, `priv_aes_scan`, `priv_xor_recover`, `priv_lua_parse`, `priv_lua_convert`, `priv_lua_heping`, `priv_compress_fit`, `priv_apk_audit`, `priv_apk_manifest`, `priv_str_recover`, `priv_entropy_map`, `priv_pak_manifest` |
+| 20 | Smart Asset Engine | SMART ANALYSIS | SMART ASSET MODDING ENGINE | `asset_fingerprint`, `asset_scan_ids`, `asset_context`, `asset_patch`, `asset_validate` |
 
 ## Inventory checks
 
