@@ -79,8 +79,14 @@ def _source_probe(p: Path) -> tuple[bool, str]:
         return False, f"source probe failed: {exc}"
 
 
+def run_lua_smart(input_path, output_dir, jars_dir=None):
+    """Compatibility wrapper exposing the canonical Smart Lua orchestrator to callers/tests."""
+    from alvsia_features import run_lua_smart as _run
+    return _run(input_path, output_dir, jars_dir=jars_dir)
+
+
 def decompile(input_path, output_dir, jars_dir=None) -> dict:
-    from alvsia_features import run_lua_smart, run_lua_analyze
+    from alvsia_features import run_lua_analyze
     p = Path(input_path)
     out = Path(output_dir)
     out.mkdir(parents=True, exist_ok=True)
@@ -112,6 +118,22 @@ def decompile(input_path, output_dir, jars_dir=None) -> dict:
                                output_bytes=candidate.stat().st_size,
                                sha256=_sha256_file(candidate),
                                validation=msg)
+            # A very large .lua source is already the source artifact. If the
+            # full validator rejects it, do not route it into bytecode recovery
+            # or discard it. A bounded lexical/source probe is enough to mark
+            # the artifact as preserved while explicitly downgrading validation
+            # confidence.
+            if candidate.stat().st_size > 4 * 1024 * 1024:
+                probe_ok, probe_note = _source_probe(candidate)
+                if probe_ok:
+                    return _result(True, "decompile", out=str(candidate),
+                                   selected_engine="source_passthrough",
+                                   source_recovered=True, final_status="SUCCESS",
+                                   validation_level="source_probe",
+                                   output_bytes=candidate.stat().st_size,
+                                   sha256=_sha256_file(candidate),
+                                   validation=probe_note,
+                                   validation_warning=msg)
             # Preserve the exact source for inspection when syntax validation
             # rejects it. This is a truthful PARTIAL result, not fake bytecode
             # decompilation and not a silent loss of the user's input.
