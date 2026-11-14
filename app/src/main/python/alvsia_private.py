@@ -907,7 +907,9 @@ class LuaOpcodeConverter:
         reader.pos = 33
         writer = self._Writer()
         header = bytearray(data[:33])
-        header[13] = 4
+        # Emit the standard 64-bit size_t layout used by the ARM64 release
+        # toolchain; the game input uses a 32-bit size_t at byte 13.
+        header[13] = 8
         writer.raw(header)
         writer.u8(reader.u8())  # main closure upvalue count
         self._convert_proto(reader, writer)
