@@ -1,4 +1,5 @@
 import json, tempfile, zlib, struct
+from unittest.mock import patch
 from pathlib import Path
 import sys
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "app/src/main/python"))
@@ -178,6 +179,40 @@ def main():
             encrypted_bgmi, key=fixture_key, decrypt=True
         )
         assert keyed_roundtrip == standard_bgmi_chunk
+
+        # The large-file streaming normalizer must reuse the one input buffer
+        # across standard/mod-guard/BGMI candidates instead of rereading 30 MiB.
+        from alvsia_private import ALVSIA_BGMI_XOR_KEY
+        import lua_engine.decompiler53 as decompiler53
+        from lua_engine.streaming_decompiler import stream_decompile_lua53
+        canonical_bgmi = transform_bgmi_lua(
+            standard_bgmi_chunk, key=ALVSIA_BGMI_XOR_KEY, decrypt=False
+        )
+        stream_bgmi_path = td / "sample_streaming.bgmi"
+        stream_bgmi_path.write_bytes(canonical_bgmi)
+        stream_bgmi_out = td / "sample_streaming.lua"
+        original_read_bytes = Path.read_bytes
+        read_count = 0
+
+        def counted_read_bytes(path):
+            nonlocal read_count
+            read_count += 1
+            return original_read_bytes(path)
+
+        def force_bgmi_normalization(candidate, **kwargs):
+            candidate_bytes = bytes(candidate)
+            if candidate_bytes[13] == 4:
+                raise ValueError("fixture forces BGMI normalization")
+            return "return"
+
+        with patch.object(Path, "read_bytes", counted_read_bytes):
+            with patch.object(decompiler53, "decompile_bytes", force_bgmi_normalization):
+                stream_ok, stream_note = stream_decompile_lua53(
+                    stream_bgmi_path, stream_bgmi_out
+                )
+        assert stream_ok, stream_note
+        assert read_count == 1, f"large input was read {read_count} times"
+        assert stream_bgmi_out.is_file()
         assert b"\xff\xfeA" in bgmi_roundtrip
 
         # The Smart Lua orchestrator may use this only as a last-resort,
