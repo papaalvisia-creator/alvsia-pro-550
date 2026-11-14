@@ -96,6 +96,37 @@ def test_large_declared_work_routes_to_bounded_streaming_path():
         assert result.get("ok") is False, result
 
 
+def test_incomplete_estimate_fails_closed_without_copying_file(tmp_path, monkeypatch):
+    import lua_engine.decompiler53 as decompiler53
+
+    src = tmp_path / "unknown-work.luac"
+    src.write_bytes(_single_proto_chunk(450_000))
+
+    def incomplete(data):
+        assert isinstance(data, memoryview), type(data)
+        return {"completed": False, "instructions": 0, "error": "truncated"}
+
+    monkeypatch.setattr(decompiler53, "estimate_chunk_work", incomplete)
+    monkeypatch.setattr(
+        Path, "read_bytes",
+        lambda self: (_ for _ in ()).throw(AssertionError("whole-file copy attempted")),
+    )
+    assert features._lua_work_exceeds_budget(src, src.stat().st_size) is True
+
+
+def test_estimator_exception_fails_closed(tmp_path, monkeypatch):
+    import lua_engine.decompiler53 as decompiler53
+
+    src = tmp_path / "estimator-error.luac"
+    src.write_bytes(_single_proto_chunk(450_000))
+
+    def broken(_data):
+        raise ValueError("simulated parser failure")
+
+    monkeypatch.setattr(decompiler53, "estimate_chunk_work", broken)
+    assert features._lua_work_exceeds_budget(src, src.stat().st_size) is True
+
+
 def test_small_chunk_stays_on_in_memory_path():
     # A tiny valid chunk must not be diverted by the work-budget gate.
     with tempfile.TemporaryDirectory(prefix="alvsia-small-") as td:
