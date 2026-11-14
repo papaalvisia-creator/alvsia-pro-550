@@ -196,7 +196,8 @@ def main():
 
         def counted_read_bytes(path):
             nonlocal read_count
-            read_count += 1
+            if Path(path) == stream_bgmi_path:
+                read_count += 1
             return original_read_bytes(path)
 
         def force_bgmi_normalization(candidate, **kwargs):
