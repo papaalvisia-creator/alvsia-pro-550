@@ -52,40 +52,81 @@ def detect(input_path: str | Path) -> dict:
         return _result(True, "detect", format="binary/unknown")
 
 
+def _copy_source_preserving_bytes(src: Path, dst: Path) -> None:
+    """Copy source without rewriting line endings or Unicode bytes."""
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    with src.open("rb") as source, dst.open("wb") as target:
+        shutil.copyfileobj(source, target, length=1024 * 1024)
+    shutil.copystat(src, dst, follow_symlinks=False)
+
+
+def _source_probe(p: Path) -> tuple[bool, str]:
+    """Bounded UTF-8 probe used before bytecode recovery.
+
+    A .lua file can be a very large source script. Never route text through
+    bytecode engines merely because its size exceeds the bytecode RAM budget.
+    """
+    try:
+        with p.open("rb") as handle:
+            sample = handle.read(64 * 1024)
+        if not sample:
+            return False, "empty input"
+        sample.decode("utf-8")
+        return True, "UTF-8 source prefix"
+    except UnicodeDecodeError as exc:
+        return False, f"UTF-8 probe failed at byte {exc.start}: {exc.reason}"
+    except OSError as exc:
+        return False, f"source probe failed: {exc}"
+
+
 def decompile(input_path, output_dir, jars_dir=None) -> dict:
     from alvsia_features import run_lua_smart, run_lua_analyze
     p = Path(input_path)
     out = Path(output_dir)
     out.mkdir(parents=True, exist_ok=True)
 
-    # Recovery runs first so optional diagnostics can never delay or suppress
-    # the primary decompilation result.
-    # Plain Lua source is already the decompiled artifact. Do not send
-    # source text through bytecode/protection recovery engines, because doing
-    # so can incorrectly turn a valid .lua file into a false failure.
+    # Plain Lua source is already the requested source artifact. Preserve the
+    # exact bytes first, including for very large scripts. Validation is a
+    # quality gate, not a reason to throw away the user's source artifact.
     try:
         detected = detect(p)
-        if detected.get("format") == "lua-source":
+        source_like = detected.get("format") == "lua-source"
+        if not source_like and p.suffix.lower() == ".lua":
+            probe_ok, probe_note = _source_probe(p)
+            source_like = probe_ok
+            if source_like:
+                detected = dict(detected)
+                detected.update({"format": "lua-source", "source_probe": probe_note})
+        if source_like:
             candidate = out / (p.stem + "_decompiled.lua")
-            source = p.read_text(encoding="utf-8")
-            if not source.strip():
+            _copy_source_preserving_bytes(p, candidate)
+            if candidate.stat().st_size == 0:
+                candidate.unlink(missing_ok=True)
                 return _result(False, "decompile", error="Lua source file is empty")
-            candidate.write_text(source, encoding="utf-8")
             from lua_engine import validate_lua_source
             valid, msg = validate_lua_source(candidate)
-            if not valid:
-                candidate.unlink(missing_ok=True)
-                return _result(False, "decompile", error="Lua source validation failed: " + msg)
+            if valid:
+                return _result(True, "decompile", out=str(candidate),
+                               selected_engine="source_passthrough",
+                               source_recovered=True, final_status="SUCCESS",
+                               output_bytes=candidate.stat().st_size,
+                               sha256=_sha256_file(candidate),
+                               validation=msg)
+            # Preserve the exact source for inspection when syntax validation
+            # rejects it. This is a truthful PARTIAL result, not fake bytecode
+            # decompilation and not a silent loss of the user's input.
             return _result(True, "decompile", out=str(candidate),
-                           selected_engine="source_passthrough",
-                           source_recovered=True, final_status="SUCCESS",
+                           selected_engine="source_preserved",
+                           source_recovered=True, final_status="PARTIAL",
+                           validation_level="source_bytes_preserved",
                            output_bytes=candidate.stat().st_size,
                            sha256=_sha256_file(candidate),
-                           validation=msg)
+                           validation_error=msg,
+                           note="Input is UTF-8 Lua source but did not pass the Lua source validator; exact source bytes were preserved.")
     except Exception as exc:
-        # Fall through to the full recovery stack for ambiguous/malformed
-        # source-like inputs.
-        pass
+        source_probe_error = f"{type(exc).__name__}: {exc}"
+    else:
+        source_probe_error = None
 
     result = dict(run_lua_smart(p, out, jars_dir=jars_dir) or {})
     result.update({"module": "lua", "operation": "decompile"})
