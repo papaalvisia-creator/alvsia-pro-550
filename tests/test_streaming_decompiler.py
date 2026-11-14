@@ -169,6 +169,50 @@ class TestLuaCandidateDeduplication(unittest.TestCase):
             self.assertIn("variant=heping", message)
             self.assertEqual(dst.read_text(encoding="utf-8"), "return 7")
 
+class TestT24VariantRouting(unittest.TestCase):
+    def test_t24_candidate_is_tried_after_standard_parser_rejects(self):
+        raw = (
+            b"\\x1bLua\\x53\\x00\\x19\\x93\\x0d\\x0a\\x1a\\x0a"
+            + bytes([4, 8, 4, 8, 8])
+            + struct.pack("<q", 0x5678)
+            + struct.pack("<d", 370.5)
+            + b"\\x00"
+        )
+        normalized = raw + b"T24_NORMALIZED"
+        calls = []
+
+        def fake_decompile(candidate, *, deadline=None):
+            value = bytes(candidate)
+            calls.append(value)
+            if value == raw:
+                raise ValueError("standard profile rejected T24 fixture")
+            if value == normalized:
+                return "return 42\\n"
+            raise AssertionError("unexpected candidate")
+
+        def fake_t24(data, key):
+            self.assertEqual(bytes(data), raw)
+            self.assertTrue(key)
+            return normalized, {"prototypes": 1, "lineinfo_checkpoints": 1}
+
+        with tempfile.TemporaryDirectory() as td:
+            src = Path(td) / "t24.luac"
+            dst = Path(td) / "t24.lua"
+            src.write_bytes(raw)
+            with patch("lua_engine.streaming_decompiler.decompile_bytes",
+                       side_effect=fake_decompile):
+                with patch("lua_engine.t24.convert_t24_to_standard",
+                           side_effect=fake_t24):
+                    with patch("lua_engine.streaming_decompiler.validate_lua_source",
+                               return_value=(True, "fixture source accepted")):
+                        ok, message = stream_decompile_lua53(src, dst)
+
+        self.assertTrue(ok, message)
+        self.assertIn("variant=t24", message)
+        self.assertIn(normalized, calls)
+        self.assertEqual(dst.read_text(encoding="utf-8"), "return 42\\n")
+
+
 class TestStreamInflate(unittest.TestCase):
     def test_recover_lua_payload_from_deflate(self):
         """Build a synthetic chunked-raw-DEFLATE container whose payload
