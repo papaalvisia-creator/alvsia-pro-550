@@ -6,7 +6,7 @@
 - **New commits (this session):**
   - `87623309` — fix(lua/pak): bound memory for large Lua chunks + recover partial PAK extraction
   - `7575d0b7` — fix(ci): honour pytest.skip in script-mode PAK extraction runner
-- **Status:** DONE for the engine work in this session; APK build delegated to CI (see FINAL_APK_VERIFICATION.md).
+- **Status:** DONE — engine work complete; signed APK built/signed/audited by CI (see FINAL_APK_VERIFICATION.md).
 
 ## 1. What was verified at the start (not assumed)
 
@@ -116,8 +116,8 @@ python3 tools/security_release_check.py    -> SECURITY SOURCE CHECK: PASS
 | Large Lua chunk handling | DONE (bounded) | 22.7 MB → PARTIAL at ≈50 MB, no OOM |
 | PUBG/BGMI custom-VM decompile | PARTIAL / UNSUPPORTED | Standard Lua 5.3 decoder cannot faithfully decode protected VM bytecode |
 | Partial-extraction recovery | DONE | 20/20 extracted Lua attempted, honestly PARTIAL |
-| CI test-runner | DONE | Step 15 green on `7575d0b7` |
-| Final signed APK | CI-DEPENDENT | Built/signed by CI pipeline with secrets; see FINAL_APK_VERIFICATION.md |
+| CI test-runner | DONE | Step 15 green on `7575d0b7`; full CI green |
+| Final signed APK | DONE | CI Final Release Pipeline produced `ALVSIA_SMART_PREMIUM_6.0.0-xop-signed.apk` (V2+V3, 34,503,233 bytes, SHA-256 `b08c5dd2…`); see FINAL_APK_VERIFICATION.md |
 
 ## 6. Residual risks
 

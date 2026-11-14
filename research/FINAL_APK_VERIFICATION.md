@@ -2,12 +2,111 @@
 
 - **Date:** 2026-11-14
 - **Branch:** `fix/engine-repair-20261114`
-- **Commit:** `7575d0b7a2349092b40fb6e30a15e4f4eb84bf3e`
-- **Status:** BUILD IN PROGRESS IN CI — local build environment-blocked (honest)
+- **Commit (engine code):** `7575d0b7a2349092b40fb6e30a15e4f4eb84bf3e`
+- **Commit (reports):** `b68df651`
+- **Status:** **PASS — signed APK built, signed (V2+V3), audited, and uploaded by CI**
 
-## 1. Local environment check (honest)
+## 1. Result summary
 
-The sandbox has **no Android build toolchain**:
+The signed release APK was produced by the **Final Release Pipeline** in GitHub
+Actions and passed the full release audit. Local production is not possible in
+this sandbox (no Android SDK/NDK/JDK/keystore), so the authoritative build path
+is CI — which completed successfully.
+
+| Field | Value |
+|---|---|
+| APK file | `ALVSIA_SMART_PREMIUM_6.0.0-xop-signed.apk` |
+| APK size | **34,503,233 bytes** (~32.9 MB) |
+| APK SHA-256 | `b08c5dd2f171f8f39b2ecdc52488ba6c85653db65474bfeb630ddc8d478b5c11` |
+| Signature schemes | **V1 = false, V2 = true, V3 = true** (as mandated) |
+| Signer cert DN | `CN=ALVSIA PREMIUM, OU=ALVSIA, O=ALVSIA PRO, L=Makassar, ST=Sulawesi, C=ID` |
+| Signer cert SHA-256 | `99b33815c88a17abbcfe22be15250363f6dfc79c11ffc980e71b62b74b1f295c` |
+| Signer key size | 4096 bits |
+| Public key SHA-256 | `783c160d6900430acb670326c6d3f73a4acbb447a8c8c16263bea427ce421a19` |
+| App identity | `6.0.0-smart-premium` (versionCode 100), package `com.alvsia.pro` |
+| ABI | `arm64-v8a` only |
+| Artifact (zip) | `ALVSIA_SMART_PREMIUM_6.0.0-final-xop-signed`, 59,268,998 bytes |
+| Artifact ID | `14109853179` |
+
+## 2. CI runs (all green)
+
+| Workflow | Run | Commit | Result |
+|---|---|---|---|
+| Final Release Pipeline | [43585187257](https://github.com/papaalvisia-creator/alvsia-pro-550/actions/runs/43585187257) | `7575d0b7` | **success** |
+| Android Security Validation | [43585779725](https://github.com/papaalvisia-creator/alvsia-pro-550/actions/runs/43585779725) | `b68df651` | **success** |
+| ALVSIA release safety audit | [43585779707](https://github.com/papaalvisia-creator/alvsia-pro-550/actions/runs/43585779707) | `b68df651` | **success** |
+
+### Final Release Pipeline steps (all success)
+
+```
+8  Build native Smart Lua engines            success
+9  Source and Lua validation                 success
+10 Reference corpus research status          success
+11 Prepare sealed release                    success
+12 Build unsigned APK                        success
+13 Sign baseline for XOP                     success
+14 Build XopProtector and pack candidate     success
+15 Sign final XOP APK and verify             success
+16 Upload final APK and audit                success
+```
+
+### Android Security Validation steps 1–35 (all success)
+
+Steps 1–20 (security source checks, sealed-payload crypto, Lua/PAK regressions,
+JDK/Rust/NDK, native engine build) succeeded, then 21–35 (debug build, sealed
+release, XopProtector, sign, fingerprint/size report, upload, manifest debug
+check, CERT_SHA256 check, branch restriction, Telegram report) all succeeded.
+The previously-failing **"Run Tencent PAK extraction regressions"** (step 15)
+now passes.
+
+> Note: the Android Security Validation workflow names its artifact
+> `ALVISIA_PRO_5.5.2-xop_candidate_signed` (a legacy label in that workflow).
+> The **actual** app identity in the build is `6.0.0-smart-premium` (versionCode
+> 100), confirmed by the release audit and the Final Release Pipeline artifact
+> name `ALVSIA_SMART_PREMIUM_6.0.0-final-xop-signed`.
+
+## 3. Release audit (`tools/audit_release_apk.py`) — PASS
+
+Selected PASS lines from the audit on the final APK:
+
+```
+PASS APK ZIP integrity
+PASS Xop protector config is valid JSON
+PASS Xop native SO protection enabled
+PASS Xop proxy detection and NetGuard enabled
+PASS Xop SO decryption uses lazy mode
+PASS Xop RASP enforce action enabled
+PASS Xop dex_hmac is a populated SHA-256 HMAC
+PASS Xop code_hmac is a populated SHA-256 HMAC
+PASS Xop code_methods_hmac is a populated SHA-256 HMAC
+PASS Xop application signing certificate fingerprint is populated
+PASS Xop asset encryption enabled
+PASS native RASP library packaged
+PASS Android ARM64 Smart Lua native decompiler packaged
+PASS unluac-rs executable is Android ARM64 ELF
+PASS Android ARM64 Luau v3-v9 decompiler packaged
+PASS Luau decompiler executable is Android ARM64 ELF
+PASS Chaquopy app bundle packaged
+PASS sealed JAR index packaged
+PASS Xop encrypted asset index packaged
+PASS Xop PAS1 encrypted sealed JAR index packaged
+PASS dependency version metadata absent from APK
+PASS sensitive local rebrand/build metadata absent from APK
+PASS sealed Python loader packaged
+```
+
+Sealed-payload audit: `RESULT=PASS` — all protected Python payloads are AES-GCM
+sealed (`.alv`), no plaintext source/bytecode, VCS metadata absent.
+
+## 4. Manifest / config checks
+
+- No `android:debuggable="true"` in manifest (step 32 PASS).
+- `CERT_SHA256` present in `app/build.gradle.kts` (step 33 PASS).
+- Branch restriction holds (step 34 PASS).
+- Compiled manifest excludes `android.permission.DUMP`, unused
+  `DELETE_PACKAGES`, and unused `CHANGE_NETWORK_STATE`.
+
+## 5. Local environment (why CI is the build path)
 
 ```
 ANDROID_HOME=            (unset)
@@ -16,89 +115,22 @@ java / javac / gradle    (not installed)
 release keystore (.jks/.keystore)  (none present)
 ```
 
-Therefore a signed release APK **cannot** be produced locally without
-fabricating signing material — which is forbidden. The build is delegated to the
-GitHub Actions release pipeline, which injects the signing secrets
-(`CM_KEYSTORE` etc.) and has the Android SDK/NDK. This is an **environment
-blocker**, not a code defect.
+A signed APK cannot be produced locally without fabricating signing material
+(forbidden). The CI pipeline injects the owner's keystore and Android SDK/NDK, so
+it is the authoritative build path. This is an environment fact, not a defect.
 
-## 2. Build configuration (verified correct)
+## 6. Honest notes
 
-From `app/build.gradle.kts` and the security audit:
+1. The APK is **signed with the owner's 4096-bit key** and verified V2+V3 (V1
+   disabled). It is uploaded as a CI artifact; publishing to a public release is
+   a separate maintainer action.
+2. The XopProtector/ReArk pipeline ran and the final XOP-signed APK passed
+   `apksigner verify` and the release audit.
+3. Runtime/device install testing is still required — a green build and a valid
+   signature are necessary but not sufficient proof of on-device correctness.
 
-- `applicationId = com.alvsia.pro`, `versionName = 6.0.0-smart-premium`,
-  `versionCode = 100`.
-- Release: `isMinifyEnabled = true`, `isShrinkResources = true`,
-  `isDebuggable = false`, `isJniDebuggable = false`.
-- Signing: `enableV1Signing = false`, `enableV2Signing = true`,
-  `enableV3Signing = true` (V2/V3 only).
-- ABI: `arm64-v8a` only.
-- R8 full mode + 127-line `proguard-rules.pro`.
-- Chaquopy Python runtime + native Smart Lua engines (Rust/NDK) built in CI.
-- XopProtector → ReArk handoff, then single signed APK.
+## 7. Verdict
 
-## 3. CI pipeline (authoritative build path)
-
-Workflows triggered on `fix/engine-repair-20261114` at `7575d0b7`:
-
-| Workflow | Run ID | Status |
-|---|---|---|
-| Android Security Validation | [43585187268](https://github.com/papaalvisia-creator/alvsia-pro-550/actions/runs/43585187268) | in progress |
-| ALVSIA SMART PREMIUM Final Release Pipeline | [43585187257](https://github.com/papaalvisia-creator/alvsia-pro-550/actions/runs/43585187257) | in progress |
-| ALVSIA release safety audit | [43585187279](https://github.com/papaalvisia-creator/alvsia-pro-550/actions/runs/43585187279) | **success** |
-
-### Android Security Validation — step progress at time of writing
-
-Steps **1–20 = success**, including the previously-failing
-**"Run Tencent PAK extraction regressions"** (step 15). Step 21 (Android debug
-build) in progress; release/sign/upload steps 22–35 pending.
-
-| # | Step | Status |
-|---|---|---|
-| 6 | Generate fresh per-build seal seed | success |
-| 7 | Source-level security checks | success |
-| 8 | Security protections wired into runtime | success |
-| 9 | Active Unaux Python TLS pin policy | success |
-| 10 | Compile Python modules + dispatch contract tests | success |
-| 11 | Telegram notifier integration contract | success |
-| 12 | Sealed payload crypto tests | success |
-| 13 | Install Lua 5.3 parser | success |
-| 14 | Lua decompiler safety regression | success |
-| 15 | Tencent PAK extraction regressions | **success** |
-| 16 | Lua Protector round-trip | success |
-| 17 | JDK 17 | success |
-| 18 | Rust + Android ARM64 target | success |
-| 19 | Pinned Android NDK + CMake | success |
-| 20 | Build pinned native Smart Lua engines | success |
-| 21 | Build and test Android debug variant | in progress |
-| 22–30 | Sealed release build, XopProtector, sign, publish, upload | pending |
-| 31–35 | Restore sources, manifest/debug checks, CERT_SHA256, branch restriction, Telegram report | pending |
-
-## 4. What "verified" will mean when CI completes
-
-The APK is only considered verified when the pipeline produces:
-
-1. A **signed** APK (V2 + V3) with the release keystore — fingerprint and size
-   reported (step 28).
-2. A **private draft validation release** (step 29) and the signed XopProtector
-   validation APK upload (step 30).
-3. Manifest checks: no debug flags (step 32), `CERT_SHA256` matches build config
-   (step 33), branch restriction holds (step 34).
-
-Until those steps complete, this report records an **honest in-progress**
-status — it does not claim a built APK that does not yet exist.
-
-## 5. Honest blockers
-
-1. **Local build** — no Android SDK/NDK/JDK/keystore in sandbox. Environment
-   blocker; cannot be bypassed without fabricating signing material.
-2. **CI completion** — release/sign/upload steps still running at report time.
-   Final fingerprint/size/artifact links will be appended once the run completes.
-
-## 6. Verdict
-
-Build configuration is **correct and hardened** (V2/V3, arm64-v8a, R8, no debug,
-no V1). The signed APK is produced by the CI release pipeline, which is
-**actively running** and has passed all engine/security/test gates (steps 1–20).
-Local production of the APK is an honest environment blocker. Status:
-**IN PROGRESS IN CI — configuration PASS, artifact pending CI completion.**
+The final APK is **built, signed (V2+V3), audited, and uploaded** by CI with a
+verified SHA-256, certificate, and package identity. Status: **PASS** (device
+runtime testing remains a separate follow-up).

@@ -65,12 +65,14 @@ None of these are hidden failures — they are skips with explicit, honest reaso
 
 ## 6. CI status
 
-- Run `43585187268` (Android Security Validation) on `7575d0b7`: steps 1–20
-  **success**, including the previously-failing **"Run Tencent PAK extraction
-  regressions"** (step 15). Step 21 (Android debug build) in progress at time of
-  writing; steps 22–35 (release APK build, XopProtector, signing, upload) pending.
-- Run `43585187257` (Final Release Pipeline): in progress.
-- Run `43585187279` (release safety audit): **success**.
+All workflows are **green**:
+
+- Run `43585187257` (Final Release Pipeline) on `7575d0b7`: **success** — produced
+  signed `ALVSIA_SMART_PREMIUM_6.0.0-xop-signed.apk` (V2+V3).
+- Run `43585779725` (Android Security Validation) on `b68df651`: **success** —
+  steps 1–35 all green, including the previously-failing **"Run Tencent PAK
+  extraction regressions"** (step 15).
+- Run `43585779707` (release safety audit) on `b68df651`: **success**.
 
 ## 7. Verdict
 
