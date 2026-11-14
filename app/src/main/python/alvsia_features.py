@@ -1078,7 +1078,10 @@ def run_lua_smart(input_path, out_dir, jars_dir=None):
             result["out"] = str(dest)
             result["source_recovered"] = True
             result["artifact_kind"] = "lua_source"
-            result["final_status"] = "SUCCESS"
+            # Preserve the evidence level established by the engine. A source
+            # that passed only syntax/structural validation is not equivalent
+            # to a source with semantic/round-trip proof.
+            result["final_status"] = source_status or "SUCCESS"
             result["publish_gate"] = "PASSED"
             result["published_files"] = [dest.name]
             result["internal_workspace"] = "sealed"
