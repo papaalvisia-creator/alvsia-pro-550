@@ -16,6 +16,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberInfiniteTransition
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Shadow
@@ -34,6 +35,7 @@ fun LoadingScreen(
     subtitle: String = "Initializing Smart Core...",
     progress: Float = -1f
 ) {
+    val uriHandler = LocalUriHandler.current
     val transition = rememberInfiniteTransition(label = "welcome")
     val pulse by transition.animateFloat(initialValue = 0.96f, targetValue = 1.04f, animationSpec = infiniteRepeatable(tween(850), RepeatMode.Reverse), label = "welcome-scale")
     val glow by transition.animateFloat(initialValue = 0.55f, targetValue = 1f, animationSpec = infiniteRepeatable(tween(700), RepeatMode.Reverse), label = "welcome-alpha")
