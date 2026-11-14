@@ -55,6 +55,29 @@ def test_historical_candidate_shape_detector_covers_all_three_legacy_families():
     assert not scanner._looks_like_historical_sm4_candidate("ordinary-test-value")
 
 
+def test_security_release_check_rejects_cache_and_signing_files_in_source_export(tmp_path):
+    import importlib.util
+
+    scanner_path = ROOT / "tools/security_release_check.py"
+    spec = importlib.util.spec_from_file_location("alvsia_security_hygiene_check", scanner_path)
+    scanner = importlib.util.module_from_spec(spec)
+    assert spec.loader is not None
+    spec.loader.exec_module(scanner)
+
+    pycache = tmp_path / "app" / "__pycache__"
+    pytest_cache = tmp_path / ".pytest_cache"
+    pycache.mkdir(parents=True)
+    pytest_cache.mkdir(parents=True)
+    (pycache / "engine.pyc").write_bytes(b"compiled-cache")
+    (pytest_cache / "CACHEDIR.TAG").write_text("cache", encoding="utf-8")
+    (tmp_path / "release-signing.jks").write_bytes(b"test-only")
+
+    violations = scanner._artifact_hygiene_violations(tmp_path)
+    assert any("compiled Python cache" in item for item in violations)
+    assert any("pytest cache" in item for item in violations)
+    assert any("signing/private-key" in item for item in violations)
+
+
 def test_no_hardcoded_sm4_secret_assignments_ast():
     """AST check: SM4_SECRET_* must not be assigned a string literal."""
     offenders = []
