@@ -3,7 +3,7 @@ from pathlib import Path
 import sys
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "app/src/main/python"))
 from lua_engine import detect_lua, analyze_lua, validate_lua_source, unwrap_lua_container, decompile_lua
-from lua_engine.bgmi import transform_bgmi_lua
+from lua_engine.bgmi import is_bgmi_lua, transform_bgmi_lua
 
 def main():
     with tempfile.TemporaryDirectory() as td:
@@ -133,6 +133,42 @@ def main():
             assert report["container"] == "zlib", report
         plain, ci = unwrap_lua_container(lua_payload)
         assert plain == lua_payload and not ci.wrapped
+
+        # Structure-only BGMI conversion must preserve arbitrary encrypted
+        # string bytes exactly when no authorized XOR key is supplied.
+        standard_bgmi_header = (
+            b"\\x1bLua\\x53\\x00\\x19\\x93\\x0d\\x0a\\x1a\\x0a"
+            + b"\\x04\\x08\\x04\\x08\\x08"
+            + bytes.fromhex("7856000000000000")
+            + bytes.fromhex("0000000000287740")
+        )
+        standard_bgmi_chunk = (
+            standard_bgmi_header
+            + struct.pack("<B", 0)              # main upvalue count
+            + struct.pack("<B", 0)              # source = NULL
+            + struct.pack("<ii", 0, 0)          # line-defined / last-line
+            + struct.pack("<BBB", 0, 0, 2)      # params / vararg / stack
+            + struct.pack("<I", 1)              # one instruction
+            + struct.pack("<I", 38)             # RETURN
+            + struct.pack("<I", 1)              # one constant
+            + struct.pack("<BB", 4, 4)          # short string, size incl NUL
+            + b"\\xff\\xfeA"                    # deliberately non-UTF8 bytes
+            + struct.pack("<I", 0)              # upvalues
+            + struct.pack("<I", 0)              # nested prototypes
+            + struct.pack("<I", 0)              # line info
+            + struct.pack("<I", 0)              # absolute line info
+            + struct.pack("<I", 0)              # local variables
+            + struct.pack("<I", 0)              # upvalue names
+        )
+        bgmi_structural = transform_bgmi_lua(
+            standard_bgmi_chunk, key=None, decrypt=False
+        )
+        assert is_bgmi_lua(bgmi_structural)
+        bgmi_roundtrip = transform_bgmi_lua(
+            bgmi_structural, key=None, decrypt=True
+        )
+        assert bgmi_roundtrip == standard_bgmi_chunk
+        assert b"\\xff\\xfeA" in bgmi_roundtrip
 
         # Unknown BGMI opcodes must fail closed, never pass through as standard
         # Lua opcodes and create a misleading decompile result.
