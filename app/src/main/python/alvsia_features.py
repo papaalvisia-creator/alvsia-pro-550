@@ -1917,14 +1917,12 @@ class PUBGLuaConverter:
     def convert_bytes(self, data: bytes) -> bytes:
         if len(data) > self.MAX_INPUT_BYTES:
             raise ValueError("PUBG/BGMI input exceeds the 32 MiB safety cap")
-        from lua_engine.bgmi import is_bgmi_lua, transform_bgmi_lua
+        from alvsia_private import LuaOpcodeConverter
         raw = bytes(data)
-        if not is_bgmi_lua(raw):
-            raise ValueError(
-                "unsupported PUBG/BGMI variant: expected validated Lua 5.3 "
-                "BGMI header with 4-byte size_t; use Smart Lua automatic routing"
-            )
-        return transform_bgmi_lua(raw, key=PUBG_XOR_KEY, decrypt=True)
+        # Use the same strict producer parser as the large-file Smart Lua path.
+        # It validates the exact BGMI header, every Proto, opcode map, string
+        # payload, debug table, and trailing bytes before returning a chunk.
+        return LuaOpcodeConverter(variant="bgmi").convert_bytes(raw)
 
     def convert_file(self, input_path: str, output_path: str | None = None) -> bytes:
         source = Path(input_path)
