@@ -59,6 +59,13 @@ assert "SmartEnginePlanner.plan(sub, operation" in main
 assert "for ((index, stageRoute) in routes.withIndex())" in main
 for provider_id in range(1, 21):
     assert f"            {provider_id} ->" in planner, f"Smart planner missing provider {provider_id}"
-assert "detection?.suggestedSubtool" in planner\nasset_section = group_section\nassert "SMART ASSET MODDING ENGINE" in submenus\nassert "asset_fingerprint" in submenus\nassert "asset_patch" in submenus\nassert "legacyModuleId = 20" in submenus\nassert "20 -> choose" in planner\nassert "providerModuleId" in facade
+assert "detection?.suggestedSubtool" in planner
+assert "assetGroup()" in group_section
+assert len(legacy_ids) + group_section.count("assetGroup()") == 20
+assert "SMART ASSET MODDING ENGINE" in submenus
+assert "asset_smart" in submenus
+assert "legacyModuleId = 20" in submenus
+assert '20 -> choose("asset_smart")' in planner
+assert "providerModuleId" in facade
 
 print("UNIFIED CATALOG: PASS (7 menus, 20 submenus: 19 legacy providers + Smart Asset provider, 89 retained legacy operations; no nested operation picker)")
