@@ -80,7 +80,7 @@ def test_estimator_never_raises_on_truncated_input():
     assert est["error"], est
 
 
-def test_large_declared_work_routes_to_bounded_streaming_path():
+def test_large_declared_work_routes_to_bounded_streaming_path(monkeypatch):
     chunk = _single_proto_chunk(450_000)  # > 400k instruction budget, > 256 KB
     with tempfile.TemporaryDirectory(prefix="alvsia-budget-") as td:
         root = Path(td)
@@ -92,12 +92,8 @@ def test_large_declared_work_routes_to_bounded_streaming_path():
         out = root / "out"
         from lua_engine import orchestrator
         # Keep this test deterministic even if a host has unluac-cli on PATH.
-        monkeypatch = __import__("pytest").MonkeyPatch()
         monkeypatch.setattr(orchestrator, "_find_unluac_rs", lambda _jars: None)
-        try:
-            result = features.run_lua_smart(src, out)
-        finally:
-            monkeypatch.undo()
+        result = features.run_lua_smart(src, out)
         assert result.get("mode") == "smart_streaming_large_input", result
         assert result.get("final_status") == "PARTIAL", result
         assert result.get("ok") is False, result
@@ -116,7 +112,7 @@ def test_large_declared_work_uses_strict_native_engine_when_available(tmp_path, 
 
     def fake_native_run(_binary, _src, dst):
         dst.parent.mkdir(parents=True, exist_ok=True)
-        dst.write_text("return 1\\n", encoding="utf-8")
+        dst.write_text("return 1\n", encoding="utf-8")
         return True, "strict native test output"
 
     monkeypatch.setattr(orchestrator, "_run_unluac_rs", fake_native_run)
