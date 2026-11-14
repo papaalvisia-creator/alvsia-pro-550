@@ -167,16 +167,25 @@ def decompile(input_path, output_dir, jars_dir=None) -> dict:
             return _result(False, "decompile",
                            error="string recovery reported an artifact but the artifact is missing or empty",
                            diagnostics=result)
-        return _result(True, "decompile",
-                       out=str(artifact),
-                       selected_engine="string_recovery",
-                       final_status="PARTIAL_STRING_RECOVERY",
-                       artifact_kind="string_recovery",
-                       source_recovered=False,
-                       strings_recovered=True,
-                       output_bytes=artifact.stat().st_size,
-                       note=result.get("note"),
-                       diagnostics=result)
+        partial_result = _result(True, "decompile",
+                              out=str(artifact),
+                              selected_engine="string_recovery",
+                              final_status="PARTIAL_STRING_RECOVERY",
+                              artifact_kind="string_recovery",
+                              source_recovered=False,
+                              strings_recovered=True,
+                              output_bytes=artifact.stat().st_size,
+                              note=result.get("note"),
+                              diagnostics=result)
+        # Keep the intelligence plan attached to the public partial result.
+        # String-only recovery is useful evidence and must remain actionable,
+        # not degrade into an adapter error or lose the next-step plan.
+        try:
+            from recovery_planner import build_recovery_plan
+            partial_result["recovery_plan"] = build_recovery_plan(partial_result, domain="lua")
+        except Exception as exc:
+            partial_result["recovery_plan_error"] = f"{type(exc).__name__}: {exc}"
+        return partial_result
     if not result.get("ok") or not result.get("out"):
         if result.get("ok"):
             return _result(False, "decompile",
