@@ -90,10 +90,42 @@ def test_large_declared_work_routes_to_bounded_streaming_path():
         assert features._lua_work_exceeds_budget(src, src.stat().st_size) is True
 
         out = root / "out"
-        result = features.run_lua_smart(src, out)
+        from lua_engine import orchestrator
+        # Keep this test deterministic even if a host has unluac-cli on PATH.
+        monkeypatch = __import__("pytest").MonkeyPatch()
+        monkeypatch.setattr(orchestrator, "_find_unluac_rs", lambda _jars: None)
+        try:
+            result = features.run_lua_smart(src, out)
+        finally:
+            monkeypatch.undo()
         assert result.get("mode") == "smart_streaming_large_input", result
         assert result.get("final_status") == "PARTIAL", result
         assert result.get("ok") is False, result
+
+
+def test_large_declared_work_uses_strict_native_engine_when_available(tmp_path, monkeypatch):
+    from lua_engine import orchestrator
+
+    src = tmp_path / "big-native.luac"
+    src.write_bytes(_single_proto_chunk(450_000))
+    out = tmp_path / "native-out"
+    fake_binary = tmp_path / "unluac-cli"
+    fake_binary.write_bytes(b"native-cli-test-stub")
+
+    monkeypatch.setattr(orchestrator, "_find_unluac_rs", lambda _jars: fake_binary)
+
+    def fake_native_run(_binary, _src, dst):
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        dst.write_text("return 1\\n", encoding="utf-8")
+        return True, "strict native test output"
+
+    monkeypatch.setattr(orchestrator, "_run_unluac_rs", fake_native_run)
+    result = features.run_lua_smart(src, out)
+    assert result.get("ok") is True, result
+    assert result.get("mode") == "smart_native_large_input", result
+    assert result.get("selected_engine") == "unluac_rs_v1_4_4", result
+    assert result.get("final_status") == "SUCCESS", result
+    assert Path(result["out"]).is_file()
 
 
 def test_incomplete_estimate_fails_closed_without_copying_file(tmp_path, monkeypatch):
