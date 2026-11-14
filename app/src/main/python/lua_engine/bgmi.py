@@ -208,14 +208,12 @@ def transform_bgmi_lua(data: bytes, key: bytes | None = None, decrypt=True) -> b
         if sz == 0:
             return None
         raw = r.raw(sz - 1)
-        # Structure-only mode must preserve encrypted/arbitrary string bytes
-        # exactly. Decoding with errors="replace" and re-encoding would corrupt
-        # the original payload even though the caller supplied no XOR key.
-        if not key:
-            return raw
+        # Lua strings are byte sequences, not necessarily UTF-8 text. Preserve
+        # them as bytes after optional XOR so both binary and textual constants
+        # survive a structure conversion without replacement-character loss.
         if decrypt:
             raw = _xor(raw, key)
-        return raw.decode("utf-8", "replace")
+        return raw
 
     def swrite(s):
         if s is None:
