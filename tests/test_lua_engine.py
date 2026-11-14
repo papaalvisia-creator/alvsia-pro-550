@@ -156,8 +156,7 @@ def main():
             + b"\xff\xfeA"                    # deliberately non-UTF8 bytes
             + struct.pack("<I", 0)              # upvalues
             + struct.pack("<I", 0)              # nested prototypes
-            + struct.pack("<I", 0)              # line info
-            + struct.pack("<I", 0)              # absolute line info
+            + struct.pack("<I", 0)              # Lua 5.3 line info
             + struct.pack("<I", 0)              # local variables
             + struct.pack("<I", 0)              # upvalue names
         )
