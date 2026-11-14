@@ -72,6 +72,7 @@ class Reader:
         self.little = True
         self.hybrid_long_string_size = hybrid_long_string_size
         self.pubgm = pubgm
+        self.lineinfo_mode = "int"
 
     def remaining(self):
         return len(self._d) - self._pos
@@ -233,22 +234,21 @@ def load_proto(r: Reader, depth: int = 0) -> Proto:
     p.protos = [load_proto(r, depth + 1) for _ in range(n)]
 
     # debug: lineinfo
-    if r.pubgm:
-        n = _read_count(r, "line delta", 1)
-        _deltas = [struct.unpack("b", r._read(1))[0] for _ in range(n)]
-        abs_n = _read_count(r, "absolute line", 8)
-        _abs_lines = [(r.int_(), r.int_()) for _ in range(abs_n)]
-        p.lineinfo = _deltas
-    else:
-        # Real Lua 5.3 debug format (lundump.c LoadDebug): lineinfo is an
-        # array of signed-BYTE deltas followed by the abslineinfo table
-        # (pc int + line int per entry). The previous 4-byte-int reading was
-        # a fixture bug: no real Lua 5.3 producer emits 4-byte line deltas,
-        # and every genuine 32-bit/64-bit chunk misparsed here.
+    # Debug: lineinfo. Authoritative Lua 5.3 lundump.c LoadDebug stores
+    # lineinfo as an array of `int` (4 bytes each) and has NO abslineinfo
+    # table (abslineinfo is a Lua 5.4 feature). Some protected/hybrid
+    # producers instead emit 1-byte deltas followed by an abslineinfo table;
+    # that layout is only attempted through the explicit "byte_abs" mode so
+    # genuine Lua 5.3 chunks are never misparsed.
+    mode = getattr(r, "lineinfo_mode", "int")
+    if mode == "byte_abs":
         n = _read_count(r, "line delta", 1)
         p.lineinfo = [struct.unpack("b", r._read(1))[0] for _ in range(n)]
         abs_n = _read_count(r, "absolute line", 8)
         _abs_lines = [(r.int_(), r.int_()) for _ in range(abs_n)]
+    else:
+        n = _read_count(r, "lineinfo", 4)
+        p.lineinfo = [r.int_() for _ in range(n)]
 
     # debug: locvars
     n = _read_count(r, "local variable", 9)
@@ -272,9 +272,11 @@ def load_proto(r: Reader, depth: int = 0) -> Proto:
 
 
 def load_chunk(data: bytes, *, hybrid_long_string_size: bool = False,
-               pubgm: bool = False, deadline: float | None = None) -> Proto:
+               pubgm: bool = False, deadline: float | None = None,
+               lineinfo_mode: str = "int") -> Proto:
     r = Reader(data, pubgm=pubgm, hybrid_long_string_size=hybrid_long_string_size,
                deadline=deadline)
+    r.lineinfo_mode = lineinfo_mode
     # header
     sig = r._read(4)
     if sig != b"\x1bLua":
@@ -1036,13 +1038,14 @@ def decompile_bytes(
     global INVALID_CONSTANT_REF_COUNT
     INVALID_CONSTANT_REF_COUNT = 0
     errors = []
-    for variant in ("standard", "pubgm"):
+    for variant in ("standard", "hybrid", "pubgm"):
         try:
             proto = load_chunk(
                 data,
                 pubgm=(variant == "pubgm"),
                 hybrid_long_string_size=hybrid_long_string_size,
                 deadline=deadline,
+                lineinfo_mode=("byte_abs" if variant == "hybrid" else "int"),
             )
             break
         except TimeoutError:

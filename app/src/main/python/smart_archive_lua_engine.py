@@ -51,8 +51,12 @@ def execute(input_path, output_dir, work_dir=None, archive_kind="auto",
                 "error": detected.get("error", "unsupported archive"), "detect": detected}
 
     fmt = detected.get("format")
-    if archive_kind not in ("auto", fmt):
-        expected = "tencent-pak" if archive_kind == "pak" else "obb-zip"
+    # Normalise the caller-facing short kind ("pak"/"obb") to the canonical
+    # detected format names ("tencent-pak"/"obb-zip") before comparing.
+    _kind_map = {"pak": "tencent-pak", "obb": "obb-zip"}
+    normalized_kind = _kind_map.get(archive_kind, archive_kind)
+    if normalized_kind not in ("auto", fmt):
+        expected = "tencent-pak" if normalized_kind == "tencent-pak" else "obb-zip"
         return {"ok": False, "engine": "SMART " + archive_kind.upper(),
                 "stage": "detect", "error": f"expected {expected}, detected {fmt}"}
 

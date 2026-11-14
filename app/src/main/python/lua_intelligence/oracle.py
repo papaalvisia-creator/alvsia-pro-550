@@ -153,6 +153,14 @@ def semantic_signature(path: Path) -> dict:
     try:
         with path.open("r", encoding="utf-8", errors="replace") as fh:
             for line in fh:
+                # Normalise faithful string encodings back to a single literal so
+                # the strong profile's `string.char(<bytes>)` transform is not
+                # mistaken for a semantic change (it preserves the literal).
+                line = re.sub(
+                    r"string\s*\.\s*char\s*\(\s*(?:\d+\s*,\s*)*\d+\s*\)",
+                    '""',
+                    line,
+                )
                 # Strip comments only for the structural token stream; strings
                 # remain tokens so string-bearing candidates are distinguishable.
                 tokens = re.findall(
@@ -234,6 +242,9 @@ def differential_validate(original: Path, reconstructed: Path) -> OracleResult:
     )
     return OracleResult(score >= 0.75, "differential", score, {
         "original": a, "reconstructed": b,
+        # Flattened original structural markers for callers that gate on them.
+        "function_markers": a["function_markers"],
+        "return_markers": a["return_markers"],
         "exact_match_ratio": matches,
         "operator_match_ratio": operator_matches,
         "identifier_ratio": identifier_ratio,
