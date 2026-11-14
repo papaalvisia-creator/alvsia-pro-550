@@ -757,6 +757,9 @@ class LuaOpcodeConverter:
         def u32(self, value: int):
             self.data.extend(_struct.pack('<I', value))
 
+        def u64(self, value: int):
+            self.data.extend(_struct.pack('<Q', value))
+
         def i32(self, value: int):
             self.data.extend(_struct.pack('<i', value))
 
@@ -775,7 +778,7 @@ class LuaOpcodeConverter:
                 self.u8(size)
             else:
                 self.u8(0xFF)
-                self.u32(size)
+                self.u64(size)
             self.raw(value)
 
     def _convert_proto(self, reader, writer, depth: int = 0):
@@ -930,9 +933,8 @@ class LuaOpcodeConverter:
         reader.pos = 33
         writer = self._Writer()
         header = bytearray(data[:33])
-        # Keep the 32-bit size_t layout used by this game's Lua VM. The
-        # in-app Lua 5.3 reader explicitly supports this producer layout.
-        header[13] = 4
+        # Emit the standard 64-bit size_t ABI used by the ARM64 Lua 5.3 runtime.
+        header[13] = 8
         writer.raw(header)
         writer.u8(reader.u8())  # main closure upvalue count
         self._convert_proto(reader, writer)
