@@ -9,9 +9,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "app" / "src" / "ma
 from alvsia_features import PUBGLuaConverter, run_pubg_lua_decrypt
 from alvsia_private import ALVSIA_BGMI_XOR_KEY
 from lua_engine.bgmi import transform_bgmi_lua
+from lua_engine.decompiler53 import load_chunk
 
 
-def _standard_chunk_with_binary_string() -> bytes:
+def _standard_chunk_with_binary_string(line_numbers: tuple[int, ...] = ()) -> bytes:
     header = (
         b"\x1bLua\x53\x00\x19\x93\x0d\x0a\x1a\x0a"
         + b"\x04\x08\x04\x08\x08"
@@ -24,17 +25,17 @@ def _standard_chunk_with_binary_string() -> bytes:
         + struct.pack("<B", 0)
         + struct.pack("<ii", 0, 0)
         + struct.pack("<BBB", 0, 0, 2)
-        + struct.pack("<I", 1)
-        + struct.pack("<I", 38)
+        + struct.pack("<I", max(1, len(line_numbers)))
+        + b"".join(struct.pack("<I", 38) for _ in range(max(1, len(line_numbers))))
         + struct.pack("<I", 1)
         + struct.pack("<BB", 4, 4)
         + b"\xff\xfeA"
-        + struct.pack("<I", 0)
-        + struct.pack("<I", 0)
-        + struct.pack("<I", 0)
-        + struct.pack("<I", 0)
-        + struct.pack("<I", 0)
-        + struct.pack("<I", 0)
+        + struct.pack("<I", 0)  # upvalue count
+        + struct.pack("<I", 0)  # nested prototype count
+        + struct.pack("<I", len(line_numbers))
+        + b"".join(struct.pack("<i", line) for line in line_numbers)
+        + struct.pack("<I", 0)  # local variable count
+        + struct.pack("<I", 0)  # upvalue-name count
     )
 
 
@@ -45,8 +46,20 @@ def test_pubg_converter_uses_structured_bgmi_parser_and_preserves_binary_strings
     )
     converted = PUBGLuaConverter().convert_bytes(encrypted_bgmi)
     expected = bytearray(standard)
-    expected[13] = 4  # retain the producer's 32-bit size_t layout
+    expected[13] = 8  # emit the standard ARM64 Lua 5.3 size_t layout
     assert converted == bytes(expected)
+
+
+def test_pubg_converter_reconstructs_signed_line_deltas_and_absolute_checkpoints():
+    expected_lines = (300, 301, 500, 499)
+    standard = _standard_chunk_with_binary_string(expected_lines)
+    encrypted_bgmi = transform_bgmi_lua(
+        standard, key=ALVSIA_BGMI_XOR_KEY, decrypt=False
+    )
+    converted = PUBGLuaConverter().convert_bytes(encrypted_bgmi)
+    proto = load_chunk(converted)
+    assert proto.lineinfo == list(expected_lines)
+    assert converted[13] == 8
 
 
 def test_pubg_converter_rejects_unknown_variant_instead_of_bytewise_corruption():
