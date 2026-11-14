@@ -85,6 +85,7 @@ jobs:
         if: steps.corpus-auth.outputs.available == 'true'
         run: |
           set -euo pipefail
+          ulimit -v 3200000
           test -s "reference-corpus/samples/pak/game_patch_4.7.0.21752.pak"
           test -s "reference-corpus/samples/pak/game_patch_4.7.0.21756.pak"
           test -s "reference-corpus/samples/lua/PUBG_(4.7.0)_All-Orginal-Lua.zip"
