@@ -20,10 +20,10 @@ The reports ZIP contains Markdown reports; it does not contain the APK. The sign
 
 ## 2. RAR source snapshot findings
 
-The RAR was safely listed and extracted. It contains 618 files, including:
+The RAR was safely listed and extracted into a clean directory. It contains 434 regular files and 71 directories (505 archive entries), including:
 
-- 299 .pyc compiled Python files;
-- 8 __pycache__ / .pytest_cache directories;
+- 112 .pyc compiled Python files;
+- 7 __pycache__ / .pytest_cache directories;
 - no .git directory;
 - no APK;
 - no keystore or private signing-key file.
