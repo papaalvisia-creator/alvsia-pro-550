@@ -25,7 +25,26 @@ def _sha256(path: Path) -> str:
 
 
 def _safe_error(exc: BaseException) -> str:
-    return f"{type(exc).__name__}: {exc}"[:500]
+    return f"{type(exc).__name__}: {exc}"
+
+
+def _fallback_recovery_status(result) -> str:
+    """Classify a non-success recovery result as PARTIAL or FAILED.
+
+    A bounded streaming recovery that produced diagnostic artifacts (strings,
+    container unwrap, etc.) reports ``final_status == "PARTIAL"`` with
+    ``ok == False``. That is an honest partial recovery, not a failure, and
+    must be counted as such so the archive summary never under-reports work
+    that actually succeeded within its memory budget.
+    """
+    if isinstance(result, dict):
+        if result.get("partial_recovery"):
+            return "PARTIAL"
+        if str(result.get("final_status") or "") in (
+            "PARTIAL", "PARTIAL_RECOVERY", "STRUCTURALLY_VALID"
+        ):
+            return "PARTIAL"
+    return "FAILED"
 
 
 def _candidate_probe(path: Path) -> dict[str, Any]:
@@ -62,7 +81,17 @@ def execute(input_path, output_dir, work_dir=None, archive_kind="auto",
 
     extracted_root = out / ("PAK" if fmt == "tencent-pak" else "OBB")
     extracted = extract_archive(source, extracted_root)
-    if not extracted.get("ok"):
+    extract_stats = extracted.get("stats") or {}
+    try:
+        _on_disk = int(extract_stats.get("on_disk") or 0)
+    except (TypeError, ValueError):
+        _on_disk = 0
+    # A partially-extracted archive (e.g. some entries are SM4-blocked with no
+    # authorized key material) must NOT abort the whole pipeline: the entries
+    # that *were* written can still be scanned and recovered. We only abort
+    # when nothing at all was written to disk. The blocked/failed entries stay
+    # visible in ``extract`` and the report is marked partial.
+    if not extracted.get("ok") and _on_disk <= 0:
         return {"ok": False, "engine": "SMART ARCHIVE/LUA", "stage": "extract",
                 "error": extracted.get("error", "archive extraction failed"),
                 "detect": detected, "extract": extracted}
@@ -137,7 +166,7 @@ def execute(input_path, output_dir, work_dir=None, archive_kind="auto",
                     partials.append(record)
                 continue
         partials_info = result.get("partial_recovery") if isinstance(result, dict) else None
-        if partials_info:
+        if partials_info or _fallback_recovery_status(result) == "PARTIAL":
             record["status"] = "PARTIAL"
             partials.append(record)
         else:
@@ -149,6 +178,8 @@ def execute(input_path, output_dir, work_dir=None, archive_kind="auto",
         "engine": "SMART ARCHIVE/LUA",
         "format": fmt,
         "operation": "extract-scan-recover",
+        "extraction_complete": bool(extracted.get("ok")),
+        "blocked_entries": list(extract_stats.get("blocked_entries") or []),
         "input": {"name": source.name, "bytes": source.stat().st_size,
                   "sha256": _sha256(source)},
         "extract": extracted,

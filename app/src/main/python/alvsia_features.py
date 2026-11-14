@@ -21,6 +21,40 @@ except Exception:
     validate_decompile_text = None
     classify_bytes = None
 
+# ── Large-input memory safety ────────────────────────────────────────────────
+# A Lua 5.3 bytecode chunk can expand enormously when parsed into Python
+# objects (a single real-world protected chunk of ~22.7 MB declared >900k
+# instructions and drove the pure-Python decompiler past several GB of RAM,
+# OOM-killing the host). To keep peak memory bounded we only attempt the
+# in-memory decompiler for chunks whose declared work fits a safe budget;
+# anything larger is routed to the bounded streaming recovery path, which
+# scans/recovers with O(chunk) memory and reports an honest PARTIAL status.
+_LUA_INMEM_SAFE_BYTES = 256 * 1024
+_LUA_MAX_INSTRUCTIONS = 400_000
+
+
+def _lua_work_exceeds_budget(input_path: Path, input_size: int) -> bool:
+    """True when a Lua 5.3 bytecode chunk declares more work than the
+    in-memory decompiler can materialise safely.
+
+    Small inputs short-circuit immediately (no extra read). Only plain Lua 5.3
+    bytecode is estimated; containers/other formats keep their existing
+    handling. Any estimation error falls back to the normal path.
+    """
+    try:
+        if input_size <= _LUA_INMEM_SAFE_BYTES:
+            return False
+        with input_path.open("rb") as fh:
+            head = fh.read(5)
+        if len(head) < 5 or head[:4] != b"\x1bLua" or head[4] != 0x53:
+            return False
+        from lua_engine.decompiler53 import estimate_chunk_work
+        est = estimate_chunk_work(input_path.read_bytes())
+        budget = int(os.environ.get("ALVSIA_LUA_MAX_INSTRUCTIONS", str(_LUA_MAX_INSTRUCTIONS)))
+        return int(est.get("instructions", 0)) > budget
+    except Exception:
+        return False
+
 
 def _find_java():
     for c in ("java", "/data/data/com.termux/files/usr/bin/java"):
@@ -604,7 +638,9 @@ def run_lua_smart(input_path, out_dir, jars_dir=None):
     ))
     max_in_memory = max(16 * 1024 * 1024, min(max_in_memory, 512 * 1024 * 1024))
     input_size = input_path.stat().st_size if input_path.is_file() else 0
-    if input_size > max_in_memory:
+    if input_size > max_in_memory or (
+        input_path.is_file() and _lua_work_exceeds_budget(input_path, input_size)
+    ):
         from lua_engine.streaming_decompiler import (
             preflight_magic, stream_inflate_zlib, stream_inflate_deflate_container,
         )
@@ -656,9 +692,10 @@ def run_lua_smart(input_path, out_dir, jars_dir=None):
             decompile_report = {
                 "ok": False,
                 "error": (
-                    f"input/payload exceeds in-memory Lua parser budget ({max_in_memory} bytes); "
-                    "large-file scanning and container inflation remain streaming, "
-                    "but full Lua 5.3 source reconstruction is not yet streaming"
+                    "input exceeds the safe in-memory Lua decompiler budget "
+                    "(byte size or declared instruction count); bounded streaming "
+                    "scanning/string recovery was used, but full Lua 5.3 source "
+                    "reconstruction is not performed for this input"
                 ),
             }
         try:

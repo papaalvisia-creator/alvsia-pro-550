@@ -77,6 +77,22 @@ class Reader:
     def remaining(self):
         return len(self._d) - self._pos
 
+    def skip(self, n):
+        """Advance the cursor by ``n`` bytes without copying them.
+
+        Used by the non-allocating work estimator so that walking a huge
+        chunk never materializes per-instruction byte copies in RAM.
+        """
+        if not isinstance(n, int) or n < 0:
+            raise ValueError(f"invalid Lua chunk skip length {n!r} at offset {self._pos}")
+        end = self._pos + n
+        if end > len(self._d):
+            raise ValueError(
+                f"truncated Lua chunk at offset {self._pos}: "
+                f"need {n} bytes, have {self.remaining()}"
+            )
+        self._pos = end
+
     def _read(self, n):
         self._read_ops += 1
         if self.deadline is not None and (self._read_ops & 0x3FF) == 0:
@@ -309,6 +325,116 @@ def load_chunk(data: bytes, *, hybrid_long_string_size: bool = False,
     # main upvalue count (upvalues field before main proto)
     _upval_count = r.byte()
     return load_proto(r)
+
+
+def estimate_chunk_work(data: bytes, *, max_protos: int = 500_000) -> dict:
+    """Non-allocating structural walk of a Lua 5.3 chunk.
+
+    Counts the total number of instructions/constants across every prototype
+    WITHOUT materializing per-instruction lists. It is therefore safe to run
+    on very large or adversarial chunks: memory use stays O(1) in the input
+    size (only the input bytes themselves are held).
+
+    On any desync/truncation it stops and returns ``completed=False`` together
+    with the partial counts gathered so far. It never raises, so callers can
+    use it as a cheap pre-flight budget gate.
+    """
+    r = Reader(data)
+    result = {
+        "completed": False,
+        "instructions": 0,
+        "constants": 0,
+        "protos": 0,
+        "bytes_consumed": 0,
+        "error": None,
+    }
+
+    def skip_string() -> None:
+        size = r.uint8()
+        if size == 0xFF:
+            size = r.sizet_()
+        if size:
+            r.skip(size - 1)
+
+    def walk(depth: int = 0) -> None:
+        if depth > 200:
+            raise ValueError("Lua prototype nesting exceeds safety limit")
+        if result["protos"] > max_protos:
+            raise ValueError("prototype count exceeds safety limit")
+        result["protos"] += 1
+        skip_string()
+        r.int_(); r.int_(); r.uint8(); r.uint8(); r.uint8()
+        n = r.int_()
+        if n < 0 or n > r.remaining() // 4:
+            raise ValueError(f"invalid instruction count {n} at offset {r._pos}")
+        result["instructions"] += n
+        r.skip(n * 4)
+        nc = r.int_()
+        if nc < 0 or nc > r.remaining():
+            raise ValueError(f"invalid constant count {nc} at offset {r._pos}")
+        result["constants"] += nc
+        for _ in range(nc):
+            t = r.uint8()
+            if t == 0:
+                pass
+            elif t == 1:
+                r.uint8()
+            elif t == 3:
+                r.lua_num()
+            elif t == 19:
+                r.lua_int()
+            elif t in (4, 20):
+                skip_string()
+        nu = r.int_()
+        if nu < 0 or nu > r.remaining() // 2:
+            raise ValueError(f"invalid upvalue count {nu} at offset {r._pos}")
+        r.skip(nu * 2)
+        np = r.int_()
+        if np < 0 or np > r.remaining():
+            raise ValueError(f"invalid nested prototype count {np} at offset {r._pos}")
+        for _ in range(np):
+            walk(depth + 1)
+        nl = r.int_()
+        if nl < 0 or nl > r.remaining() // 4:
+            raise ValueError(f"invalid lineinfo count {nl} at offset {r._pos}")
+        r.skip(nl * 4)
+        nlv = r.int_()
+        if nlv < 0 or nlv > r.remaining() // 9:
+            raise ValueError(f"invalid local variable count {nlv} at offset {r._pos}")
+        for _ in range(nlv):
+            skip_string(); r.int_(); r.int_()
+        nuv = r.int_()
+        if nuv < 0 or nuv > r.remaining():
+            raise ValueError(f"invalid upvalue-name count {nuv} at offset {r._pos}")
+        for _ in range(nuv):
+            skip_string()
+
+    try:
+        if r._read(4) != b"\x1bLua":
+            result["error"] = "not a Lua chunk"
+            return result
+        if r.byte() != 0x53:
+            result["error"] = "not Lua 5.3"
+            return result
+        r.byte()  # format
+        r._read(6)
+        r.int_size = r.byte()
+        r.sizet_size = r.byte()
+        r.instr_size = r.byte()
+        r.lua_int_size = r.byte()
+        r.lua_num_size = r.byte()
+        if r.int_size != 4 or r.instr_size != 4 or r.sizet_size not in (4, 8):
+            result["error"] = "unsupported field sizes"
+            return result
+        r.lua_int()
+        r.lua_num()
+        r.byte()
+        walk(0)
+        result["completed"] = True
+    except Exception as exc:  # noqa: BLE001 - estimator must never raise
+        result["error"] = f"{type(exc).__name__}: {exc}"
+    result["bytes_consumed"] = r._pos
+    return result
 
 
 # ── Name tracking ─────────────────────────────────────────────────────────────
