@@ -129,6 +129,7 @@ jobs:
       - name: Run Tencent PAK extraction regressions
         run: |
           python3 -m pip install --disable-pip-version-check pycryptodome pytest zstandard
+          python3 -m pytest -q tests/test_sm4_material_isolation.py
           python3 tests/test_pak_extraction.py
           python3 -m pytest -q tests/test_pak_extraction_contract.py
 
