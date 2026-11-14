@@ -50,3 +50,79 @@ if __name__ == "__main__":
     test_limits_and_detection()
     test_real_pak_manifest_entry()
     print("SMART PAK/LUA PIPELINE CONTRACT: PASS")
+
+
+
+def test_smart_pak_lua_processes_written_entries_when_other_entries_are_blocked(
+    tmp_path, monkeypatch
+):
+    import smart_archive_lua_engine
+    import smart_pak_lua_engine
+
+    source = tmp_path / "partial.pak"
+    source.write_bytes(b"pak")
+    output = tmp_path / "out"
+    captured = {}
+
+    def fake_archive_execute(path, out, work_dir=None, archive_kind="auto",
+                             deep_lua=True):
+        captured.update({
+            "path": Path(path),
+            "archive_kind": archive_kind,
+            "deep_lua": deep_lua,
+        })
+        return {
+            "ok": True,
+            "engine": "SMART ARCHIVE/LUA",
+            "extraction_complete": False,
+            "extract": {
+                "ok": False,
+                "stats": {"expected_files": 2, "written_files": 1,
+                          "skipped_files": 1, "on_disk": 1},
+            },
+            "blocked_entries": [{"path": "protected.uasset",
+                                 "classification": "BLOCKED_AUTHORIZATION"}],
+            "recovery": {"attempted": 1, "success": 0, "partial": 1, "failed": 0},
+            "partials": [{"path": "available.luac",
+                          "status": "PARTIAL_RECOVERY"}],
+            "out": str(out),
+        }
+
+    monkeypatch.setattr(smart_archive_lua_engine, "execute", fake_archive_execute)
+    result = smart_pak_lua_engine.execute(source, output)
+
+    assert captured["path"] == source
+    assert captured["archive_kind"] == "pak"
+    assert captured["deep_lua"] is True
+    assert result["ok"] is True
+    assert result["final_status"] == "PARTIAL"
+    assert result["extraction_complete"] is False
+    assert result["decompile"]["partial"] == 1
+    assert result["blocked_entries"][0]["classification"] == "BLOCKED_AUTHORIZATION"
+    assert Path(result["report"]).is_file()
+
+
+def test_smart_pak_lua_reports_success_only_when_extraction_and_recovery_are_complete(
+    tmp_path, monkeypatch
+):
+    import smart_archive_lua_engine
+    import smart_pak_lua_engine
+
+    source = tmp_path / "complete.pak"
+    source.write_bytes(b"pak")
+    output = tmp_path / "out"
+
+    monkeypatch.setattr(
+        smart_archive_lua_engine,
+        "execute",
+        lambda *args, **kwargs: {
+            "ok": True,
+            "extraction_complete": True,
+            "recovery": {"attempted": 1, "success": 1, "partial": 0, "failed": 0},
+            "out": str(output),
+        },
+    )
+    result = smart_pak_lua_engine.execute(source, output)
+    assert result["ok"] is True
+    assert result["final_status"] == "SUCCESS"
+    assert result["decompile"]["success"] == 1
