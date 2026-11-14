@@ -33,7 +33,7 @@ jobs:
             echo "available=true" >> "$GITHUB_OUTPUT"
           else
             echo "available=false" >> "$GITHUB_OUTPUT"
-            printf '%s\\n' \
+            printf '%s\n' \
               '{"status":"BLOCKED_AUTHORIZATION","reason":"REFERENCE_CORPUS_TOKEN secret is not configured; private reference corpus was not checked."}' \
               > reference-corpus-gate-report/gate-status.json
             {
