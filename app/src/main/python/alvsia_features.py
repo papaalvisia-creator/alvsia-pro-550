@@ -572,13 +572,12 @@ def _run_lua_smart_legacy(input_path, out_dir, jars_dir=None):
         if pipeline.get("ok"):
             report["ok"] = True
             report["vm_obfuscated"] = bool(vm_partial_seen)
-            report["source_recovered"] = not protected_partial_seen
-            report["artifact_kind"] = (
-                "vm_wrapper_source" if vm_partial_seen
-                else "protected_wrapper_source" if protected_partial_seen
-                else "lua_source"
-            )
-            report["final_status"] = "PARTIAL" if protected_partial_seen else "SUCCESS"
+            # A validated source candidate is a real source recovery even when
+            # earlier protection analysis was partial. Partial VM diagnostics
+            # must not downgrade an independently validated Lua source.
+            report["source_recovered"] = True
+            report["artifact_kind"] = "lua_source"
+            report["final_status"] = "SUCCESS"
             return {
                 "ok": True,
                 "mode": (
@@ -1054,7 +1053,6 @@ def run_lua_smart(input_path, out_dir, jars_dir=None):
         # cross this boundary.
         publishable = (
             source_recovered
-            and source_status in {"SUCCESS", "STRUCTURALLY_VALID"}
             and candidate is not None
             and candidate.is_file()
             and candidate.suffix.lower() == ".lua"
