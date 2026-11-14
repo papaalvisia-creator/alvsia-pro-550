@@ -306,6 +306,18 @@ fun subToolConfig(subId: String): List<SubToolConfig> = when (subId) {
         )
     )
 
+    // Smart Asset Engine — optional user-supplied equal-length hex mappings.
+    "asset_smart" -> listOf(
+        SubToolConfig(
+            field = "asset_patch_map",
+            label = "Optional Asset Mapping (old_hex=new_hex, one per line)",
+            type = ConfigType.MULTILINE,
+            hint = "DEADBEEF=01020304",
+            required = false,
+            workFileName = "asset_patch_map.txt"
+        )
+    )
+
     // All other subtools — no inline config needed
     else -> emptyList()
 }
