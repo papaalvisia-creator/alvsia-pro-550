@@ -707,7 +707,68 @@ def run_lua_smart(input_path, out_dir, jars_dir=None):
             unwrap_report = {"ok": False, "format": fmt,
                              "error": f"{type(exc).__name__}: {exc}"}
 
-        if work_input != input_path and work_input.stat().st_size <= max_in_memory:
+        # A high-instruction Lua 5.3 chunk must not fall back to the pure-Python
+        # parser merely because a compressed wrapper was small. Try the pinned
+        # native Rust CLI first: it is isolated from Chaquopy's Python heap,
+        # strict-mode output is checked again by the common Lua validator, and
+        # unsupported/custom-VM inputs remain PARTIAL rather than being guessed.
+        native_report = None
+        try:
+            from lua_engine.streaming_decompiler import preflight_magic
+            native_format = preflight_magic(work_input)
+            native_limit = 32 * 1024 * 1024
+            if native_format == "luac_53" and work_input.stat().st_size <= native_limit:
+                from lua_engine.orchestrator import _find_unluac_rs, _run_unluac_rs
+                native_binary = _find_unluac_rs(jars_dir)
+                if native_binary is not None:
+                    native_out = out_dir / (input_path.stem + "_native_decompiled.lua")
+                    native_ok, native_note = _run_unluac_rs(
+                        native_binary, work_input, native_out
+                    )
+                    native_report = {
+                        "available": True, "ok": bool(native_ok),
+                        "engine": "unluac_rs_v1_4_4", "note": str(native_note)[:500],
+                    }
+                    if native_ok and native_out.is_file() and native_out.stat().st_size > 0:
+                        valid, validation_note = validate_lua_source(native_out)
+                        native_report["validation"] = validation_note
+                        if valid:
+                            return {
+                                "ok": True,
+                                "mode": "smart_native_large_input",
+                                "final_status": "SUCCESS",
+                                "selected_engine": "unluac_rs_v1_4_4",
+                                "out": str(native_out),
+                                "source_recovered": True,
+                                "input_bytes": input_size,
+                                "stream_unwrap": unwrap_report,
+                                "native_decompile": native_report,
+                                "validation": validation_note,
+                            }
+                        native_out.unlink(missing_ok=True)
+                        native_report["ok"] = False
+                        native_report["error"] = "native output failed Lua source validation"
+                else:
+                    native_report = {
+                        "available": False, "ok": False,
+                        "note": "native unluac-rs CLI is not registered in this runtime",
+                    }
+            elif native_format == "luac_53":
+                native_report = {
+                    "available": False, "ok": False,
+                    "note": "native Lua input exceeds the 32 MiB safety cap",
+                }
+        except Exception as exc:
+            native_report = {
+                "available": False, "ok": False,
+                "error": f"{type(exc).__name__}: {exc}",
+            }
+
+        if (
+            work_input != input_path
+            and work_input.stat().st_size <= max_in_memory
+            and not _lua_work_exceeds_budget(work_input, work_input.stat().st_size)
+        ):
             try:
                 legacy = _run_lua_smart_legacy(work_input, out_dir, jars_dir=jars_dir)
                 legacy["input_bytes"] = input_size
@@ -740,6 +801,7 @@ def run_lua_smart(input_path, out_dir, jars_dir=None):
             "input_bytes": input_size,
             "stream_unwrap": unwrap_report,
             "decompile": decompile_report,
+            "native_decompile": native_report,
             "streaming_recovery": recovery,
             "note": (
                 "Large input was processed without whole-file RAM loading. "
