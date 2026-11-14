@@ -95,8 +95,12 @@ def test_large_declared_work_routes_to_bounded_streaming_path(monkeypatch):
         monkeypatch.setattr(orchestrator, "_find_unluac_rs", lambda _jars: None)
         result = features.run_lua_smart(src, out)
         assert result.get("mode") == "smart_streaming_large_input", result
-        assert result.get("final_status") == "PARTIAL", result
-        assert result.get("ok") is False, result
+        # String recovery is a usable partial artifact, not a fatal failure.
+        assert result.get("final_status") == "PARTIAL_STRING_RECOVERY", result
+        assert result.get("artifact_kind") == "string_recovery", result
+        assert result.get("strings_recovered") is True, result
+        assert result.get("source_recovered") is False, result
+        assert result.get("ok") is True, result
 
 
 def test_large_declared_work_uses_strict_native_engine_when_available(tmp_path, monkeypatch):
