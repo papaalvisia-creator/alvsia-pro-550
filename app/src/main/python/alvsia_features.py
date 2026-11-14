@@ -1897,113 +1897,47 @@ PUBG_XOR_KEY = bytes([
 ])
 
 # Verified opcode mapping: PUBG/BGMI opcode → Standard Lua 5.3 opcode
-PUBG_TO_STD_OPCODE = {
-    0: 0, 1: 1, 17: 0, 18: 1, 20: 3, 21: 4, 22: 5, 23: 6,
-    24: 7, 26: 9, 27: 10, 28: 11, 29: 12, 31: 31, 32: 32,
-    33: 33, 34: 34, 35: 35, 36: 36, 37: 37, 38: 38, 39: 39,
-    40: 40, 41: 41, 42: 42, 43: 43, 44: 44, 45: 45, 46: 46,
-    47: 47,
-}
-
-
 class PUBGLuaConverter:
-    """Convert PUBG Mobile / BGMI Lua bytecode to standard Lua 5.3 format.
+    """Structure-aware PUBG/BGMI Lua 5.3 normalizer.
 
-    The converter:
-
-    1. XOR-decrypts the string-constant pool (bytes after the 0x22-byte header)
-       using ``PUBG_XOR_KEY``.
-    2. Remaps scrambled opcodes to standard Lua 5.3 opcodes via
-       ``PUBG_TO_STD_OPCODE``.
-    3. Rewrites the Lua header to the standard Lua 5.3 signature so that
-       decompilers accept the output.
-
-    Usage::
-
-        converter = PUBGLuaConverter()
-        std_bytes = converter.convert_file('/path/to/scrambled.luac')
-        Path('/out/fixed.luac').write_bytes(std_bytes)
+    Only the verified BGMI 4-byte-size_t container is accepted here. Unknown
+    variants fail closed and should be handled by the Smart Lua auto-router;
+    the former bytewise XOR/opcode sweep could corrupt strings and metadata.
     """
-
-    _LUA53_HEADER = (
-        b'\x1bLua'       # magic
-        b'\x53'          # version 5.3
-        b'\x00'          # format 0
-        b'\x19\x93\r\n\x1a\n'  # LUAC_DATA
-        b'\x04'          # sizeof_int
-        b'\x08'          # sizeof_size_t
-        b'\x04'          # sizeof_Instruction
-        b'\x08'          # sizeof_lua_Integer
-        b'\x08'          # sizeof_lua_Number
-        b'\x78\x56\x00\x00\x00\x00\x00\x00'   # LUAC_INT
-        b'\x00\x00\x00\x00\x00\x28\x77\x40'   # LUAC_NUM
-    )
-    _HDR_LEN = 33
-    _HEADER_ENCRYPTED_START = 0x22  # bytes before this are NOT XOR-encrypted
-
-    @staticmethod
-    def _xor_decrypt(data: bytes) -> bytes:
-        key = PUBG_XOR_KEY
-        kl  = len(key)
-        return bytes(b ^ key[i % kl] for i, b in enumerate(data))
+    MAX_INPUT_BYTES = 32 * 1024 * 1024
 
     def convert_bytes(self, data: bytes) -> bytes:
-        """Convert *data* (raw PUBG .luac bytes) to standard Lua 5.3 bytes."""
-        if len(data) < self._HDR_LEN:
-            raise ValueError("data too short to be a Lua bytecode file")
-        # Decrypt the portion after the unencrypted header prefix
-        header   = data[:self._HEADER_ENCRYPTED_START]
-        body_enc = data[self._HEADER_ENCRYPTED_START:]
-        body     = self._xor_decrypt(body_enc)
-        decrypted = header + body
-
-        # Remap opcodes in all instruction words (every u32 that encodes an instruction)
-        result = self._remap_opcodes(decrypted)
-        # Rewrite the Lua header so luadec / unluac accept the file
-        return self._LUA53_HEADER + result[self._HDR_LEN:]
-
-    def _remap_opcodes(self, data: bytes) -> bytes:
-        """Walk the top-level proto and remap PUBG opcodes to standard ones."""
-        # Simple approach: scan all aligned u32 words and remap op field (bits 0-5)
-        # This is fast and works for most well-formed files.
-        ba = bytearray(data)
-        i  = self._HDR_LEN
-        while i + 4 <= len(ba):
-            raw = _struct.unpack_from('<I', ba, i)[0]
-            op  = raw & 0x3F
-            if op in PUBG_TO_STD_OPCODE:
-                std_op = PUBG_TO_STD_OPCODE[op]
-                new_raw = (raw & ~0x3F) | std_op
-                _struct.pack_into('<I', ba, i, new_raw)
-            i += 4
-        return bytes(ba)
+        if len(data) > self.MAX_INPUT_BYTES:
+            raise ValueError("PUBG/BGMI input exceeds the 32 MiB safety cap")
+        from lua_engine.bgmi import is_bgmi_lua, transform_bgmi_lua
+        raw = bytes(data)
+        if not is_bgmi_lua(raw):
+            raise ValueError(
+                "unsupported PUBG/BGMI variant: expected validated Lua 5.3 "
+                "BGMI header with 4-byte size_t; use Smart Lua automatic routing"
+            )
+        return transform_bgmi_lua(raw, key=PUBG_XOR_KEY, decrypt=True)
 
     def convert_file(self, input_path: str, output_path: str | None = None) -> bytes:
-        """Convert one ``.luac`` file.  If *output_path* is given, write the result there.
-
-        Returns the converted bytes regardless.
-        """
-        data   = Path(input_path).read_bytes()
-        result = self.convert_bytes(data)
+        source = Path(input_path)
+        if source.stat().st_size > self.MAX_INPUT_BYTES:
+            raise ValueError("PUBG/BGMI input exceeds the 32 MiB safety cap")
+        result = self.convert_bytes(source.read_bytes())
         if output_path:
             Path(output_path).write_bytes(result)
         return result
 
     def convert_folder(self, input_dir: str, output_dir: str,
                        glob_pat: str = '*.luac') -> dict:
-        """Convert all matching files in *input_dir*, writing to *output_dir*.
-
-        Returns ``{filename: 'OK' | 'FAIL: <reason>'}`` for each file processed.
-        """
         src_dir = Path(input_dir)
         dst_dir = Path(output_dir)
         dst_dir.mkdir(parents=True, exist_ok=True)
         report: dict = {}
-        for p in sorted(src_dir.glob(glob_pat)):
+        for source in sorted(src_dir.glob(glob_pat)):
             try:
-                out_path = dst_dir / p.name
-                self.convert_file(str(p), str(out_path))
-                report[p.name] = 'OK'
+                out_path = dst_dir / source.name
+                self.convert_file(str(source), str(out_path))
+                report[source.name] = 'OK'
             except Exception as exc:
-                report[p.name] = f'FAIL: {exc}'
+                report[source.name] = f'FAIL: {exc}'
         return report
