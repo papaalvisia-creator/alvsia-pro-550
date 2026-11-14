@@ -97,7 +97,7 @@ jobs:
           python3 tests/test_smart_lua_streaming.py
           python3 -m pytest -q tests/test_large_lua_memory_budget.py
           python3 tests/test_smart_archive_engine.py
-          python3 tests/test_smart_pak_lua_pipeline.py
+          python3 -m pytest -q tests/test_smart_pak_lua_pipeline.py
           python3 tests/test_smart_data_engine.py
           python3 -m pip install --disable-pip-version-check zstandard
           python3 -m pytest -q tests/test_pak_extraction_contract.py
