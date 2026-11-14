@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """ALVSIA PRO 5.5 — features: LUA (unluac jar), helpers."""
-import mmap
 from __future__ import annotations
+import mmap
 import os
 import hashlib
 import shutil
