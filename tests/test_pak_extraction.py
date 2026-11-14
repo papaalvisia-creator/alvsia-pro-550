@@ -47,6 +47,31 @@ def test_zstd_plain_block_uses_zero_argument_decoder():
         raise AssertionError("dictionary-compressed block accepted without dictionary")
 
 
+def test_explicit_zstd_frame_is_recovered_when_index_marks_zlib():
+    try:
+        import zstandard as zstd
+    except ImportError:
+        raise AssertionError("zstandard dependency is required for PAK ZSTD support")
+
+    plain = b"ALVSIA ZSTD frame-magic fallback regression\\n" * 256
+    frame = zstd.ZstdCompressor(level=3).compress(plain)
+    assert frame[:4] == b"\\x28\\xb5\\x2f\\xfd"
+
+    recovered = core.PakCompression.decompress_block(
+        frame, None, core.CM_ZLIB, max_output_size=len(plain)
+    )
+    assert recovered == plain
+
+    try:
+        core.PakCompression.decompress_block(
+            frame, None, core.CM_ZLIB, max_output_size=len(plain) - 1
+        )
+    except Exception as exc:
+        assert "size" in str(exc).lower() or "limit" in str(exc).lower() or "max" in str(exc).lower()
+    else:
+        raise AssertionError("ZSTD fallback exceeded the declared output limit")
+
+
 def test_corrupt_zlib_is_rejected_not_returned_as_plaintext():
     try:
         core.PakCompression.decompress_block(b"not-a-deflate-stream", None, core.CM_ZLIB)
