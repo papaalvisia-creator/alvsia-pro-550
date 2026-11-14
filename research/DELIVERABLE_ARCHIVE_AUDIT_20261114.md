@@ -59,7 +59,7 @@ The reports ZIP records:
 - claimed regression result 455 passed, 6 skipped;
 - signed APK SHA-256 b08c5dd2f171f8f39b2ecdc52488ba6c85653db65474bfeb630ddc8d478b5c11.
 
-The RAR instead identifies PR #24 / HEAD 59facc42, and its own README and TODO disagree on test counts (425/12/6 versus 423/12/6). The reports ZIP describes a later state than the RAR. They must not be presented as a single synchronized source-and-report package. The reports ZIP also claims 29 protected Python modules, while the RAR's scanner and the current branch's release scanner count 28; reconcile the module inventory before issuing a new final report.
+The RAR instead identifies PR #24 / HEAD 59facc42, and its own README and TODO disagree on test counts (425/12/6 versus 423/12/6). The reports ZIP describes a later state than the RAR. They must not be presented as a single synchronized source-and-report package. The reports ZIP claims 29 protected Python modules. The RAR's older scanner counted 28, but the current PR #25 seal script and release scanner now both inventory 29 and cross-check the inventories. The count discrepancy is therefore specific to the stale RAR snapshot; the current branch has reconciled it.
 
 The signed APK inside GitHub artifact 14109853179 was independently extracted and its SHA-256 matched the reports ZIP. A separate older APK ZIP present in the workspace has SHA-256 48da331a793e438152f5feb204131526cfa463b1d9d1349dd0040f6dfdf71d28; it is a different APK and must not be confused with the b08c5dd2 artifact.
 
