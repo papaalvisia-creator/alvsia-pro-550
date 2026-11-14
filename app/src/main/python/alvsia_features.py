@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 """ALVSIA PRO 5.5 — features: LUA (unluac jar), helpers."""
+import mmap
 from __future__ import annotations
 import os
 import hashlib
@@ -34,26 +35,39 @@ _LUA_MAX_INSTRUCTIONS = 400_000
 
 
 def _lua_work_exceeds_budget(input_path: Path, input_size: int) -> bool:
-    """True when a Lua 5.3 bytecode chunk declares more work than the
-    in-memory decompiler can materialise safely.
+    """Fail-closed preflight for potentially expensive Lua 5.3 chunks.
 
-    Small inputs short-circuit immediately (no extra read). Only plain Lua 5.3
-    bytecode is estimated; containers/other formats keep their existing
-    handling. Any estimation error falls back to the normal path.
+    The estimator receives a read-only memoryview over an mmap, not a copied
+    bytes object. If the header is Lua 5.3 but estimation is incomplete,
+    malformed, or the configured budget is invalid, route to bounded recovery
+    rather than allowing the in-memory parser to run without a work estimate.
     """
+    if input_size <= _LUA_INMEM_SAFE_BYTES:
+        return False
     try:
-        if input_size <= _LUA_INMEM_SAFE_BYTES:
-            return False
         with input_path.open("rb") as fh:
             head = fh.read(5)
-        if len(head) < 5 or head[:4] != b"\x1bLua" or head[4] != 0x53:
-            return False
-        from lua_engine.decompiler53 import estimate_chunk_work
-        est = estimate_chunk_work(input_path.read_bytes())
-        budget = int(os.environ.get("ALVSIA_LUA_MAX_INSTRUCTIONS", str(_LUA_MAX_INSTRUCTIONS)))
+            if len(head) < 5 or head[:4] != b"\x1bLua" or head[4] != 0x53:
+                return False
+            from lua_engine.decompiler53 import estimate_chunk_work
+            with mmap.mmap(fh.fileno(), 0, access=mmap.ACCESS_READ) as mapped:
+                view = memoryview(mapped)
+                try:
+                    est = estimate_chunk_work(view)
+                finally:
+                    view.release()
+        if not isinstance(est, dict) or est.get("completed") is not True:
+            return True
+        budget = int(os.environ.get(
+            "ALVSIA_LUA_MAX_INSTRUCTIONS", str(_LUA_MAX_INSTRUCTIONS)
+        ))
+        if budget < 1:
+            return True
         return int(est.get("instructions", 0)) > budget
     except Exception:
-        return False
+        # Unknown work is not safe work. Never fall back to an unbounded
+        # in-memory decompile merely because the preflight could not finish.
+        return True
 
 
 def _find_java():
