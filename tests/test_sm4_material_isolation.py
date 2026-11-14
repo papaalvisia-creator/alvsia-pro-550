@@ -29,6 +29,32 @@ def test_security_scanner_does_not_embed_plaintext_key_values():
     assert "PY.rglob(\"*.py\")" in scanner
 
 
+def test_historical_candidate_shape_detector_covers_all_three_legacy_families():
+    import importlib.util
+
+    scanner_path = ROOT / "tools/security_release_check.py"
+    spec = importlib.util.spec_from_file_location("alvsia_security_release_check", scanner_path)
+    scanner = importlib.util.module_from_spec(spec)
+    assert spec.loader is not None
+    spec.loader.exec_module(scanner)
+
+    # Construct only synthetic shapes at runtime; do not place historical
+    # candidate values in this test source or its compiled constants.
+    family_new = "".join([
+        "a", "B", "1", "c", "D", "2", "e", "F", "3", "g",
+        "H", "4", "i", "J", "5", "k", "L", "6", "m", "N",
+    ])
+    family_four = "".join([
+        "a1", "b2", "c3", "d4", "e5", "f6", "g7", "h8", "i9", "j0",
+    ])
+    family_two = "".join(["ABcD", "$*", "EFgh", "1234567890"])
+
+    assert scanner._looks_like_historical_sm4_candidate(family_new)
+    assert scanner._looks_like_historical_sm4_candidate(family_four)
+    assert scanner._looks_like_historical_sm4_candidate(family_two)
+    assert not scanner._looks_like_historical_sm4_candidate("ordinary-test-value")
+
+
 def test_no_hardcoded_sm4_secret_assignments_ast():
     """AST check: SM4_SECRET_* must not be assigned a string literal."""
     offenders = []
