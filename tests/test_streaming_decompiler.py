@@ -205,13 +205,15 @@ class TestT24VariantRouting(unittest.TestCase):
             # The streaming wrapper imports the strict parser locally from
             # decompiler53; patch that real dependency rather than a removed
             # module-level alias.
-            with patch("lua_engine.decompiler53.decompile_bytes",
-                       side_effect=fake_decompile):
-                with patch("lua_engine.t24.convert_t24_to_standard",
-                           side_effect=fake_t24):
-                    with patch("lua_engine.streaming_decompiler.validate_lua_source",
-                               return_value=(True, "fixture source accepted")):
-                        ok, message = stream_decompile_lua53(src, dst)
+            fake_private = types.SimpleNamespace(ALVSIA_BGMI_XOR_KEY=b"fixture-t24-key")
+            with patch.dict(sys.modules, {"alvsia_private": fake_private}):
+                with patch("lua_engine.decompiler53.decompile_bytes",
+                           side_effect=fake_decompile):
+                    with patch("lua_engine.t24.convert_t24_to_standard",
+                               side_effect=fake_t24):
+                        with patch("lua_engine.streaming_decompiler.validate_lua_source",
+                                   return_value=(True, "fixture source accepted")):
+                            ok, message = stream_decompile_lua53(src, dst)
 
         self.assertTrue(ok, message)
         self.assertIn("variant=t24", message)
