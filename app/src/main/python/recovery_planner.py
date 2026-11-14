@@ -57,6 +57,21 @@ def build_recovery_plan(result: dict[str, Any], *, domain: str = "generic") -> d
              "reason": "collect evidence without fabricating source"},
         ])
 
+    pipeline = [
+        {"stage": "observe", "state": "complete", "evidence": ["status", "artifact_kind"]},
+        {"stage": "route", "state": "complete", "evidence": ["domain", "actions"]},
+        {"stage": "lift_ir", "state": "pending" if status != "FAILED" else "blocked",
+         "evidence": ["instruction_boundaries", "constants", "references"]},
+        {"stage": "cfg_ssa", "state": "pending" if status != "FAILED" else "blocked",
+         "evidence": ["control_flow", "data_flow"]},
+        {"stage": "reconstruct", "state": "pending" if status != "FAILED" else "blocked",
+         "evidence": ["validated_ir"]},
+        {"stage": "validate", "state": "pending" if status != "FAILED" else "blocked",
+         "evidence": ["syntax", "roundtrip", "semantic_agreement"]},
+        {"stage": "promote", "state": "pending" if status != "FAILED" else "blocked",
+         "evidence": ["best_verified_candidate"]},
+    ]
+
     return {
         "planner": "ALVSIA_RECOVERY_PLANNER",
         "domain": domain,
@@ -66,6 +81,7 @@ def build_recovery_plan(result: dict[str, Any], *, domain: str = "generic") -> d
         "strings_recovered": strings_recovered,
         "terminal": status == "FAILED" and not actions,
         "actions": sorted(actions, key=lambda item: (item["priority"], item["action"])),
+        "pipeline": pipeline,
         "policy": "evidence-driven; never synthesize unvalidated source",
     }
 
