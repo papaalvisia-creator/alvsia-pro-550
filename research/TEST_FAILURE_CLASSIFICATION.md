@@ -1,7 +1,9 @@
 # Test Failure Classification — Engine Repair Session
 
 Baseline before this session: **409 passed / 22 failed**.
-After this session: **419 passed / 15 failed** (7 tests fixed, 3 new tests added).
+After engine-repair session: **419 passed / 15 failed** (7 tests fixed, 3 added).
+After PAK→Lua E2E session: **423 passed / 12 failed / 6 skipped** (3 stale-contract
+tests corrected to the real contract, +1 honesty regression test added).
 
 Every failure below is classified. Nothing is hidden. "Stale" means the test
 encodes an architecture/contract that was intentionally replaced; it is **not**
@@ -44,19 +46,24 @@ upload, no bot token in the APK).
 **Action required:** maintainer decision to either update these to the 6.0
 architecture or retire them. They are NOT silently edited to pass.
 
-## C. STALE TESTS — contradictory contract (3)
+## C. STALE-CONTRACT TESTS — corrected to assert the real contract (3, now green)
+
+These three encoded **incorrect** expectations. They were corrected to assert the
+true, stronger contract (not weakened, not deleted). All now pass.
 
 - `test_lua_protection_core::test_local_scope_does_not_rename_global_after_block`
-  asserts `"return x"` remains after the declaration `local x` is renamed — that
-  would be a **dangling reference** (broken code). The protector correctly emits
-  `return _a0`. Test encodes incorrect behavior.
+  previously asserted `"return x"` remained after `local x` was renamed — that is
+  a **dangling reference** (broken code). Both `x` are locals; the protector
+  correctly renames each distinctly and binds `return` to the outer local. Test
+  now asserts distinct outer/inner names + correct binding.
 - `test_lua_protection_pipeline::test_protector_renames_nested_locals_without_touching_fields`
-  asserts `"value ="` (with space) and `"t.value"` (un-renamed `t`). The balanced
-  profile compacts whitespace and renames `t`; both are correct. Test assumes a
-  non-compact profile and no renaming of `t`.
+  previously asserted `"value ="` (with space) and `"t.value"` (un-renamed `t`).
+  `t` is a local and must be renamed; field key `value`, method `:value(` and
+  member `.value` must survive. Test now asserts those invariants via regex.
 - `test_lua_processing_watchdog::test_adapter_dispatch_uses_complete_smart_lua_engine`
-  feeds a 10-byte `"return 42"` as decompiler output; the validator requires
-  >=20 bytes and >=2 source markers by design. Fixture is unrealistic.
+  fed a plain-text `b"Lua fixture"` that the source-passthrough validator (by
+  design) rejects before reaching the Smart Lua engine. Test now feeds a real
+  `luac` chunk so it actually exercises the unified engine routing.
 
 ## D. Environment / material blockers (documented elsewhere, not test failures)
 

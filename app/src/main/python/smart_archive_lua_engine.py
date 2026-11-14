@@ -114,11 +114,24 @@ def execute(input_path, output_dir, work_dir=None, archive_kind="auto",
                 except Exception as exc:
                     proof = {"status": "UNPROVEN", "reason": f"{type(exc).__name__}: {exc}"}
                 record["recovery_proof"] = proof
-                if proof.get("status") == "ROUNDTRIP_VERIFIED":
+                proof_status = proof.get("status")
+                passthrough = result.get("selected_engine") == "source_passthrough"
+                # Honesty rule: a created file is NOT proof of success. Only an
+                # already-valid source passthrough or a VM roundtrip match may be
+                # reported as SUCCESS/ROUNDTRIP_VERIFIED. A decompiled bytecode
+                # artifact that parses but diverges from the original VM listing
+                # is STRUCTURALLY_VALID (parseable, not semantically proven), and
+                # an unproven artifact is PARTIAL_RECOVERY -- never SUCCESS.
+                if passthrough:
+                    record["status"] = "SUCCESS"
+                elif proof_status == "ROUNDTRIP_VERIFIED":
                     record["status"] = "ROUNDTRIP_VERIFIED"
+                elif proof_status == "DIVERGED":
+                    record["status"] = "STRUCTURALLY_VALID"
                 else:
-                    record["status"] = result.get("final_status", "SUCCESS")
-                if record["status"] in ("SUCCESS", "ROUNDTRIP_VERIFIED"):
+                    record["status"] = "PARTIAL_RECOVERY"
+                if record["status"] in ("SUCCESS", "ROUNDTRIP_VERIFIED",
+                                        "EXACT_SOURCE_RECOVERY"):
                     successes.append(record)
                 else:
                     partials.append(record)
