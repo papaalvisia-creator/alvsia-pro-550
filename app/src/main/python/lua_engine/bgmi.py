@@ -249,12 +249,22 @@ def transform_bgmi_lua(data: bytes, key: bytes | None = None, decrypt=True) -> b
             Bx = (raw >> 14) & 0x3ffff
             Ax = (raw >> 6) & 0x3ffffff
             sBx = Bx - MAXARG_sBx
+            # Validate every prototype, not only the top-level code array.
+            # Unknown nested opcodes must fail closed instead of being copied
+            # through as if their semantics were understood.
+            op_map = BGMI_STD if decrypt else STD_BGMI
+            if op not in op_map:
+                raise ValueError(f"unsupported BGMI opcode {op} in prototype")
             if decrypt:
-                sop = BGMI_STD.get(op, op)
-                fmt = STD_FMT[sop] if sop < len(STD_FMT) else 0
+                sop = op_map[op]
+                if not 0 <= sop < len(STD_FMT):
+                    raise ValueError(f"unsupported normalized Lua opcode {sop}")
+                fmt = STD_FMT[sop]
             else:
-                sop = STD_BGMI.get(op, op)
-                fmt = STD_FMT[op] if op < len(STD_FMT) else 0
+                sop = op_map[op]
+                if not 0 <= op < len(STD_FMT):
+                    raise ValueError(f"unsupported standard Lua opcode {op}")
+                fmt = STD_FMT[op]
             if fmt == 0:
                 res = (sop & 63) | (A << 6) | (C << 14) | (B << 23)
             elif fmt == 1:
