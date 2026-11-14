@@ -62,6 +62,19 @@ def test_pubg_converter_reconstructs_signed_line_deltas_and_absolute_checkpoints
     assert converted[13] == 8
 
 
+def test_bgmi_transform_roundtrips_real_lua53_lineinfo_checkpoints():
+    expected_lines = (300, 301, 500, 499)
+    standard = _standard_chunk_with_binary_string(expected_lines)
+    bgmi = transform_bgmi_lua(
+        standard, key=ALVSIA_BGMI_XOR_KEY, decrypt=False
+    )
+    restored = transform_bgmi_lua(
+        bgmi, key=ALVSIA_BGMI_XOR_KEY, decrypt=True
+    )
+    proto = load_chunk(restored)
+    assert proto.lineinfo == list(expected_lines)
+
+
 def test_shared_opcode_converter_rejects_oversized_file_before_read(tmp_path):
     converter = LuaOpcodeConverter("bgmi")
     source = tmp_path / "too-large.bgmi"
