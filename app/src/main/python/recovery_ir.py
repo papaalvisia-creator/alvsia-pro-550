@@ -160,3 +160,36 @@ __all__ = [
     "IRInstruction", "IRBlock", "RecoveryIR", "normalize_instructions",
     "build_cfg", "lift_to_ir", "score_candidate", "rank_candidates",
 ]
+
+
+def analyze_lua_bytecode(path: str, *, deadline_seconds: float = 8.0) -> dict:
+    """Lift a standard Lua 5.3 chunk into shared IR without executing it."""
+    import time
+    from pathlib import Path
+    try:
+        from lua_engine.decompiler53 import load_chunk, decode, OP
+        raw = Path(path).read_bytes()
+        proto = load_chunk(raw, deadline=time.monotonic() + float(deadline_seconds))
+        records = []
+        def visit(p, prefix="main"):
+            for pc, ins in enumerate(p.code):
+                op, a, b, c, bx, sbx = decode(ins)
+                operands = (a, b, c, bx, sbx)
+                records.append({"pc": pc, "opcode": OP[op] if 0 <= op < len(OP) else f"OP_{op}",
+                                "operands": operands, "source_ref": prefix})
+            for idx, child in enumerate(p.protos):
+                visit(child, f"{prefix}.proto{idx}")
+        visit(proto)
+        # Conservative branch targets: only direct sBx jumps/loops are lifted.
+        targets = {}
+        for row in records:
+            op = row["opcode"]
+            if op in {"JMP", "FORLOOP", "FORPREP", "TFORLOOP"}:
+                sbx = int(row["operands"][-1])
+                targets.setdefault(int(row["pc"]), []).append(int(row["pc"]) + 1 + sbx)
+        ir = lift_to_ir(records, domain="lua", branch_targets=targets,
+                        metadata={"format": "Lua 5.3", "prototype_count": 1 + len(proto.protos)})
+        return {"ok": True, "format": "Lua 5.3", "ir": ir.to_dict(),
+                "instruction_count": len(ir.instructions), "block_count": len(ir.blocks)}
+    except Exception as exc:
+        return {"ok": False, "error": f"{type(exc).__name__}: {exc}"}
