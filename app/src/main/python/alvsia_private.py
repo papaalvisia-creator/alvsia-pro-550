@@ -855,25 +855,48 @@ class LuaOpcodeConverter:
             self._convert_proto(reader, writer, depth + 1)
 
         line_count = reader.u32()
+        if line_count not in (0, code_count):
+            raise ValueError(
+                'lineinfo count %d does not match instruction count %d' %
+                (line_count, code_count)
+            )
         if line_count > (len(reader.data) - reader.pos):
             raise ValueError('invalid compressed lineinfo count %d at offset %d' % (line_count, reader.pos))
-        # Output must be REAL Lua 5.3 debug format: 1-byte signed deltas followed
-        # by an abslineinfo table. The previous 4-byte-int expansion produced
-        # chunks that no real Lua 5.3 loader accepts.
         deltas = []
         for _ in range(line_count):
-            deltas.append(reader.u8())
-        writer.u32(line_count)
-        for delta in deltas:
-            writer.u8(delta)
+            value = reader.u8()
+            deltas.append(value - 256 if value >= 128 else value)
 
-        # The game variant carries an additional abslineinfo table; the emitted
-        # standard chunk keeps an empty one (valid real-format debug section).
+        # The protected producer stores Lua 5.4-style signed line deltas plus
+        # (pc, absolute_line) checkpoints. Convert those into the 4-byte
+        # absolute line-number array required by the genuine Lua 5.3 format.
         abs_count = reader.u32()
         if abs_count > (len(reader.data) - reader.pos) // 8:
             raise ValueError('invalid absolute lineinfo count %d at offset %d' % (abs_count, reader.pos))
-        reader.read(abs_count * 8)
-        writer.u32(0)
+        abs_entries = []
+        previous_pc = -1
+        for _ in range(abs_count):
+            pc = reader.i32()
+            absolute_line = reader.i32()
+            if pc <= previous_pc or pc < 0 or pc >= line_count:
+                raise ValueError('invalid absolute lineinfo pc %d' % pc)
+            if deltas[pc] != -128:
+                raise ValueError('absolute lineinfo pc %d lacks delta sentinel' % pc)
+            abs_entries.append((pc, absolute_line))
+            previous_pc = pc
+        abs_by_pc = dict(abs_entries)
+        writer.u32(line_count)
+        current_line = line_defined
+        for pc, delta in enumerate(deltas):
+            if delta == -128:
+                if pc not in abs_by_pc:
+                    raise ValueError('missing absolute lineinfo checkpoint at pc %d' % pc)
+                current_line = abs_by_pc[pc]
+            else:
+                if pc in abs_by_pc:
+                    raise ValueError('unexpected absolute lineinfo checkpoint at pc %d' % pc)
+                current_line += delta
+            writer.i32(current_line)
 
         local_count = reader.u32()
         if local_count > (len(reader.data) - reader.pos) // 9:
