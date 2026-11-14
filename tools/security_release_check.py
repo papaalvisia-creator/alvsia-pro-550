@@ -314,7 +314,7 @@ def _artifact_hygiene_violations(root: Path, tracked_files=None) -> list[str]:
             if result.returncode == 0:
                 tracked_files = [
                     root / Path(item.decode("utf-8", "replace"))
-                    for item in result.stdout.split(b"\\x00") if item
+                    for item in result.stdout.split(b"\x00") if item
                 ]
         if tracked_files is None:
             tracked_files = [p for p in root.rglob("*") if p.is_file()]
