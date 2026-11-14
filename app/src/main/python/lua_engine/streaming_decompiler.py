@@ -288,10 +288,19 @@ def stream_decompile_lua53(input_path: Path, out_path: Path) -> Tuple[bool, str]
     except Exception as exc:
         return False, f"decompiler53_import_failed: {exc}"
     input_size = Path(input_path).stat().st_size
-    max_parser_bytes = int(os.environ.get(
-        "ALVSIA_LUA53_MAX_IN_MEMORY_BYTES", str(256 * 1024 * 1024)
-    ))
-    max_parser_bytes = max(16 * 1024 * 1024, min(max_parser_bytes, 512 * 1024 * 1024))
+    # This recovery path materializes the input and may hold a normalized
+    # candidate alongside it. Keep the hard ceiling independent of an
+    # environment override so an untrusted file cannot request a 512 MiB
+    # allocation inside the Android process. Files above the cap still get
+    # header/container diagnostics and are reported PARTIAL by the caller.
+    hard_limit = 32 * 1024 * 1024
+    try:
+        configured_limit = int(os.environ.get(
+            "ALVSIA_LUA53_MAX_IN_MEMORY_BYTES", str(hard_limit)
+        ))
+    except (TypeError, ValueError):
+        configured_limit = hard_limit
+    max_parser_bytes = max(8 * 1024 * 1024, min(configured_limit, hard_limit))
     if input_size > max_parser_bytes:
         return False, (
             f"lua53_parser_memory_limit: input={input_size} bytes "
