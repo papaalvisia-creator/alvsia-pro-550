@@ -27,6 +27,7 @@ from lua_engine.streaming_decompiler import (
     stream_inflate_zlib,
     decompile_large,
     probe_lua_header,
+    stream_decompile_lua53,
 )
 
 
@@ -353,6 +354,20 @@ class TestLuaHeaderDiagnostics(unittest.TestCase):
             report = probe_lua_header(src)
             self.assertEqual(report["utf8_replacement_markers"], 3)
             self.assertEqual(src.read_bytes(), raw)
+
+class TestLua53HardMemoryCap(unittest.TestCase):
+    def test_input_over_32_mib_is_rejected_before_read(self):
+        with tempfile.TemporaryDirectory() as td:
+            src = Path(td) / "oversized.luac"
+            with src.open("wb") as handle:
+                handle.truncate(32 * 1024 * 1024 + 1)
+            with patch.dict(os.environ, {"ALVSIA_LUA53_MAX_IN_MEMORY_BYTES": str(2 * 1024 * 1024 * 1024)}):
+                with patch.object(Path, "read_bytes", side_effect=AssertionError("must not buffer oversized input")):
+                    ok, message = stream_decompile_lua53(src, Path(td) / "out.lua")
+            self.assertFalse(ok)
+            self.assertIn("lua53_parser_memory_limit", message)
+            self.assertIn(str(32 * 1024 * 1024), message)
+
 
 class TestLargeInputDoesNotCrash(unittest.TestCase):
     def test_large_input_routes_to_streaming(self):
