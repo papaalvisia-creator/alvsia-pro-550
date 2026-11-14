@@ -200,9 +200,12 @@ def main():
                 read_count += 1
             return original_read_bytes(path)
 
+        decode_calls = 0
+
         def force_bgmi_normalization(candidate, **kwargs):
-            candidate_bytes = bytes(candidate)
-            if candidate_bytes[13] == 4:
+            nonlocal decode_calls
+            decode_calls += 1
+            if decode_calls == 1:
                 raise ValueError("fixture forces BGMI normalization")
             return "return"
 
