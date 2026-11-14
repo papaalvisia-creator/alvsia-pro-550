@@ -917,8 +917,12 @@ class LuaOpcodeConverter:
         for _ in range(name_count):
             writer.string(reader.string(encrypted=True))
 
+    MAX_INPUT_BYTES = 32 * 1024 * 1024
+
     def convert_bytes(self, data: bytes) -> bytes:
         """Decode only the known structured game variant; reject partial parses."""
+        if len(data) > self.MAX_INPUT_BYTES:
+            raise ValueError('BGMI input exceeds the 32 MiB safety cap')
         if len(data) < 34 or data[:4] != b'\x1bLua' or data[4] != 0x53:
             raise ValueError('input is not a Lua 5.3 variant chunk')
         if data[5] != 0 or data[6:12] != b'\x19\x93\x0d\x0a\x1a\x0a':
@@ -947,7 +951,10 @@ class LuaOpcodeConverter:
         return converted
 
     def convert_file(self, src: str, dst: str | None = None) -> bytes:
-        result = self.convert_bytes(Path(src).read_bytes())
+        source = Path(src)
+        if source.stat().st_size > self.MAX_INPUT_BYTES:
+            raise ValueError('BGMI input exceeds the 32 MiB safety cap')
+        result = self.convert_bytes(source.read_bytes())
         if dst:
             Path(dst).parent.mkdir(parents=True, exist_ok=True)
             Path(dst).write_bytes(result)
