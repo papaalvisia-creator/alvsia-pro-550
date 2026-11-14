@@ -18,6 +18,7 @@ object SmartAssetEngine {
         if (f.length() > MAX_BYTES) return listOf("X Asset analysis limit exceeded: 512 MiB")
         return try {
             when (subId) {
+                "asset_smart" -> smart(f, out, taskId)
                 "asset_fingerprint" -> fingerprint(f, out)
                 "asset_scan_ids" -> scanIds(f, out)
                 "asset_context" -> context(f, out)
@@ -28,6 +29,30 @@ object SmartAssetEngine {
         } catch (t: Throwable) {
             listOf("X Smart Asset Engine failed: " + t.javaClass.simpleName + ": " + (t.message ?: "no detail"))
         }
+    }
+
+    private fun smart(f: File, out: File, taskId: String): List<String> {
+        val lines = mutableListOf<String>()
+        lines.add("OK Smart Asset pipeline started")
+        lines.addAll(fingerprint(f, out))
+        lines.addAll(scanIds(f, out))
+        lines.addAll(context(f, out))
+
+        val config = File(WorkPaths.taskRoot(taskId), "WORK/asset_patch_map.txt")
+        val patchRequested = config.isFile && config.length() > 0L
+        if (patchRequested) {
+            val patchLines = patch(f, out, taskId)
+            lines.addAll(patchLines)
+            val patched = File(out, f.name + ".asset_patched")
+            lines.addAll(validate(
+                if (patchLines.any { it.startsWith("OK safe asset patch:") } && patched.isFile) patched else f,
+                out
+            ))
+        } else {
+            lines.add("NOTE no asset mapping supplied; modification skipped (read-only analysis)")
+            lines.addAll(validate(f, out))
+        }
+        return lines
     }
 
     private fun fingerprint(f: File, out: File): List<String> {
@@ -89,8 +114,8 @@ object SmartAssetEngine {
         return listOf("OK asset contextual scan: " + hits + " matches", "OK OUTPUT -> " + report.absolutePath)
     }
 
-    private fun patch(f: File, out: File): List<String> {
-        val cfg = File(WorkPaths.dirWork(), "asset_patch_map.txt")
+    private fun patch(f: File, out: File, taskId: String): List<String> {
+        val cfg = File(WorkPaths.taskRoot(taskId), "WORK/asset_patch_map.txt")
         if (!cfg.isFile) return listOf("X Missing WORK/asset_patch_map.txt", "hint: old_hex=new_hex; both must have equal byte length")
         var b = f.readBytes()
         var applied = 0
