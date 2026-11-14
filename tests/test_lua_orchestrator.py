@@ -486,3 +486,37 @@ def test_smart_lua_engine_preserves_invalid_lua_source_as_partial_instead_of_fai
     assert result["validation_level"] == "source_bytes_preserved"
     assert Path(result["out"]).read_bytes() == source.read_bytes()
     assert result.get("validation_error")
+
+
+def test_string_only_recovery_is_partial_success_not_adapter_failure(tmp_path):
+    from smart_lua_engine import decompile
+
+    payload = tmp_path / "protected.luac"
+    payload.write_bytes(b"\x1bLua\x53" + b"\x00" * 80 + b"PLAYER_HEALTH\x00WEAPON_ID\x00")
+    out = tmp_path / "out"
+
+    fallback = {
+        "ok": True,
+        "mode": "smart_fallback",
+        "final_status": "PARTIAL_STRING_RECOVERY",
+        "selected_engine": "string_recovery",
+        "artifact_kind": "string_recovery",
+        "source_recovered": False,
+        "strings_recovered": True,
+        "out": str(out / "protected_strings.txt"),
+        "note": "String recovery produced usable artifacts, but no validated Lua source was reconstructed.",
+    }
+    string_file = Path(fallback["out"])
+    string_file.parent.mkdir(parents=True, exist_ok=True)
+    string_file.write_text("PLAYER_HEALTH\nWEAPON_ID\n", encoding="utf-8")
+
+    with patch("smart_lua_engine.run_lua_smart", return_value=fallback):
+        result = decompile(payload, out)
+
+    assert result["ok"] is True, result
+    assert result["final_status"] == "PARTIAL_STRING_RECOVERY"
+    assert result["selected_engine"] == "string_recovery"
+    assert result["artifact_kind"] == "string_recovery"
+    assert result["source_recovered"] is False
+    assert result["strings_recovered"] is True
+    assert Path(result["out"]).read_text(encoding="utf-8").splitlines() == ["PLAYER_HEALTH", "WEAPON_ID"]
