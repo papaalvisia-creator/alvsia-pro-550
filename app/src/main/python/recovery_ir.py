@@ -158,9 +158,41 @@ def rank_candidates(candidates: Iterable[Mapping[str, Any]]) -> list[dict[str, A
 
 __all__ = [
     "IRInstruction", "IRBlock", "RecoveryIR", "normalize_instructions",
-    "build_cfg", "lift_to_ir", "score_candidate", "rank_candidates",
+    "build_cfg", "lift_to_ir", "build_ssa", "score_candidate", "rank_candidates",
 ]
 
+
+
+def build_ssa(instructions: Sequence[IRInstruction]) -> list[dict[str, Any]]:
+    """Build conservative register-version data flow from recovered instructions.
+
+    This is intentionally not a full language-semantic SSA solver. It versions
+    register writes and records reads as they appear in the verified instruction
+    stream; unknown aliases and control-flow merges are left explicit.
+    """
+    versions: dict[int, int] = {}
+    out: list[dict[str, Any]] = []
+    writes = {
+        "MOVE", "LOADK", "LOADKX", "LOADBOOL", "LOADNIL", "GETUPVAL",
+        "GETTABUP", "GETTABLE", "NEWTABLE", "SELF", "ADD", "SUB", "MUL",
+        "MOD", "POW", "DIV", "IDIV", "BAND", "BOR", "BXOR", "SHL", "SHR",
+        "UNM", "BNOT", "NOT", "LEN", "CONCAT", "CALL", "TAILCALL",
+        "TFORCALL", "CLOSURE", "VARARG",
+    }
+    for ins in instructions:
+        operands = list(ins.operands)
+        a = int(operands[0]) if operands and isinstance(operands[0], int) else None
+        reads = []
+        if ins.opcode in {"MOVE", "GETTABLE", "SETTABLE", "ADD", "SUB", "MUL", "MOD", "POW", "DIV", "IDIV", "BAND", "BOR", "BXOR", "SHL", "SHR", "EQ", "LT", "LE", "TEST", "TESTSET"}:
+            for value in operands[1:3]:
+                if isinstance(value, int) and 0 <= value < 256:
+                    reads.append({"register": value, "version": versions.get(value, 0)})
+        write = None
+        if a is not None and ins.opcode in writes:
+            versions[a] = versions.get(a, 0) + 1
+            write = {"register": a, "version": versions[a]}
+        out.append({"pc": ins.pc, "opcode": ins.opcode, "reads": reads, "write": write})
+    return out
 
 def analyze_lua_bytecode(path: str, *, deadline_seconds: float = 8.0) -> dict:
     """Lift a standard Lua 5.3 chunk into shared IR without executing it."""
