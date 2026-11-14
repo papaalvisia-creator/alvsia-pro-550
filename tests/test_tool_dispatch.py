@@ -87,8 +87,14 @@ def test_sm4_registry_contains_no_embedded_secret_material():
     assert "xG2qW5lP7lV2iN5fN5pG" not in source
     core = (ROOT / "app/src/main/python/alvsia_core.py").read_text(encoding="utf-8")
     assert "xG2qW5lP7lV2iN5fN5pG" not in core
-    assert "SM4 candidate material is not authorized/supplied" in core
+    # Core must delegate all SM4 material to the single authorized provider and
+    # fail closed when nothing was supplied.
+    assert "import sm4_material" in core
+    assert "require_secret_2" in core and "require_secret_4" in core
+    assert "require_candidates" in core
     assert "set_authorized_sm4_candidates" in core
+    provider = (ROOT / "app/src/main/python/sm4_material.py").read_text(encoding="utf-8")
+    assert "SM4 candidate material is not authorized/supplied" in provider
 
 def test_menu_ids_are_unique_and_reachable():
     menus = MENUS.read_text(encoding="utf-8")

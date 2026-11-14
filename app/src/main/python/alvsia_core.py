@@ -331,10 +331,10 @@ RSA_MOD_2 = bytes.fromhex('7F58E8A39A4DA4E87357DDD650EAA16D3B5CE95B213D1030A6625
 SIMPLE1_DECRYPT_KEY = 121
 SIMPLE2_DECRYPT_KEY = bytes.fromhex('E55B4ED1')
 SIMPLE2_BLOCK_SIZE = 4
-SM4_SECRET_4 = 'eb691efea914241317a8'
-SM4_SECRET_2 = 'Q0hVTKey$as*1ZFlQCiA'
-# New/variant SM4 candidates are never embedded in the public source tree.
-# They must be supplied by an authorized caller for the corresponding PAK.
+# SM4 material is never embedded in the public source tree. All key material
+# (SM4-2, SM4-4, and new/variant candidates) is supplied through the single
+# authorized provider in ``sm4_material`` and fails closed when absent.
+import sm4_material as _sm4_material
 from sm4_secret_registry import SM4_SECRET_NEW
 _SM4_AUTHORIZED_CANDIDATES = ()
 
@@ -344,12 +344,14 @@ def set_authorized_sm4_candidates(candidates) -> bool:
     if not all(isinstance(key, str) and 1 <= len(key) <= 64 for key in values):
         return False
     _SM4_AUTHORIZED_CANDIDATES = values
+    _sm4_material.install_material(candidates=values, source="alvsia_core")
     PakCrypto._derive_sm4_key.cache_clear()
     return True
 
 def clear_authorized_sm4_candidates() -> None:
     global _SM4_AUTHORIZED_CANDIDATES
     _SM4_AUTHORIZED_CANDIDATES = ()
+    _sm4_material.clear_material()
     PakCrypto._derive_sm4_key.cache_clear()
 
 EM_SIMPLE1 = 1
@@ -841,19 +843,15 @@ class PakCrypto:
     def _derive_sm4_key(file_path: PurePath, encryption_method: int) -> bytes:
         _s5faefbac755f = file_path.stem.lower()
         if encryption_method == EM_SM4_2:
-            _sbd281f3d3181 = SM4_SECRET_2
+            _sbd281f3d3181 = _sm4_material.require_secret_2()
         elif encryption_method == EM_SM4_4:
-            _sbd281f3d3181 = SM4_SECRET_4
+            _sbd281f3d3181 = _sm4_material.require_secret_4()
         elif encryption_method == EM_UNKNOWN_17:
-            candidates = _SM4_AUTHORIZED_CANDIDATES
-            if not candidates:
-                raise RuntimeError('SM4 candidate material is not authorized/supplied')
+            candidates = _sm4_material.require_candidates()
             _s2b8e7b87d9f2 = (encryption_method - EM_SM4_NEW_BASE) % len(candidates)
             _sbd281f3d3181 = candidates[_s2b8e7b87d9f2]
         else:
-            candidates = _SM4_AUTHORIZED_CANDIDATES
-            if not candidates:
-                raise RuntimeError('SM4 candidate material is not authorized/supplied')
+            candidates = _sm4_material.require_candidates()
             _s2b8e7b87d9f2 = (encryption_method - EM_SM4_NEW_BASE) % len(candidates)
             _sbd281f3d3181 = f'{candidates[_s2b8e7b87d9f2]}{encryption_method}'
         return SHA1.new(str(_s5faefbac755f + _sbd281f3d3181).encode()).digest()[:SM4.key_length()]

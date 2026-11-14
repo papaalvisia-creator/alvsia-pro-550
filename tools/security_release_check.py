@@ -38,7 +38,7 @@ profile = read(ROOT / "app/src/main/java/com/alvsia/pro/ui/profile/ProfileScreen
 required_modules = {
     "alvsia_bridge_impl.py", "alvsia_metadata.py", "alvsia_private.py", "alvsia_vm_protect.py", "lua_engine/pattern_registry.py",
     "alvsia_core.py", "alvsia_ultimate.py",
-    "alvsia_ultimate_compat.py", "alvsia_features.py", "sm4_secret_registry.py", "pinned_http.py",
+    "alvsia_ultimate_compat.py", "alvsia_features.py", "sm4_secret_registry.py", "sm4_material.py", "pinned_http.py",
     "lua_engine/lua_decompiler_final.py", "lua_engine/lua_protector.py",
     "lua_engine/t24.py",
     "lua_output_validator.py", "lua_string_recover.py",
@@ -236,6 +236,132 @@ if ("ALVSIA_GRANT_KID='alvsia-unaux-rsa1'" not in grant_endpoint
         or "grant_signing_key_mismatch" not in grant_endpoint
         or "ALVSIA_GRANT_PUBLIC_N_B64URL" not in grant_endpoint):
     fail.append("Unaux endpoint must sign the aligned JWT contract, rate-limit, and enforce 180-second TTL")
+
+# ---------------------------------------------------------------------------
+# Embedded-secret scan across EVERY Python module (not just the registry).
+# This is AST-based so it does not trip on comments or the scanner's own rules.
+# ---------------------------------------------------------------------------
+import ast
+
+# Known historical SM4 material that must never reappear in the source tree.
+FORBIDDEN_SM4_LITERALS = {
+    "09ea7a1d9e6528b72b48",
+    "eb691efea914241317a8",
+    ">gahRZFL4r2*TByfx6#X",
+    "Q0hVTKey$as*1ZFlQCiA",
+    "xG2qW5lP7lV2iN5fN5pG",
+    "xT1cJ6dL5wC0kK1rB4dK",
+    "qC4jS5bZ6fL5xE6nD4zA",
+    "gD4jQ2aL3bS3lC3xT0iW",
+    "xU1yQ8wE9zY3gZ3bT5aE",
+    "uQ3cO2dX7xY4xU7gH7iS",
+    "gW1fR0jK6wQ4oN0oK1kZ",
+    "aJ4pV7iZ7pU4wP2aC2cZ",
+    "cX6jT3cM2oT3vK0kJ1qN",
+    "iT2vS0cS6yT6cZ1sE1lO",
+    "hM1pH9iY8wM9hT4lN5uJ",
+    "kG6bC8jK0fL0dE4sH4mL",
+    "dB6lB3vE0eZ8wM8rI0aC",
+    "tP7sP7nI9rA2vQ4cV5yQ",
+    "aT0cL1yN4pT3sZ7eM2vY",
+    "uV6fU8fC9zN3mP5dH8mN",
+    "rT6aQ6oZ1yM0gO5tO1aN",
+    "jU5bH7lQ0fM9hK2kI0oF",
+    "iQ0eM0mJ7uT0kV6kL5zY",
+    "fO3kW1fE6eD0pU1kY7xK",
+    "rG0lR2rZ5vM6mW5lM1rR",
+    "wD2rP3lP9xF4mE1eC5jS",
+}
+SECRET_NAME_PREFIXES = ("SM4_SECRET", "SM4_KEY", "SM4_CANDIDATE")
+SECRET_NAME_EXCLUDE_SUFFIXES = (
+    "_VERSION", "_EXPECTED_COUNT", "_COUNT", "_SET", "_LEN", "_NAME",
+    "_PATTERN", "_LABEL", "_TYPE", "_KIND",
+)
+
+
+def _is_secret_name(name: str) -> bool:
+    if not name.startswith(SECRET_NAME_PREFIXES):
+        return False
+    if name.endswith(SECRET_NAME_EXCLUDE_SUFFIXES):
+        return False
+    return True
+
+
+def _looks_like_key_literal(value: str) -> bool:
+    """Heuristic for a 16..64 char opaque key-ish string literal."""
+    if not isinstance(value, str) or not (16 <= len(value) <= 64):
+        return False
+    if any(ch.isspace() for ch in value):
+        return False
+    # Reject obvious human text / paths / identifiers with spaces or dots.
+    return True
+
+
+for py_file in sorted(PY.rglob("*.py")):
+    rel = py_file.relative_to(ROOT)
+    try:
+        src = py_file.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        fail.append(f"unreadable python module: {rel}")
+        continue
+    for literal in FORBIDDEN_SM4_LITERALS:
+        if literal in src:
+            fail.append(f"embedded historical SM4 material found in {rel}")
+            break
+    try:
+        tree = ast.parse(src, filename=str(rel))
+    except SyntaxError as exc:
+        fail.append(f"python module does not parse ({rel}): {exc}")
+        continue
+    for node in ast.walk(tree):
+        targets = []
+        value = None
+        if isinstance(node, ast.Assign):
+            targets = node.targets
+            value = node.value
+        elif isinstance(node, ast.AnnAssign):
+            targets = [node.target]
+            value = node.value
+        if value is None:
+            continue
+        names = []
+        for t in targets:
+            if isinstance(t, ast.Name):
+                names.append(t.id)
+            elif isinstance(t, ast.Attribute):
+                names.append(t.attr)
+        if not any(_is_secret_name(n) for n in names):
+            continue
+        # Only flag literal string/bytes constants (not calls like os.environ.get).
+        if isinstance(value, ast.Constant) and isinstance(value.value, str):
+            if _looks_like_key_literal(value.value):
+                fail.append(
+                    f"hardcoded secret literal assigned to {names[0]} in {rel}"
+                )
+        elif isinstance(value, (ast.List, ast.Tuple, ast.Set)):
+            for elt in value.elts:
+                if isinstance(elt, ast.Constant) and isinstance(elt.value, str):
+                    if _looks_like_key_literal(elt.value):
+                        fail.append(
+                            f"hardcoded secret literal in {names[0]} collection in {rel}"
+                        )
+                        break
+
+# Release artifacts must not carry the material either.
+for artifact_dir in (ROOT / "app/src/main/assets", ROOT / "app/src/main/python"):
+    if not artifact_dir.exists():
+        continue
+    for blob in artifact_dir.rglob("*"):
+        if not blob.is_file():
+            continue
+        try:
+            data = blob.read_bytes()
+        except OSError:
+            continue
+        for literal in FORBIDDEN_SM4_LITERALS:
+            if literal.encode("utf-8") in data:
+                fail.append(f"embedded SM4 material found in artifact {blob.relative_to(ROOT)}")
+                break
 
 if fail:
     print("SECURITY SOURCE CHECK: FAIL")
