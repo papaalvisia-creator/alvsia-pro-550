@@ -1773,10 +1773,14 @@ class BinaryURLScanner:
         rb'(?::(\d{1,5}))?',
     )
     _RE_IP      = _re.compile(rb'\b(?:\d{1,3}\.){3}\d{1,3}(?::\d{1,5})?\b')
-    _RE_B64     = _re.compile(rb'[A-Za-z0-9+/]{40,}={0,2}')
+    # Bound the captured base64 prefix to keep regex work and chunk overlap finite.
+    # scan_bytes() already returned at most 120 bytes, so this preserves its output.
+    _RE_B64     = _re.compile(rb'[A-Za-z0-9+/]{40,120}={0,2}')
     _CTX_KW     = [b'url', b'host', b'connect', b'endpoint', b'server',
                    b'proxy', b'gateway', b'base', b'api', b'link', b'path']
     _CHUNK      = 8 * 1024 * 1024
+    _CARRY      = 512
+    _CONTEXT    = 60
 
     # Private IP ranges — excluded from host results to reduce noise
     _PRIVATE_IP = _re.compile(
@@ -1789,49 +1793,72 @@ class BinaryURLScanner:
         ctx = data[lo:hi].lower()
         return any(k in ctx for k in self._CTX_KW)
 
-    def scan_bytes(self, data: bytes) -> list:
-        """Return ``list[tuple[str, str]]`` — (kind, value)."""
-        results: list = []
-        seen: set = set()
+    def _scan_buffer(self, data: bytes, base: int, final: bool,
+                     results: list, seen: set) -> None:
+        """Scan a bounded window; defer tail matches until full context is present."""
+        safe_start = len(data) if final else max(
+            0, len(data) - self._CARRY + self._CONTEXT
+        )
 
         def add(kind: str, raw: bytes) -> None:
-            val = raw.decode('utf-8', errors='replace').strip()
-            if val and val not in seen:
-                seen.add(val)
-                results.append((kind, val))
+            value = raw.decode('utf-8', errors='replace').strip()
+            if value and value not in seen:
+                seen.add(value)
+                results.append((kind, value))
 
-        # 1. Full URLs
-        for m in self._RE_URL.finditer(data):
-            add('URL', m.group(0))
-
-        # 2. host:port near context keywords
-        for m in self._RE_HOST.finditer(data):
-            host = m.group(1)
-            port = m.group(2) or b''
-            if not self._ctx_ok(data, m.start(), m.end()):
+        for match in self._RE_URL.finditer(data):
+            if not final and match.start() >= safe_start:
                 continue
-            raw = host + (b':' + port if port else b'')
-            add('HOST', raw)
+            add('URL', match.group(0))
 
-        # 3. IP:port
-        for m in self._RE_IP.finditer(data):
-            ip_bytes = m.group(0)
-            if self._PRIVATE_IP.match(ip_bytes):
+        for match in self._RE_HOST.finditer(data):
+            if not final and match.start() >= safe_start:
                 continue
-            add('IP', ip_bytes)
-
-        # 4. Long base64 near context keywords (obfuscated URLs)
-        for m in self._RE_B64.finditer(data):
-            if not self._ctx_ok(data, m.start(), m.end()):
+            if not self._ctx_ok(data, match.start(), match.end()):
                 continue
-            add('B64', m.group(0)[:120])
+            host = match.group(1)
+            port = match.group(2) or b''
+            add('HOST', host + (b':' + port if port else b''))
 
+        for match in self._RE_IP.finditer(data):
+            if not final and match.start() >= safe_start:
+                continue
+            ip_bytes = match.group(0)
+            if not self._PRIVATE_IP.match(ip_bytes):
+                add('IP', ip_bytes)
+
+        for match in self._RE_B64.finditer(data):
+            if not final and match.start() >= safe_start:
+                continue
+            if self._ctx_ok(data, match.start(), match.end()):
+                add('B64', match.group(0)[:120])
+
+    def scan_bytes(self, data: bytes) -> list:
+        """Scan an in-memory buffer; results match the streaming file scanner."""
+        results: list = []
+        seen: set = set()
+        self._scan_buffer(data, 0, True, results, seen)
         return results
 
     def scan_file(self, filepath) -> list:
-        """Scan one binary file.  Returns list of (kind, value) tuples."""
-        data = Path(filepath).read_bytes()
-        return self.scan_bytes(data)
+        """Scan a large binary in bounded chunks instead of reading it all into RAM."""
+        results: list = []
+        seen: set = set()
+        carry = b''
+        offset = 0
+        chunk_size = max(1024, int(self._CHUNK))
+        with Path(filepath).open("rb") as handle:
+            while True:
+                block = handle.read(chunk_size)
+                final = not block
+                window = carry + block
+                base = offset - len(carry)
+                self._scan_buffer(window, base, final, results, seen)
+                if final:
+                    break
+                carry = window[-self._CARRY:]
+                offset += len(block)
+        return results
 
     def scan_folder(self, folder_path: str, exts=('.so', '.obb', '.apk')) -> dict:
         """Scan all matching files under *folder_path*.
