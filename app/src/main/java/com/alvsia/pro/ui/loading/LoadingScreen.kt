@@ -10,6 +10,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.clip
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.tween
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -71,7 +75,7 @@ fun LoadingScreen(
                 fontWeight = FontWeight.Bold,
                 fontSize = 9.sp,
                 modifier = Modifier.clip(RoundedCornerShape(8.dp)).clickable {
-                    androidx.compose.ui.platform.LocalUriHandler.current.openUri("https://t.me/ALVISIACHANEL")
+                    uriHandler.openUri("https://t.me/ALVISIACHANEL")
                 }.padding(horizontal = 10.dp, vertical = 6.dp)
             )
             Spacer(Modifier.height(20.dp))
