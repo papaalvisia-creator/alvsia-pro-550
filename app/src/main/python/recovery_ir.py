@@ -203,14 +203,17 @@ def analyze_lua_bytecode(path: str, *, deadline_seconds: float = 8.0) -> dict:
         raw = Path(path).read_bytes()
         proto = load_chunk(raw, deadline=time.monotonic() + float(deadline_seconds))
         records = []
-        def visit(p, prefix="main"):
-            for pc, ins in enumerate(p.code):
+        def visit(p, prefix="main", base=0):
+            for local_pc, ins in enumerate(p.code):
                 op, a, b, c, bx, sbx = decode(ins)
                 operands = (a, b, c, bx, sbx)
-                records.append({"pc": pc, "opcode": OP[op] if 0 <= op < len(OP) else f"OP_{op}",
+                records.append({"pc": base + local_pc,
+                                "opcode": OP[op] if 0 <= op < len(OP) else f"OP_{op}",
                                 "operands": operands, "source_ref": prefix})
+            cursor = base + len(p.code)
             for idx, child in enumerate(p.protos):
-                visit(child, f"{prefix}.proto{idx}")
+                cursor = visit(child, f"{prefix}.proto{idx}", cursor)
+            return cursor
         visit(proto)
         # Conservative branch targets: only direct sBx jumps/loops are lifted.
         targets = {}
