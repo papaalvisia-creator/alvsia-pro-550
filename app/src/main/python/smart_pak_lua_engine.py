@@ -127,6 +127,13 @@ def _safe_error(exc: BaseException) -> str:
 
 
 def execute(input_path, output_dir, work_dir=None, archive_kind="pak") -> dict[str, Any]:
+    """Run PAK extraction and Lua recovery through the shared, proof-aware pipeline.
+
+    A PAK with some authorization-blocked entries must still process the files
+    that were safely extracted. The shared archive engine classifies each Lua
+    result as SUCCESS, ROUNDTRIP_VERIFIED, STRUCTURALLY_VALID, PARTIAL_RECOVERY
+    or FAILED; a created output file alone is never promoted to SUCCESS.
+    """
     source = Path(input_path)
     out = Path(output_dir)
     work = Path(work_dir) if work_dir else out.parent / "WORK"
@@ -134,111 +141,35 @@ def execute(input_path, output_dir, work_dir=None, archive_kind="pak") -> dict[s
     work.mkdir(parents=True, exist_ok=True)
 
     if not source.is_file():
-        return {"ok": False, "engine": "SMART PAK/LUA", "error": "PAK input file not found"}
+        return {"ok": False, "engine": "SMART PAK/LUA",
+                "error": "PAK input file not found", "final_status": "FAILED"}
     size = source.stat().st_size
     if size > MAX_IMPORT_BYTES:
         return {"ok": False, "engine": "SMART PAK/LUA",
-                "error": "input exceeds 5 GiB per-file/import limit"}
+                "error": "input exceeds 5 GiB per-file/import limit",
+                "final_status": "FAILED"}
 
     try:
-        from archive_engine import detect_archive, extract_archive
-        detected = detect_archive(source)
-        if not detected.get("ok") or detected.get("format") != "tencent-pak":
-            return {"ok": False, "engine": "SMART PAK/LUA",
-                    "error": "input is not a detected Tencent PAK", "detect": detected}
-
-        pak_out = out / "PAK"
-        extracted = extract_archive(source, pak_out)
-        if not extracted.get("ok"):
-            return {"ok": False, "engine": "SMART PAK/LUA",
-                    "stage": "extract", "error": extracted.get("error", "PAK extraction failed"),
-                    "extract": extracted}
-
-        files = sorted(
-            p for p in pak_out.rglob("*")
-            if p.is_file()
-        )
-        if len(files) > MAX_CANDIDATES:
-            return {"ok": False, "engine": "SMART PAK/LUA",
-                    "stage": "scan", "error": "extracted file count exceeds safety limit",
-                    "files": len(files)}
-
-        probes = {str(p): _probe_lua(p) for p in files}
-        candidates = [p for p in files if probes[str(p)].get("candidate")]
-        lua_out = out / "SMART_LUA"
-        lua_out.mkdir(parents=True, exist_ok=True)
-
-        from smart_lua_engine import detect, decompile, deep_recover
-
-        successes = []
-        failures = []
-        for src in candidates:
-            rel = src.relative_to(pak_out)
-            # Keep every result in a deterministic, collision-free directory.
-            digest = hashlib.sha256(rel.as_posix().encode("utf-8")).hexdigest()[:16]
-            dest_dir = lua_out / digest
-            dest_dir.mkdir(parents=True, exist_ok=True)
-            detection = detect(src)
-            record = {
-                "path": rel.as_posix(),
-                "bytes": src.stat().st_size,
-                "sha256": _sha256(src),
-                "detection": detection,
-                "probe": probes[str(src)],
-            }
-            try:
-                result = deep_recover(src, dest_dir)
-                # If a wrapper precedes a real Lua chunk, retry against an
-                # immutable embedded view. This makes wrapped/hybrid payloads
-                # recoverable without altering the original corpus file.
-                if (not result.get("ok")) and probes[str(src)].get("magic_offset", 0) > 0:
-                    view = _make_lua_view(src, probes[str(src)], work / "LUA_VIEWS")
-                    retry_dir = dest_dir / "embedded"
-                    retry_dir.mkdir(parents=True, exist_ok=True)
-                    retry = deep_recover(view, retry_dir)
-                    result = dict(retry)
-                    result["recovery"] = "embedded-lua-view"
-                    result["embedded_offset"] = probes[str(src)].get("magic_offset")
-            except Exception as exc:
-                result = {"ok": False, "error": _safe_error(exc)}
-            record["decompile"] = result
-            if result.get("ok") and result.get("out"):
-                artifact = Path(str(result["out"]))
-                if artifact.is_file() and artifact.stat().st_size > 0:
-                    record["status"] = "SUCCESS"
-                    successes.append(record)
-                    continue
-            record["status"] = "FAILED"
-            failures.append(record)
-
-        report = {
-            "ok": True,
-            "engine": "SMART PAK/LUA",
-            "operation": "extract-analyze-decompile",
-            "input": {
-                "name": source.name,
-                "bytes": size,
-                "sha256": _sha256(source),
-            },
-            "extract": extracted,
-            "scan": {
-                "files": len(files),
-                "lua_candidates": len(candidates),
-                "non_candidates": len(files) - len(candidates),
-                "probe": {
-                    "max_probe_bytes": MAX_LUA_PROBE_BYTES,
-                    "max_decompile_bytes": MAX_LUA_DECOMPILE_BYTES,
-                },
-            },
-            "decompile": {
-                "attempted": len(candidates),
-                "success": len(successes),
-                "failed": len(failures),
-            },
-            "successes": successes,
-            "failures": failures,
-            "out": str(lua_out),
-        }
+        from smart_archive_lua_engine import execute as execute_archive
+        report = dict(execute_archive(
+            source, out, work_dir=work, archive_kind="pak", deep_lua=True
+        ) or {})
+        report["engine"] = "SMART PAK/LUA"
+        report["operation"] = "extract-analyze-decompile"
+        report["archive_out"] = report.get("out")
+        report["out"] = str(out / "SMART_LUA")
+        recovery = report.get("recovery") or {}
+        report["decompile"] = dict(recovery)
+        if report.get("ok"):
+            extraction_complete = bool(report.get("extraction_complete"))
+            partial = int(recovery.get("partial", 0) or 0)
+            failed = int(recovery.get("failed", 0) or 0)
+            report["final_status"] = (
+                "SUCCESS" if extraction_complete and partial == 0 and failed == 0
+                else "PARTIAL"
+            )
+        else:
+            report.setdefault("final_status", "FAILED")
         report_path = out / "smart_pak_lua_report.json"
         report_path.write_text(
             json.dumps(report, indent=2, sort_keys=True, ensure_ascii=False),
@@ -248,5 +179,5 @@ def execute(input_path, output_dir, work_dir=None, archive_kind="pak") -> dict[s
         return report
     except Exception as exc:
         return {"ok": False, "engine": "SMART PAK/LUA",
-                "stage": "pipeline", "error": _safe_error(exc)}
-
+                "stage": "pipeline", "error": _safe_error(exc),
+                "final_status": "FAILED"}
