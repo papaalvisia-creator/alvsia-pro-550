@@ -49,7 +49,8 @@ object SubMenus {
         5 -> listOf(
             moduleGroup(10, "SMART SO ANALYZER", "Native library strings, URLs, crypto patterns and safe patch operations"),
             moduleGroup(11, "SMART JNI TRACE", "JNI observation scripts and Frida command generation"),
-            moduleGroup(17, "SMART ANTI-RE AUDIT", "APK, Lua, SO and source triage reports")
+            moduleGroup(17, "SMART ANTI-RE AUDIT", "APK, Lua, SO and source triage reports"),
+            assetGroup()
         )
         6 -> listOf(
             moduleGroup(7, "SMART WORKSPACE", "Workspace lifecycle and safe cleanup"),
@@ -68,16 +69,13 @@ object SubMenus {
         needsFile = true,
         legacyModuleId = 20,
         actions = listOf(
-            SubTool("asset_fingerprint", "Asset Fingerprint", "Format, entropy, markers and SHA-256 evidence",
-                "Select asset/binary → OUT/SMART_ASSET/*.asset_fingerprint.json", legacyModuleId = 20),
-            SubTool("asset_scan_ids", "Asset ID Discovery", "Find likely asset/skin/material/weapon identifiers",
-                "Select asset/binary → OUT/SMART_ASSET/*.asset_ids.txt", legacyModuleId = 20),
-            SubTool("asset_context", "Asset Context Map", "Find contextual references with offsets and neighboring bytes",
-                "Select asset/binary → OUT/SMART_ASSET/*.asset_context.jsonl", legacyModuleId = 20),
-            SubTool("asset_patch", "Safe Asset Mapping", "Apply only user-supplied equal-length hex mappings",
-                "Create WORK/asset_patch_map.txt as old_hex=new_hex → OUT/SMART_ASSET/*.asset_patched", legacyModuleId = 20),
-            SubTool("asset_validate", "Asset Validation", "Read-only post-change structural evidence and hash",
-                "Select asset/binary → OUT/SMART_ASSET/*.asset_validate.json", legacyModuleId = 20)
+            SubTool(
+                "asset_smart",
+                "Smart Asset Analysis",
+                "Fingerprint, discover IDs, map binary context, optionally apply safe user mappings, then validate",
+                "Select an asset/binary. Optional mapping rows use old_hex=new_hex in the inline WORK/asset_patch_map.txt field.",
+                legacyModuleId = 20
+            )
         )
     )
 
