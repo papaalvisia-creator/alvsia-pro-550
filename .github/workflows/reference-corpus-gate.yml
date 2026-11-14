@@ -1,11 +1,12 @@
 name: ALVSIA Reference Corpus Runtime Gate
 
 env:
-  REFERENCE_CORPUS_REV: a5b889e3477b7e5b8fb22060cb24f248f3dfe757
+  REFERENCE_CORPUS_REV: bd229d34eb339cf9b68dc2dd38939d3584bc4ce2
 
 on:
   push:
     branches:
+      - fix/engine-repair-20261114
       - feat/alvsia-capability-expansion-security-20261114-clean
     paths:
       - "app/src/main/python/**"
