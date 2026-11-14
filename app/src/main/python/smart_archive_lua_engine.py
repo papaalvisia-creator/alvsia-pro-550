@@ -41,7 +41,8 @@ def _fallback_recovery_status(result) -> str:
         if result.get("partial_recovery"):
             return "PARTIAL"
         if str(result.get("final_status") or "") in (
-            "PARTIAL", "PARTIAL_RECOVERY", "STRUCTURALLY_VALID"
+            "PARTIAL", "PARTIAL_RECOVERY", "PARTIAL_STRING_RECOVERY",
+            "STRUCTURALLY_VALID"
         ):
             return "PARTIAL"
     return "FAILED"
@@ -133,6 +134,17 @@ def execute(input_path, output_dir, work_dir=None, archive_kind="auto",
         record["recovery"] = result
         if result.get("ok") and result.get("out"):
             artifact = Path(str(result["out"]))
+            if (
+                str(result.get("final_status") or "") == "PARTIAL_STRING_RECOVERY"
+                or str(result.get("artifact_kind") or "") == "string_recovery"
+            ):
+                if artifact.is_file() and artifact.stat().st_size > 0:
+                    record["status"] = "PARTIAL_STRING_RECOVERY"
+                    record["artifact_kind"] = "string_recovery"
+                    record["source_recovered"] = False
+                    record["strings_recovered"] = True
+                    partials.append(record)
+                    continue
             if artifact.is_file() and artifact.stat().st_size > 0:
                 # Strongest available proof: compile the recovered source and
                 # compare normalized VM listings with the original chunk.
