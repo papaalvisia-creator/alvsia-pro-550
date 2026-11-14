@@ -195,7 +195,6 @@ def main():
         assert len(bgmi_header) == 33
         # main upvalue, source=nil, line-defined, last-line, proto flags,
         # instruction count, then one raw instruction whose opcode is 6.
-        import struct
         unknown_opcode_chunk = (
             bgmi_header
             + struct.pack("<B", 0)       # main upvalue count
