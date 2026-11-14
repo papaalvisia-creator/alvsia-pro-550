@@ -168,6 +168,16 @@ def main():
             bgmi_structural, key=None, decrypt=True
         )
         assert bgmi_roundtrip == standard_bgmi_chunk
+
+        # Keyed conversion must also preserve non-UTF8 Lua string bytes.
+        fixture_key = b"unit-test-bgmi-key"
+        encrypted_bgmi = transform_bgmi_lua(
+            standard_bgmi_chunk, key=fixture_key, decrypt=False
+        )
+        keyed_roundtrip = transform_bgmi_lua(
+            encrypted_bgmi, key=fixture_key, decrypt=True
+        )
+        assert keyed_roundtrip == standard_bgmi_chunk
         assert b"\xff\xfeA" in bgmi_roundtrip
 
         # The Smart Lua orchestrator may use this only as a last-resort,
