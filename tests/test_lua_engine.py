@@ -170,6 +170,20 @@ def main():
         assert bgmi_roundtrip == standard_bgmi_chunk
         assert b"\xff\xfeA" in bgmi_roundtrip
 
+        # The Smart Lua orchestrator may use this only as a last-resort,
+        # explicitly PARTIAL candidate after ordinary engines reject the file.
+        bgmi_path = td / "sample_structure_only.bgmi"
+        bgmi_path.write_bytes(bgmi_structural)
+        bgmi_source = td / "sample_structure_only.lua"
+        from lua_engine.orchestrator import _run_bgmi_structure_only
+        bgmi_ok, bgmi_note = _run_bgmi_structure_only(bgmi_path, bgmi_source)
+        assert bgmi_ok, bgmi_note
+        assert "structure-only" in bgmi_note
+        bgmi_valid, bgmi_validation = validate_lua_source(
+            bgmi_source, expected_version="Lua 5.3"
+        )
+        assert bgmi_valid, bgmi_validation
+
         # Unknown BGMI opcodes must fail closed, never pass through as standard
         # Lua opcodes and create a misleading decompile result.
         bgmi_header = (
