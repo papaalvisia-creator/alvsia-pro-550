@@ -1,12 +1,12 @@
 """Real native unluac-rs integration test for high-instruction Lua 5.3 chunks.
 
 The test is enabled in Smart Lua CI after building the pinned v1.4.4 host CLI.
-It deliberately exceeds the Python instruction budget so the app must route to
-the same native CLI registered by Android's PythonBridgeRunner.
+It compiles a real source file with luac5.3, exceeds the Python instruction
+budget, then verifies that the registered native CLI returns syntax-valid Lua.
 """
 import os
 import shutil
-import struct
+import subprocess
 import sys
 from pathlib import Path
 
@@ -19,32 +19,6 @@ import alvsia_features as features
 from lua_engine.decompiler53 import estimate_chunk_work
 
 
-def _large_valid_lua53_chunk(instruction_count: int) -> bytes:
-    header = (
-        b"\x1bLua"
-        + bytes([0x53, 0x00])
-        + b"\x19\x93\x0d\x0a\x1a\x0a"
-        + bytes([4, 4, 4, 8, 8])
-        + struct.pack("<q", 0x5678)
-        + struct.pack("<d", 370.5)
-        + bytes([1])
-    )
-    out = bytearray(header)
-    out += b"\x00"                 # source = NULL
-    out += struct.pack("<ii", 0, 0)
-    out += bytes([0, 0, 2])         # params, vararg, maxstack
-    out += struct.pack("<i", instruction_count)
-    out += b"\x00\x00\x00\x00" * (instruction_count - 1)  # MOVE R0,R0
-    out += struct.pack("<I", 38 | (1 << 23))                # RETURN R0, zero values
-    out += struct.pack("<i", 0)  # constants
-    out += struct.pack("<i", 0)  # upvalues
-    out += struct.pack("<i", 0)  # nested protos
-    out += struct.pack("<i", 0)  # lineinfo
-    out += struct.pack("<i", 0)  # local variables
-    out += struct.pack("<i", 0)  # upvalue names
-    return bytes(out)
-
-
 def test_native_unluac_rs_decompiles_high_instruction_lua53_chunk(tmp_path):
     binary = os.environ.get("ALVSIA_UNLUAC_RS_BIN", "").strip()
     if not binary or not Path(binary).is_file():
@@ -53,15 +27,24 @@ def test_native_unluac_rs_decompiles_high_instruction_lua53_chunk(tmp_path):
     if not luac:
         pytest.skip("luac5.3 is required for the final syntax check")
 
-    source = tmp_path / "high-work.luac"
+    source = tmp_path / "high-work.lua"
+    chunk = tmp_path / "high-work.luac"
     output_dir = tmp_path / "out"
-    source.write_bytes(_large_valid_lua53_chunk(450_001))
 
-    estimate = estimate_chunk_work(memoryview(source.read_bytes()))
+    # Two independent local arithmetic statements per line produce a large,
+    # straight-line function without long-jump edge cases or external globals.
+    body = "\n".join(["x=x+1; y=y+2"] * 220_000)
+    source.write_text("local x,y=0,0\n" + body + "\nreturn x+y\n", encoding="utf-8")
+    subprocess.run(
+        [luac, "-o", str(chunk), str(source)],
+        capture_output=True, text=True, check=True, timeout=90,
+    )
+
+    estimate = estimate_chunk_work(memoryview(chunk.read_bytes()))
     assert estimate["completed"] is True, estimate
     assert estimate["instructions"] > 400_000, estimate
 
-    result = features.run_lua_smart(source, output_dir)
+    result = features.run_lua_smart(chunk, output_dir)
     assert result.get("ok") is True, result
     assert result.get("mode") == "smart_native_large_input", result
     assert result.get("selected_engine") == "unluac_rs_v1_4_4", result
@@ -71,7 +54,8 @@ def test_native_unluac_rs_decompiles_high_instruction_lua53_chunk(tmp_path):
 
     recovered = Path(result["out"])
     assert recovered.is_file() and recovered.stat().st_size > 0
-    check = __import__("subprocess").run(
-        [luac, "-p", str(recovered)], capture_output=True, text=True, check=False
+    check = subprocess.run(
+        [luac, "-p", str(recovered)],
+        capture_output=True, text=True, check=False, timeout=90,
     )
     assert check.returncode == 0, check.stderr
