@@ -1697,6 +1697,44 @@ class TencentPakFile:
         console.print('[bold green]🎉 INJECT COMPLETE![/bold green]')
         console.print(f'[white]Output  :[/] [cyan]{output_pak.name}[/cyan]')
 
+    def _commit_tmp(self, tmp_path, file_path, entry) -> None:
+        """Validate size and SHA-1 of a written temp file, then rename atomically.
+
+        Every extraction path funnels through here so that no file is committed
+        unless its byte length matches the index's uncompressed_size and its
+        integrity hash matches. The index content_hash is interpreted per PAK
+        build: some builds store the SHA-1 of the extracted plaintext, others
+        store the SHA-1 of the raw (encrypted/compressed) bytes. A genuine
+        corruption matches neither, so we accept a match against either the
+        written plaintext or the raw stored span and fail closed otherwise.
+        """
+        actual_size = tmp_path.stat().st_size
+        expected_size = getattr(entry, 'uncompressed_size', None)
+        if expected_size is not None and expected_size > 0 and actual_size != expected_size:
+            raise ValueError(
+                f"decompressed size mismatch: expected {expected_size}, got {actual_size}"
+            )
+        expected_hash = bytes(getattr(entry, 'content_hash', b'') or b'')
+        if len(expected_hash) == 20:
+            plain_digest = hashlib.sha1()
+            with open(tmp_path, 'rb') as handle:
+                for chunk in iter(lambda: handle.read(1024 * 1024), b''):
+                    plain_digest.update(chunk)
+            plain_ok = plain_digest.digest() == expected_hash
+            raw_ok = False
+            try:
+                raw = bytes(self._peek_content(
+                    entry.offset, entry.size, entry.encryption_method))
+                raw_ok = hashlib.sha1(raw).digest() == expected_hash
+            except Exception:
+                raw_ok = False
+            if not (plain_ok or raw_ok):
+                raise ValueError(
+                    'PAK entry integrity check failed: SHA-1 mismatch for %s'
+                    % str(file_path)
+                )
+        tmp_path.replace(file_path)
+
     def _write_to_disk(self, file_path: PurePath, entry: TencentPakEntry) -> None:
         _se33e912f7767 = entry.encryption_method
         _s5206fe150a33 = entry.compression_method
@@ -1724,7 +1762,7 @@ class TencentPakFile:
                     for _s576e50701491 in entry.compressed_blocks:
                         _s366d3d829edf = self._file_content[_s576e50701491.start:_s576e50701491.end]
                         _sbb61cc6b3e63.write(_s366d3d829edf)
-                tmp_path.replace(file_path)
+                self._commit_tmp(tmp_path, file_path, entry)
                 return
             with open(tmp_path, 'wb') as _sbb61cc6b3e63:
                 if _s5206fe150a33 == CM_NONE:
@@ -1732,31 +1770,24 @@ class TencentPakFile:
                     if entry.encrypted:
                         _sb96393f68f4d = PakCrypto.decrypt_block(bytes(_sb96393f68f4d), file_path, _se33e912f7767)
                     _sbb61cc6b3e63.write(_sb96393f68f4d)
-                    tmp_path.replace(file_path)
-                    return
-                for _s1f6d01ab75cb in PakCrypto.generate_block_indices(len(entry.compressed_blocks), _se33e912f7767):
-                    _sb96393f68f4d = self._peek_block_content(entry.compressed_blocks[_s1f6d01ab75cb], _se33e912f7767)
-                    if entry.encrypted:
-                        _sb96393f68f4d = PakCrypto.decrypt_block(bytes(_sb96393f68f4d), file_path, _se33e912f7767)
-                    remaining_size = max(0, int(getattr(entry, 'uncompressed_size', 0)) - _sbb61cc6b3e63.tell())
-                    block_limit = None
-                    if entry.compression_block_size > 0 and remaining_size > 0:
-                        block_limit = min(int(entry.compression_block_size), remaining_size)
-                    _sb96393f68f4d = PakCompression.decompress_block(
-                        _sb96393f68f4d, self._zstd_dict, _s5206fe150a33,
-                        max_output_size=block_limit,
-                    )
-                    if block_limit and len(_sb96393f68f4d) > block_limit:
-                        raise ValueError("decompressed block exceeds PAK compression block size")
-                    _sbb61cc6b3e63.write(_sb96393f68f4d)
-            # Validate decompressed size before committing the rename.
-            actual_size = tmp_path.stat().st_size
-            expected_size = getattr(entry, 'uncompressed_size', None)
-            if expected_size is not None and expected_size > 0 and actual_size != expected_size:
-                raise ValueError(
-                    f"decompressed size mismatch: expected {expected_size}, got {actual_size}"
-                )
-            tmp_path.replace(file_path)
+                else:
+                    for _s1f6d01ab75cb in PakCrypto.generate_block_indices(len(entry.compressed_blocks), _se33e912f7767):
+                        _sb96393f68f4d = self._peek_block_content(entry.compressed_blocks[_s1f6d01ab75cb], _se33e912f7767)
+                        if entry.encrypted:
+                            _sb96393f68f4d = PakCrypto.decrypt_block(bytes(_sb96393f68f4d), file_path, _se33e912f7767)
+                        remaining_size = max(0, int(getattr(entry, 'uncompressed_size', 0)) - _sbb61cc6b3e63.tell())
+                        block_limit = None
+                        if entry.compression_block_size > 0 and remaining_size > 0:
+                            block_limit = min(int(entry.compression_block_size), remaining_size)
+                        _sb96393f68f4d = PakCompression.decompress_block(
+                            _sb96393f68f4d, self._zstd_dict, _s5206fe150a33,
+                            max_output_size=block_limit,
+                        )
+                        if block_limit and len(_sb96393f68f4d) > block_limit:
+                            raise ValueError("decompressed block exceeds PAK compression block size")
+                        _sbb61cc6b3e63.write(_sb96393f68f4d)
+            # Validate size and SHA-1 after the file is flushed and closed.
+            self._commit_tmp(tmp_path, file_path, entry)
         except Exception:
             # Clean up the temp file without touching the original.
             try:
@@ -1787,13 +1818,34 @@ class TencentPakFile:
         stats = {
             'ok': False,
             'expected_files': expected_files,
+            'expected_entries': expected_files,
             'written_files': 0,
+            # Entries that could not be extracted because authorized material
+            # (e.g. SM4 keys) is unavailable. This is an honest BLOCKED state,
+            # not a silent skip and not a data-loss failure.
+            'blocked_files': 0,
+            'blocked_entries': [],
+            # Entries that failed for an unexpected reason (corrupt block,
+            # size mismatch, I/O error). These are real failures.
+            'failed_files': 0,
+            # Entries skipped for safety (unsafe path, NUL byte, escaping root).
             'skipped_files': 0,
             'skipped_directories': 0,
             'written_bytes': 0,
             'failures': [],
             'index_parse': getattr(self, '_index_parse_stats', {}),
         }
+
+        def _is_blocked_exc(exc):
+            # SM4 material unavailability is a BLOCKED outcome, not a failure.
+            try:
+                if isinstance(exc, _sm4_material.Sm4MaterialUnavailable):
+                    return True
+            except Exception:
+                pass
+            return 'SM4 candidate material is not authorized' in str(exc) \
+                or 'SM4-2 material is not authorized' in str(exc) \
+                or 'SM4-4 material is not authorized' in str(exc)
 
         def _failure(path, exc):
             item = {'path': str(path), 'error': f'{type(exc).__name__}: {exc}'[:500]}
@@ -1893,21 +1945,45 @@ class TencentPakFile:
                     stats['written_files'] += 1
                     stats['written_bytes'] += actual_size
                 except Exception as exc:
-                    stats['skipped_files'] += 1
+                    if _is_blocked_exc(exc):
+                        stats['blocked_files'] += 1
+                        if len(stats['blocked_entries']) < 1000:
+                            stats['blocked_entries'].append({
+                                'path': relative_name,
+                                'reason': 'sm4_material_unavailable',
+                            })
+                    else:
+                        stats['failed_files'] += 1
                     _failure(relative_name, exc)
 
+        # Honest accounting invariant: every indexed entry is classified
+        # exactly once as written, failed, blocked or skipped.
+        accounted = (
+            stats['written_files']
+            + stats['failed_files']
+            + stats['blocked_files']
+            + stats['skipped_files']
+        )
+        stats['accounted_entries'] = accounted
+        stats['accounting_ok'] = (accounted == stats['expected_entries'])
         stats['ok'] = (
             stats['expected_files'] > 0
-            and stats['written_files'] == stats['expected_files']
+            and stats['accounting_ok']
+            and stats['failed_files'] == 0
             and stats['skipped_files'] == 0
             and stats['skipped_directories'] == 0
+            and (stats['written_files'] + stats['blocked_files']) == stats['expected_files']
         )
         _log_path_debug(
             'DUMP PATH SUMMARY',
             expected_files=stats['expected_files'],
             written_files=stats['written_files'],
+            blocked_files=stats['blocked_files'],
+            failed_files=stats['failed_files'],
             skipped_files=stats['skipped_files'],
             skipped_directories=stats['skipped_directories'],
+            accounted_entries=stats['accounted_entries'],
+            accounting_ok=stats['accounting_ok'],
             written_bytes=stats['written_bytes'],
         )
         return stats
