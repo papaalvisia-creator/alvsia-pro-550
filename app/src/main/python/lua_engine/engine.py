@@ -233,7 +233,7 @@ def validate_lua_source(path_or_text, expected_version=None) -> tuple[bool, str]
         if source_size > _LARGE_SOURCE_VALIDATION_BYTES:
             valid, note = _validate_lua_structure(text)
             if valid:
-                return True, "large-source structural validation accepted; external parser intentionally skipped"
+                return True, "structural heuristic accepted; large-source external parser intentionally skipped"
             return False, note
 
     # Prefer a real parser whenever the matching compiler is installed.
