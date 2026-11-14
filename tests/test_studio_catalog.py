@@ -69,8 +69,8 @@ class SmartCatalogTests(unittest.TestCase):
         mapping = {int(menu): {int(x.strip()) for x in ids.split(",")} for menu, ids in entries}
         self.assertEqual(set(mapping), set(range(1, 8)))
         providers = [provider for values in mapping.values() for provider in values]
-        self.assertEqual(len(providers), 19)
-        self.assertEqual(set(providers), set(range(1, 20)))
+        self.assertEqual(len(providers), 20)
+        self.assertEqual(set(providers), set(range(1, 21)))
         self.assertEqual(len(providers), len(set(providers)))
 
 
