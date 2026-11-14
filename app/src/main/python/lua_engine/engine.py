@@ -218,6 +218,24 @@ def validate_lua_source(path_or_text, expected_version=None) -> tuple[bool, str]
     if not _looks_like_lua_source(text):
         return False, "output does not look like Lua source"
 
+    # Large source files must not be sent through a compiler process merely to
+    # prove syntax. A multi-megabyte script can legitimately be the recovered
+    # source artifact, while a parser subprocess may time out or impose a second
+    # full-file memory copy. For large files, use the bounded structural lexer and
+    # report that level explicitly; this keeps source passthrough truthful without
+    # turning a validation timeout into a false PARTIAL result.
+    _LARGE_SOURCE_VALIDATION_BYTES = 4 * 1024 * 1024
+    if source_path is not None:
+        try:
+            source_size = source_path.stat().st_size
+        except OSError:
+            source_size = 0
+        if source_size > _LARGE_SOURCE_VALIDATION_BYTES:
+            valid, note = _validate_lua_structure(text)
+            if valid:
+                return True, "large-source structural validation accepted; external parser intentionally skipped"
+            return False, note
+
     # Prefer a real parser whenever the matching compiler is installed.
     # Never claim parser validation when only the structural fallback ran.
     parser = _find_lua_parser(expected_version)
