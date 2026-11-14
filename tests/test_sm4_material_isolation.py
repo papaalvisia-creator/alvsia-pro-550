@@ -21,7 +21,7 @@ def test_security_scanner_does_not_embed_plaintext_key_values():
     scanner = (ROOT / "tools/security_release_check.py").read_text(encoding="utf-8")
     test_source = Path(__file__).read_text(encoding="utf-8")
     assert "FORBIDDEN_SM4_LITERALS =" not in scanner
-    assert "FORBIDDEN_LITERALS =" not in test_source
+    assert "FORBIDDEN_" + "LITERALS =" not in test_source
     assert "SECRET_NAME_PREFIXES" in scanner
     assert "PY.rglob(\"*.py\")" in scanner
 
