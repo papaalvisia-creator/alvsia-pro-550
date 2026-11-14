@@ -680,6 +680,61 @@ def _run_lua_smart_legacy(input_path, out_dir, jars_dir=None):
 
 
 
+def _attach_verified_recovery_ir(result: dict, input_path: Path) -> dict:
+    """Attach bounded Lua 5.3 IR/SSA evidence without making recovery fatal.
+
+    The IR layer is analysis-only. It is deliberately gated by the same work
+    estimator used by the Smart Lua memory-safety path, so a huge protected
+    chunk cannot be parsed into an unbounded Python object graph merely because
+    the caller requested intelligence enrichment.
+    """
+    if not isinstance(result, dict):
+        return result
+    try:
+        status = str(result.get("final_status") or "").upper()
+        candidate = Path(str(result.get("out"))) if result.get("out") else input_path
+        target = candidate if candidate.is_file() and candidate.suffix.lower() in {".luac", ".luac53", ".lua"} else input_path
+        if not target.is_file():
+            return result
+        size = target.stat().st_size
+        if size > 32 * 1024 * 1024:
+            result["recovery_ir"] = {"ok": False, "status": "SKIPPED",
+                                     "reason": "IR input exceeds 32 MiB analysis cap"}
+            return result
+        if target.suffix.lower() == ".lua" and target.read_bytes()[:4] != b"\\x1bLua":
+            return result
+        if _lua_work_exceeds_budget(target, size):
+            result["recovery_ir"] = {"ok": False, "status": "SKIPPED",
+                                     "reason": "declared Lua work exceeds bounded IR budget"}
+            return result
+        from recovery_ir import analyze_lua_bytecode, build_ssa
+        analysis = analyze_lua_bytecode(str(target), deadline_seconds=8.0)
+        if analysis.get("ok"):
+            ir = analysis.get("ir") or {}
+            rows = [
+                {"pc": item.get("pc"), "opcode": item.get("opcode"),
+                 "operands": tuple(item.get("operands") or ())}
+                for item in ir.get("instructions", [])
+            ]
+            # Rebuild the typed instruction stream from verified IR data and
+            # attach SSA evidence; this does not execute or interpret code.
+            from recovery_ir import IRInstruction
+            typed = [IRInstruction(int(x["pc"]), str(x["opcode"]), tuple(x["operands"]))
+                     for x in rows if isinstance(x.get("pc"), int) and x.get("opcode")]
+            analysis["ssa"] = build_ssa(typed)
+            analysis["status"] = "VERIFIED_IR"
+            result["recovery_ir"] = analysis
+            result["recovery_ir_status"] = "VERIFIED_IR"
+        else:
+            result["recovery_ir"] = analysis
+            result["recovery_ir_status"] = "UNAVAILABLE"
+    except Exception as exc:
+        result["recovery_ir"] = {"ok": False, "status": "ERROR",
+                                 "error": f"{type(exc).__name__}: {exc}"}
+        result["recovery_ir_status"] = "ERROR"
+    return result
+
+
 def run_lua_smart(input_path, out_dir, jars_dir=None):
     """Program-intelligence front door with legacy engine orchestration as a validated adapter."""
     input_path = Path(input_path)
@@ -846,7 +901,7 @@ def run_lua_smart(input_path, out_dir, jars_dir=None):
                         string_count = 0
                     break
         if string_artifact is not None:
-            return {
+            partial_result = {
                 "ok": True,
                 "mode": "smart_streaming_large_input",
                 "final_status": "PARTIAL_STRING_RECOVERY",
@@ -874,6 +929,9 @@ def run_lua_smart(input_path, out_dir, jars_dir=None):
                     "were recovered, but no validated Lua source was reconstructed."
                 ),
             }
+            # Keep partial string recovery actionable: attach bounded IR evidence
+            # when the recovered payload is a verified, affordable Lua chunk.
+            return _attach_verified_recovery_ir(partial_result, work_input)
         return {
             "ok": False,
             "mode": "smart_streaming_large_input",
@@ -906,7 +964,7 @@ def run_lua_smart(input_path, out_dir, jars_dir=None):
         legacy = {"ok": False, "final_status": "FAILED",
                   "error": f"{type(exc).__name__}: {exc}"}
     result = dict(legacy)
-
+    # Canonical app path: expose the same verified IR evidence as the compatibility wrapper.\n    result = _attach_verified_recovery_ir(result, input_path)\n
     # Run optional intelligence analysis only after the decompiler has had
     # its chance to publish a validated artifact. Treat analysis failure as a
     # diagnostic warning, not as a reason to discard the decompiler result.
