@@ -736,7 +736,13 @@ def run_lua_smart(input_path, out_dir, jars_dir=None):
                             return {
                                 "ok": True,
                                 "mode": "smart_native_large_input",
-                                "final_status": "SUCCESS",
+                                # Syntax validation alone proves a structurally
+                                # valid source file, not semantic equivalence to
+                                # protected bytecode. The archive/Lua E2E layer
+                                # may promote it only after an explicit roundtrip proof.
+                                "final_status": "STRUCTURALLY_VALID",
+                                "validation_level": "syntax_only",
+                                "roundtrip_proof": "NOT_RUN",
                                 "selected_engine": "unluac_rs_v1_4_4",
                                 "out": str(native_out),
                                 "source_recovered": True,
