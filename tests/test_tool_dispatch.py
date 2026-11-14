@@ -107,12 +107,20 @@ def test_menu_ids_are_unique_and_reachable():
         "lua_mod_repack": 'sid.startswith("lua_patch_") or sid in ("lua_inject_hook","lua_mod_repack")',
     }
     direct_engine_routes = {"android_permission_dump": 'subId == "android_permission_dump"'}
+    local_engine_routes = {"asset_smart": ("moduleId == 20", "SmartAssetEngine.run")}
     engine = ENGINE.read_text(encoding="utf-8")
     router = ROUTER.read_text(encoding="utf-8")
+    asset_engine = (ROOT / "app/src/main/java/com/alvsia/pro/tool/SmartAssetEngine.kt").read_text(encoding="utf-8")
+    for operation in ("asset_fingerprint", "asset_scan_ids", "asset_context", "asset_patch", "asset_validate"):
+        assert f'"{operation}"' in asset_engine, f"Smart Asset internal stage missing: {operation}"
     missing = []
     for sid in ids:
         if sid in direct_engine_routes and direct_engine_routes[sid] in engine:
             continue
+        if sid in local_engine_routes:
+            module_guard, dispatch_call = local_engine_routes[sid]
+            if module_guard in engine and dispatch_call in engine:
+                continue
         # Compact Smart menus may normalize a visible operation to a legacy
         # provider ID in SmartModuleRouter; that mapping is a valid route.
         if f'"{sid}"' in router:
