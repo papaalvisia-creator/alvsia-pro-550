@@ -171,7 +171,7 @@ def _run_bgmi_structure_only(src: Path, dst: Path) -> tuple[bool, str]:
             return False, "BGMI structure-only candidate exceeds the 32 MiB safety cap"
         with src.open("rb") as handle:
             head = handle.read(14)
-        if len(head) < 14 or head[:5] != b"\\x1bLua\\x53" or head[13] != 4:
+        if len(head) < 14 or head[:5] != b"\x1bLua\x53" or head[13] != 4:
             return False, "input does not match the BGMI 4-byte size_t signature"
         from .bgmi import is_bgmi_lua, transform_bgmi_lua
         data = src.read_bytes()
