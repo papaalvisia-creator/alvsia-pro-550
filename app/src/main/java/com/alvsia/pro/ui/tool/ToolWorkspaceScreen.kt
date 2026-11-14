@@ -51,6 +51,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.alvsia.pro.tool.FileMagic
+import com.alvsia.pro.tool.SmartEnginePlanner
 import com.alvsia.pro.tool.SubTool
 import com.alvsia.pro.tool.UXStore
 import com.alvsia.pro.tool.WorkPaths
@@ -70,13 +71,19 @@ private fun selectedSizeBytes(context: Context, uri: Uri): Long? = try {
     }
 } catch (_: Exception) { null }
 
+private fun selectedDisplayName(context: Context, uri: Uri): String? = try {
+    context.contentResolver.query(uri, arrayOf(android.provider.OpenableColumns.DISPLAY_NAME), null, null, null)?.use { c ->
+        if (c.moveToFirst() && !c.isNull(0)) c.getString(0) else null
+    }
+} catch (_: Exception) { null }
+
 /**
  * ALVSIA PRO 5.5.2 — ToolWorkspaceScreen (UX Sprint 1 rewrite)
  *
  * New features:
  *  • Inline Config Editor — renders form fields for subtools that need config files
  *  • Recent Files carousel — 1 tap to reuse last 10 files
- *  • Auto-Detect file → suggest subtool (shows detection banner)
+ *  • Auto-Detect file → automatic internal routing (no nested operation picker)
  *  • Color-coded log — green=OK, red=X, yellow=info, blue=header
  *  • Output preview inline — shows first 30 lines of text output after RUN
  *  • COPY / SAVE / OPEN FOLDER buttons on log
@@ -86,6 +93,9 @@ fun ToolWorkspaceScreen(
     moduleTitle: String,
     moduleId: Int,
     sub: SubTool,
+    actions: List<SubTool> = emptyList(),
+    selectedAction: SubTool = sub,
+    onSelectAction: (SubTool) -> Unit = {},
     running: Boolean,
     logs: List<String>,
     onBack: () -> Unit,
@@ -93,12 +103,13 @@ fun ToolWorkspaceScreen(
     initialUri: Uri? = null
 ) {
     val ctx = LocalContext.current
+    val operation = selectedAction
     var uri by remember { mutableStateOf<Uri?>(null) }
     var detectionResult by remember { mutableStateOf<FileMagic.DetectionResult?>(null) }
     var selectedSize by remember { mutableStateOf<Long?>(null) }
     var sizeRejected by remember { mutableStateOf(false) }
-    var logMode by remember(sub.id) { mutableStateOf("simple") }
-    var confirmClearWorkspace by remember(sub.id) { mutableStateOf(false) }
+    var logMode by remember(operation.id) { mutableStateOf("simple") }
+    var confirmClearWorkspace by remember(operation.id) { mutableStateOf(false) }
     val errorLine = logs.firstOrNull { it.startsWith("X ") }
     val successLine = logs.firstOrNull { it.startsWith("OK ") }
     val simpleSummary = when {
@@ -116,11 +127,20 @@ fun ToolWorkspaceScreen(
     }
 
     // Inline config form state: map of field name → user input value
-    val configSchema = remember(sub.id) { subToolConfig(sub.id) }
-    val configValues = remember(sub.id) {
+    val configSchema = remember(operation.id) { subToolConfig(operation.id) }
+    val configValues = remember(operation.id) {
         mutableStateOf(configSchema.associate { it.field to (it.default ?: "") })
     }
     var recentFiles by remember { mutableStateOf(UXStore.getRecentDisplayNames(ctx)) }
+
+    fun autoResolve(selectedUri: Uri?, detection: FileMagic.DetectionResult?) {
+        if (selectedUri == null) return
+        WorkPaths.bindApp(ctx)
+        val selectedName = selectedDisplayName(ctx, selectedUri)
+            ?: selectedUri.lastPathSegment?.substringAfterLast('/') ?: ""
+        val resolved = SmartEnginePlanner.resolve(sub, actions, detection, selectedName, WorkPaths.dirWork())
+        if (resolved.id != operation.id) onSelectAction(resolved)
+    }
 
     LaunchedEffect(initialUri) {
         if (initialUri != null) {
@@ -128,6 +148,7 @@ fun ToolWorkspaceScreen(
             selectedSize = selectedSizeBytes(ctx, initialUri)
             sizeRejected = selectedSize?.let { it > MAX_DIRECT_FILE_BYTES } == true
             detectionResult = FileMagic.detect(ctx, initialUri)
+            autoResolve(initialUri, detectionResult)
             UXStore.addRecent(ctx, initialUri)
             recentFiles = UXStore.getRecentDisplayNames(ctx)
         }
@@ -143,6 +164,7 @@ fun ToolWorkspaceScreen(
             UXStore.addRecent(ctx, u)
             recentFiles = UXStore.getRecentDisplayNames(ctx)
             detectionResult = FileMagic.detect(ctx, u)
+            autoResolve(u, detectionResult)
         }
     }
 
@@ -175,8 +197,8 @@ fun ToolWorkspaceScreen(
             )
         }
         Text(moduleTitle, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 15.sp)
-        Text(sub.title, color = AlvisiaCyan, fontSize = 13.sp)
-        Text(sub.guide, color = AlvisiaSilver.copy(alpha = 0.6f), fontSize = 10.sp)
+        Text(sub.title, color = AlvisiaCyan, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+        Text(sub.desc, color = AlvisiaSilver.copy(alpha = 0.65f), fontSize = 10.sp)
         Spacer(Modifier.height(8.dp))
 
         // ── Recent Files carousel ───────────────────────────────────────
@@ -200,10 +222,12 @@ fun ToolWorkspaceScreen(
                             .border(1.dp, AlvisiaBlue.copy(alpha = 0.3f), RoundedCornerShape(8.dp))
                             .padding(horizontal = 8.dp, vertical = 4.dp)
                             .clickable {
-                                uri = Uri.parse(uriStr)
-                                selectedSize = selectedSizeBytes(ctx, Uri.parse(uriStr))
+                                val recentUri = Uri.parse(uriStr)
+                                uri = recentUri
+                                selectedSize = selectedSizeBytes(ctx, recentUri)
                                 sizeRejected = selectedSize?.let { it > MAX_DIRECT_FILE_BYTES } == true
-                                detectionResult = FileMagic.detect(ctx, Uri.parse(uriStr))
+                                detectionResult = FileMagic.detect(ctx, recentUri)
+                                autoResolve(recentUri, detectionResult)
                             }
                     )
                 }
@@ -212,7 +236,7 @@ fun ToolWorkspaceScreen(
         }
 
         // ── File picker ────────────────────────────────────────────────
-        if (sub.needsFile) {
+        if (operation.needsFile || actions.any { it.needsFile }) {
             Button(
                 onClick = { picker.launch("*/*") },
                 colors = ButtonDefaults.buttonColors(containerColor = AlvisiaBlue),
@@ -254,8 +278,8 @@ fun ToolWorkspaceScreen(
                         Column {
                             Text("DETECTED: ${det.label}",
                                 color = AlvisiaCyan, fontSize = 10.sp, fontWeight = FontWeight.Bold)
-                            if (det.suggestedSubtool != null && det.suggestedSubtool != sub.id) {
-                                Text("Suggested: ${det.suggestedSubtool}",
+                            if (det.suggestedSubtool != null) {
+                                Text("Smart Engine selected the matching internal route automatically",
                                     color = AlvisiaSilver.copy(alpha = 0.7f), fontSize = 9.sp)
                             }
                             if (det.isLargeFile) {
@@ -305,7 +329,7 @@ fun ToolWorkspaceScreen(
         Button(
             onClick = {
                 if (!running) {
-                    if (sub.id == "clear_work") {
+                    if (operation.id == "clear_work") {
                         confirmClearWorkspace = true
                     } else {
                         // Write inline config values to WORK/ files transparently
@@ -335,7 +359,7 @@ fun ToolWorkspaceScreen(
                     }
                 }
             },
-            enabled = !running && (!sub.needsFile || (uri != null && !sizeRejected)),
+            enabled = !running && (!operation.needsFile || (uri != null && !sizeRejected)),
             colors = ButtonDefaults.buttonColors(containerColor = AlvisiaBlue),
             shape = RoundedCornerShape(10.dp),
             modifier = Modifier.fillMaxWidth().height(44.dp)
@@ -379,7 +403,7 @@ fun ToolWorkspaceScreen(
                 onClick = {
                     WorkPaths.bindApp(ctx)
                     val outFile = File(WorkPaths.dirOut(),
-                        "LOG_${sub.id}_${System.currentTimeMillis()}.txt")
+                        "LOG_${operation.id}_${System.currentTimeMillis()}.txt")
                     outFile.parentFile?.mkdirs()
                     outFile.writeText(logs.joinToString("\n"))
                 },
@@ -487,6 +511,7 @@ fun ToolWorkspaceScreen(
                 }
             }
         }
+
         if (confirmClearWorkspace) {
             AlertDialog(
                 onDismissRequest = { confirmClearWorkspace = false },

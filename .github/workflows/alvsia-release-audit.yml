@@ -4,7 +4,7 @@ on:
   push:
     branches: [main, release/5.5.2-19-module-redesign]
   pull_request:
-    branches: [main]
+    branches: [main, feat/alvsia-smart-premium-v1-20261112]
 
 permissions:
   contents: read

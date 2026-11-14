@@ -7,7 +7,9 @@ package com.alvsia.pro.tool
  * remain compatible implementation modules. No legacy menu is exposed.
  */
 object SmartModuleRouter {
-    fun backendModule(visibleModuleId: Int, subId: String): Int = when (visibleModuleId) {
+    fun backendModule(visibleModuleId: Int, subId: String, legacyModuleId: Int? = null): Int {
+        if (legacyModuleId != null && legacyModuleId in 1..20) return legacyModuleId
+        return when (visibleModuleId) {
         1 -> when {
             subId.startsWith("lua_protect") || subId == "lua_vm_protect" ||
                 subId == "lua_smart_protect" || subId == "lua_smart_protect_strong" -> 18
@@ -39,6 +41,7 @@ object SmartModuleRouter {
         }
         7 -> 19
         else -> visibleModuleId
+        }
     }
 
     fun normalizedSubId(visibleModuleId: Int, subId: String): String = when {

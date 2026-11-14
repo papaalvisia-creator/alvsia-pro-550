@@ -105,8 +105,8 @@ object WorkPaths {
         16 -> "LINJ"
         17 -> "AUDIT"
         18 -> "LPROTECT"
-        7 -> "ASSET"
         19 -> "ALVSIA_PRIVATE"
+        20 -> "SMART_ASSET"
         else -> "MISC"
     }
 

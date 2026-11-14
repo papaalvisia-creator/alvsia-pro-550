@@ -68,6 +68,7 @@ def test_write_is_atomic_and_checks_decompressed_size():
         compressed_blocks=[SimpleNamespace(start=0, end=len(compressed))],
         encrypted=False,
         uncompressed_size=len(plain),
+        compression_block_size=0,
     )
     with tempfile.TemporaryDirectory() as td:
         dest = Path(td) / "sample.lua"
@@ -82,6 +83,7 @@ def test_write_is_atomic_and_checks_decompressed_size():
             compressed_blocks=[SimpleNamespace(start=0, end=len(b"corrupt"))],
             encrypted=False,
             uncompressed_size=100,
+            compression_block_size=0,
         )
         pak._file_content = memoryview(b"corrupt")
         dest.write_bytes(b"keep-prior-file-if-operation-fails")
@@ -167,7 +169,7 @@ def test_unpack_refuses_skipped_entries_and_output_count_mismatch():
         with tempfile.TemporaryDirectory() as td:
             result = core.run_pak_unpack("synthetic.pak", Path(td) / "out")
             assert not result["ok"]
-            assert "output file count mismatch" in result["error"]
+            assert "incomplete PAK extraction" in result["error"] and "on_disk=1" in result["error"]
     finally:
         core.TencentPakFile = original_class
         core._alvsia_require_operation = original_require
@@ -194,7 +196,7 @@ def main():
     for test in tests:
         test()
         print("PASS", test.__name__)
-    print("PAK EXTRACTION REGRESSION: PASS (5/5; marker-only authorization rejected)")
+    print("PAK EXTRACTION REGRESSION: PASS (6/6; marker-only authorization rejected)")
 
 
 if __name__ == "__main__":

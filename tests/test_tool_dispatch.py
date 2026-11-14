@@ -107,12 +107,20 @@ def test_menu_ids_are_unique_and_reachable():
         "lua_mod_repack": 'sid.startswith("lua_patch_") or sid in ("lua_inject_hook","lua_mod_repack")',
     }
     direct_engine_routes = {"android_permission_dump": 'subId == "android_permission_dump"'}
+    local_engine_routes = {"asset_smart": ("moduleId == 20", "SmartAssetEngine.run")}
     engine = ENGINE.read_text(encoding="utf-8")
     router = ROUTER.read_text(encoding="utf-8")
+    asset_engine = (ROOT / "app/src/main/java/com/alvsia/pro/tool/SmartAssetEngine.kt").read_text(encoding="utf-8")
+    for operation in ("asset_fingerprint", "asset_scan_ids", "asset_context", "asset_patch", "asset_validate"):
+        assert f'"{operation}"' in asset_engine, f"Smart Asset internal stage missing: {operation}"
     missing = []
     for sid in ids:
         if sid in direct_engine_routes and direct_engine_routes[sid] in engine:
             continue
+        if sid in local_engine_routes:
+            module_guard, dispatch_call = local_engine_routes[sid]
+            if module_guard in engine and dispatch_call in engine:
+                continue
         # Compact Smart menus may normalize a visible operation to a legacy
         # provider ID in SmartModuleRouter; that mapping is a valid route.
         if f'"{sid}"' in router:
@@ -142,18 +150,15 @@ def test_frida_spawn_preserves_full_package_name():
         assert "-f com.tencent " not in output, output
 
 
-def test_smart_lua_exposes_exactly_four_engines():
+def test_smart_lua_groups_all_four_legacy_lua_modules():
     menus = MENUS.read_text(encoding="utf-8")
     lua_menu = menus.split("1 -> listOf(", 1)[1].split("\n        2 -> listOf(", 1)[0]
-    ids = re.findall(r'SubTool\(\s*"([a-zA-Z0-9_]+)"', lua_menu)
-    assert ids == [
-        "lua_decompile", "lua_smart_protect", "lua_compile", "lua_patch_byte"
-    ], f"SMART LUA must expose exactly four engines, got {ids}"
-    for internal in ("lua_analyze", "lua_smart_protect_strong",
-                     "lua_protect_encrypt", "lua_vm_protect",
-                     "lua_inject_hook", "lua_mod_repack"):
-        assert internal not in ids, f"{internal} must remain internal to Smart Lua"
-
+    module_ids = [int(x) for x in re.findall(r'moduleGroup\(\s*(\d+)\s*,', lua_menu)]
+    assert module_ids == [5, 15, 16, 18], f"SMART LUA must group legacy modules 5/15/16/18, got {module_ids}"
+    legacy = menus.split("private fun legacyOperations", 1)[1]
+    for operation in ("lua_decompile", "str_recover", "lua_patch_byte", "lua_smart_protect",
+                      "lua_smart_protect_strong", "lua_protect_encrypt", "lua_vm_protect"):
+        assert f'"{operation}"' in legacy, f"legacy Lua operation missing: {operation}"
 
 def test_catalog_contains_compact_smart_modules():
     catalog = CATALOG.read_text(encoding="utf-8")
@@ -166,18 +171,37 @@ def test_catalog_contains_compact_smart_modules():
     assert 'ToolItem(7, "ALVSIA PRIVATE"' in catalog
 
 
-def test_private_module_is_compact_and_dispatchable():
+def test_private_module_is_one_group_with_all_sealed_operations():
     menus = MENUS.read_text(encoding="utf-8")
     catalog = CATALOG.read_text(encoding="utf-8")
     router = ROUTER.read_text(encoding="utf-8")
     bridge = BRIDGE.read_text(encoding="utf-8") + "\n" + BRIDGE_IMPL.read_text(encoding="utf-8")
     assert '7 -> "ALVSIA PRIVATE"' in menus
     assert 'ToolItem(7, "ALVSIA PRIVATE"' in catalog
-    expected = ["priv_lua_parse", "priv_lua_convert", "priv_pak_manifest"]
+    assert 'moduleGroup(19, "ALVSIA PRIVATE ENGINE"' in menus
+    private_section = menus.split("19 -> listOf(", 1)[1].split("\n    )", 1)[0]
+    expected = re.findall(r'SubTool\(\s*"([^"]+)"', private_section)
+    assert len(expected) == 12, f"expected all 12 private actions, got {expected}"
     for sid in expected:
-        assert f'"{sid}"' in menus
-        assert f'"{sid}"' in bridge or f'"{sid}"' in router
-    assert "sealed runtime required" in menus.lower() or "private" in menus.lower()
+        assert f'"{sid}"' in bridge or f'"{sid}"' in router, f"private operation not dispatchable: {sid}"
+    assert "ALVSIA_SEALED_RUNTIME" in bridge
+
+def test_all_89_legacy_operations_reach_a_bridge_dispatch():
+    menus = MENUS.read_text(encoding="utf-8")
+    bridge = BRIDGE.read_text(encoding="utf-8") + "\n" + BRIDGE_IMPL.read_text(encoding="utf-8")
+    section = menus.split("private fun legacyOperations", 1)[1]
+    operation_ids = re.findall(r'SubTool\(\s*"([A-Za-z0-9_]+)"', section)
+    assert len(operation_ids) == 89
+    assert len(set(operation_ids)) == 89
+    dynamic_dispatch = {"pak_delete_entry": 'if mid == 3 or "delete" in sid:'}
+    missing = [
+        sid for sid in operation_ids
+        if f'"{sid}"' not in bridge and sid not in dynamic_dispatch
+    ]
+    assert not missing, f"legacy operations without bridge dispatch: {missing}"
+    for sid, route in dynamic_dispatch.items():
+        assert sid in operation_ids
+        assert route in bridge
 
 
 def test_engine_surfaces_bridge_failures():
@@ -203,11 +227,13 @@ def test_tool_argument_and_storage_contracts():
     assert 'ult.pak_deep_zuc(ip, dest_pakd, key_hex, iv_hex)' in bridge
     assert "WorkPaths.dirWork()" in workspace
     assert "WorkPaths.dirOut()" in output_browser
+    assert "All stages in one Smart Engine task share the same immutable IN snapshot" in engine
+    assert "all pipeline stages share the verified immutable input snapshot" in engine
     assert "explicitTrue" in runner
     assert runner.count('getMethod("get", Any::class.java)') == 2
     assert 'getMethod("get", String::class.java)' not in runner
     assert "moduleId !in listOf(7, 13, 15)" not in engine
-    assert 'return subId !in setOf("frida_js_dump", "frida_spawn", "xor_batch")' in engine
+    assert 'return subId !in setOf("frida_js_dump", "frida_spawn", "xor_batch", "xor_selftest", "dec_selftest")' in engine
     config_schema = (ROOT / "app/src/main/java/com/alvsia/pro/tool/SubToolConfig.kt").read_text(encoding="utf-8")
     assert '"frida_js_dump", "frida_spawn" -> listOf(' in config_schema
     assert '"frida_jni_hook", "frida_spawn" -> listOf(' not in config_schema
@@ -375,8 +401,11 @@ def test_reference_inspection_subtools_are_registered_and_read_only():
     menus = MENUS.read_text(encoding="utf-8")
     bridge = BRIDGE_IMPL.read_text(encoding="utf-8")
     helper = (ROOT / "app/src/main/python/alvsia_reference_tools.py").read_text(encoding="utf-8")
+    visible_groups = menus.split("fun forModule(moduleId: Int)", 1)[1].split("private fun moduleGroup", 1)[0]
+    internal_actions = menus.split("private fun legacyOperations", 1)[1]
     for sid in ("lua_format_probe", "anti_re_source_triage", "so_dump_audit"):
-        assert sid not in menus, f"{sid} must remain an internal Smart provider, not a public menu"
+        assert f'"{sid}"' not in visible_groups, f"{sid} must not become a separate submenu"
+        assert f'"{sid}"' in internal_actions, f"{sid} must remain available as an internal workspace operation"
         assert sid in bridge
     assert "probe_lua_file" in helper
     assert "scan_source_file" in helper
@@ -471,8 +500,11 @@ def test_reference_inspectors_format_and_archive_fixtures():
 def test_xor_known_vector_selftest_is_registered():
     bridge = BRIDGE_IMPL.read_text(encoding="utf-8")
     menus = MENUS.read_text(encoding="utf-8")
+    visible_groups = menus.split("fun forModule(moduleId: Int)", 1)[1].split("private fun moduleGroup", 1)[0]
+    internal_actions = menus.split("private fun legacyOperations", 1)[1]
     assert "xor_selftest" in bridge
-    assert "xor_selftest" not in menus, "XOR known-answer self-test stays internal to SMART DATA"
+    assert '"xor_selftest"' not in visible_groups, "XOR self-test must not create another submenu"
+    assert '"xor_selftest"' in internal_actions, "XOR self-test remains an internal workspace operation"
     assert "9fe1e8bc97ec9eb791ff9e8ab0cad781bb8dcd8ab2cb939bbbdecacfa89c" in bridge
     assert 'sid not in ("xor_batch", "xor_selftest")' in bridge
 
@@ -480,8 +512,11 @@ def test_xor_known_vector_selftest_is_registered():
 def test_decrypt_known_answer_selftest_is_registered():
     bridge = BRIDGE_IMPL.read_text(encoding="utf-8")
     menus = MENUS.read_text(encoding="utf-8")
+    visible_groups = menus.split("fun forModule(moduleId: Int)", 1)[1].split("private fun moduleGroup", 1)[0]
+    internal_actions = menus.split("private fun legacyOperations", 1)[1]
     assert "dec_selftest" in bridge
-    assert "dec_selftest" not in menus, "decrypt known-answer self-test stays internal to SMART DATA"
+    assert '"dec_selftest"' not in visible_groups, "decrypt self-test must not create another submenu"
+    assert '"dec_selftest"' in internal_actions, "decrypt self-test remains an internal workspace operation"
     assert "69c4e0d86a7b0430d8cdb78070b4c55a" in bridge
     assert "7649abac8119b246cee98e9b12e9197d" in bridge
     assert "NIST AES known-answer tests" in bridge
@@ -502,8 +537,8 @@ if __name__ == "__main__":
         test_sm4_47_modders_authoritative_secret_set,
         test_menu_ids_are_unique_and_reachable,
         test_catalog_contains_compact_smart_modules,
-        test_smart_lua_exposes_exactly_four_engines,
-        test_private_module_is_compact_and_dispatchable,
+        test_smart_lua_groups_all_four_legacy_lua_modules,
+        test_private_module_is_one_group_with_all_sealed_operations,
         test_frida_spawn_preserves_full_package_name,
         test_engine_surfaces_bridge_failures,
         test_tool_argument_and_storage_contracts,

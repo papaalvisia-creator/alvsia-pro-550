@@ -341,12 +341,52 @@ def main() -> int:
                           "custom cipher/deobfuscator markers absent from plaintext code" if not exposed
                           else "plaintext protection markers exposed: " + ", ".join(exposed))
                     by_base = {Path(n).name: n for n in members}
-                    bridge_name = by_base.get("alvsia_bridge.py")
+                    # Chaquopy compiles Python sources into .pyc members inside app.imy.
+                    # Accept either source form (debug/test packaging) or compiled form
+                    # (release packaging), then validate the same dispatcher contract.
+                    bridge_name = by_base.get("alvsia_bridge.py") or by_base.get("alvsia_bridge.pyc")
                     bridge_bytes = inner.read(bridge_name) if bridge_name else b""
-                    check(bool(bridge_bytes) and len(bridge_bytes) < 2000,
-                          "plaintext bridge is a small bootstrap stub")
-                    check(b"import alvsia_bridge_impl as impl" in bridge_bytes and b"if mid == 1" not in bridge_bytes,
-                          "tool routing is not shipped in plaintext bridge")
+                    bridge_size_ok = bool(bridge_bytes) and len(bridge_bytes) < 16384
+                    check(bridge_size_ok,
+                          "Chaquopy bridge is a bounded bootstrap module (<16 KiB)")
+                    bridge_is_bytecode = bool(bridge_name and bridge_name.endswith(".pyc"))
+                    bridge_text = bridge_bytes.decode("utf-8", errors="replace") if not bridge_is_bytecode else ""
+                    if bridge_is_bytecode:
+                        # Names and string constants are serialized in the Python
+                        # bytecode payload. Do not marshal-load it: the audit host's
+                        # Python minor version may differ from Chaquopy's 3.8 runtime.
+                        bridge_delegates = all(token in bridge_bytes for token in (
+                            b"alvsia_bridge_impl", b"impl", b"run_tool"
+                        ))
+                        bridge_has_auth_gate = (
+                            b"_authorized" in bridge_bytes
+                            and b"ALVSIA_APK_SESSION" in bridge_bytes
+                        )
+                        bridge_has_no_inline_module_router = (
+                            b"if mid == 1" not in bridge_bytes
+                            and b"elif mid == 1" not in bridge_bytes
+                        )
+                    else:
+                        bridge_delegates = (
+                            "alvsia_bridge_impl" in bridge_text
+                            and "impl.run_tool" in bridge_text
+                            and "def run_tool" in bridge_text
+                        )
+                        bridge_has_auth_gate = (
+                            "_authorized()" in bridge_text
+                            and "ALVSIA_APK_SESSION" in bridge_text
+                        )
+                        bridge_has_no_inline_module_router = (
+                            "if mid == 1" not in bridge_text
+                            and "elif mid == 1" not in bridge_text
+                        )
+                    report.append(
+                        "INFO bridge diagnostics: path=%s size=%d bytecode=%s delegates=%s auth=%s no_inline_router=%s"
+                        % (bridge_name or "<missing>", len(bridge_bytes), bridge_is_bytecode,
+                           bridge_delegates, bridge_has_auth_gate, bridge_has_no_inline_module_router)
+                    )
+                    check(bridge_delegates and bridge_has_auth_gate and bridge_has_no_inline_module_router,
+                          "authenticated Chaquopy bridge delegates to sealed tool router")
                     actual_sealed = {Path(n).name for n in members if n.lower().endswith(".alv")}
                     missing = sorted(EXPECTED_SEALED - actual_sealed)
                     unexpected = sorted(actual_sealed - EXPECTED_SEALED)

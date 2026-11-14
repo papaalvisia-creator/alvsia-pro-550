@@ -72,7 +72,7 @@ fun SubMenuScreen(
             )
         }
         Text(moduleTitle, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 18.sp)
-        Text("Select sub-tool · ★ = favorite",
+        Text("Select Smart Engine · ★ = favorite",
             color = AlvisiaSilver.copy(alpha = 0.55f), fontSize = 12.sp)
         Spacer(Modifier.height(12.dp))
         LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
