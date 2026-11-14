@@ -1028,8 +1028,15 @@ def run_lua_smart(input_path, out_dir, jars_dir=None):
 
     # A task owns its OUT directory. Remove stale artifacts from previous
     # attempts so a failed decompile can never leave misleading output behind.
+    input_resolved = input_path.resolve()
     for child in public_out.iterdir():
         try:
+            child_resolved = child.resolve()
+            # Callers may stage the input beside the requested OUT directory
+            # (and tests intentionally exercise that layout). Never delete the
+            # input itself or an ancestor directory containing it.
+            if child_resolved == input_resolved or input_resolved in child_resolved.parents:
+                continue
             if child.is_dir() and not child.is_symlink():
                 shutil.rmtree(child)
             else:
