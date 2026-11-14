@@ -13,7 +13,9 @@ from lua_engine.decompiler53 import load_chunk
 
 
 def _standard_chunk_with_binary_string(
-    line_numbers: tuple[int, ...] = (), string_value: bytes = b"\xff\xfeA"
+    line_numbers: tuple[int, ...] = (),
+    string_value: bytes = b"\xff\xfeA",
+    nested_prototypes: tuple[bytes, ...] = (),
 ) -> bytes:
     header = (
         b"\x1bLua\x53\x00\x19\x93\x0d\x0a\x1a\x0a"
@@ -39,7 +41,8 @@ def _standard_chunk_with_binary_string(
         + struct.pack("<B", 4)
         + encoded_string
         + struct.pack("<I", 0)  # upvalue count
-        + struct.pack("<I", 0)  # nested prototype count
+        + struct.pack("<I", len(nested_prototypes))
+        + b"".join(nested_prototypes)
         + struct.pack("<I", len(line_numbers))
         + b"".join(struct.pack("<i", line) for line in line_numbers)
         + struct.pack("<I", 0)  # local variable count
@@ -120,6 +123,33 @@ def test_pubg_converter_enforces_file_size_cap_before_reading(tmp_path):
     with pytest.raises(ValueError, match="32 MiB safety cap"):
         converter.convert_file(str(source))
 
+
+
+
+
+
+def _minimal_proto_with_opcode(opcode: int) -> bytes:
+    return (
+        b"\x00"  # no source string
+        + struct.pack("<ii", 0, 0)
+        + struct.pack("<BBB", 0, 0, 2)
+        + struct.pack("<I", 1)
+        + struct.pack("<I", opcode)
+        + struct.pack("<I", 0)  # constants
+        + struct.pack("<I", 0)  # upvalues
+        + struct.pack("<I", 0)  # nested prototypes
+        + struct.pack("<I", 0)  # line info
+        + struct.pack("<I", 0)  # local variables
+        + struct.pack("<I", 0)  # upvalue names
+    )
+
+
+def test_bgmi_converter_rejects_unknown_opcode_in_nested_prototype():
+    standard = _standard_chunk_with_binary_string(
+        nested_prototypes=(_minimal_proto_with_opcode(63),)
+    )
+    with pytest.raises(ValueError, match="unsupported BGMI opcode 63 in prototype"):
+        transform_bgmi_lua(standard, key=ALVSIA_BGMI_XOR_KEY, decrypt=False)
 
 
 def test_manual_bgmi_transform_enforces_size_cap_before_buffering(tmp_path):
