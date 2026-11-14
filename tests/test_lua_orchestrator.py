@@ -454,3 +454,35 @@ def test_source_preflight_skips_bytecode_pattern_detectors(tmp_path):
 
     assert result["mode"] == "pattern_preflight"
     assert calls == ["ALVSEAL3_SOURCE"]
+
+
+def test_smart_lua_engine_preserves_large_utf8_source_without_bytecode_routing(tmp_path):
+    from smart_lua_engine import decompile
+
+    source = tmp_path / "BRPlayerCharacterBase.lua"
+    # Keep the fixture large enough to exercise the regression without
+    # allocating a bytecode-sized parser workload.
+    body = ("-- source fixture\\nlocal value = 1\\nreturn value\\n" * 500000)
+    source.write_text(body, encoding="utf-8")
+    result = decompile(source, tmp_path / "out")
+
+    assert result["ok"] is True, result
+    assert result["selected_engine"] == "source_passthrough"
+    assert result["final_status"] == "SUCCESS"
+    out = Path(result["out"])
+    assert out.read_bytes() == source.read_bytes()
+
+
+def test_smart_lua_engine_preserves_invalid_lua_source_as_partial_instead_of_failing_adapter(tmp_path):
+    from smart_lua_engine import decompile
+
+    source = tmp_path / "CharacterBase.lua"
+    source.write_text("local broken = (\\n", encoding="utf-8")
+    result = decompile(source, tmp_path / "out")
+
+    assert result["ok"] is True, result
+    assert result["selected_engine"] == "source_preserved"
+    assert result["final_status"] == "PARTIAL"
+    assert result["validation_level"] == "source_bytes_preserved"
+    assert Path(result["out"]).read_bytes() == source.read_bytes()
+    assert result.get("validation_error")
