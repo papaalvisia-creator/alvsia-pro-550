@@ -1127,7 +1127,7 @@ class PakCompression:
                     # surrounding index advertises the zlib method. Only try
                     # this fallback when the canonical ZSTD frame magic is
                     # present; never guess a codec for arbitrary bytes.
-                    if bytes(block[:4]) == b"\\x28\\xb5\\x2f\\xfd":
+                    if bytes(block[:4]) == b"\x28\xb5\x2f\xfd":
                         if ZstdDecompressor is None:
                             raise ValueError(
                                 "ZSTD frame detected in zlib-marked block but zstandard is unavailable"
