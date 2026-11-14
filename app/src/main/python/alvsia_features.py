@@ -1769,7 +1769,7 @@ class BinaryURLScanner:
         _re.IGNORECASE,
     )
     _RE_HOST    = _re.compile(
-        rb'([a-zA-Z0-9-]{2,63}(?:\.[a-zA-Z0-9-]{1,63}){1,4}\.[a-zA-Z]{2,10})'
+        rb'([a-zA-Z0-9-]{2,63}(?:\.[a-zA-Z0-9-]{1,63})+\.[a-zA-Z]{2,10})'
         rb'(?::(\d{1,5}))?',
     )
     _RE_IP      = _re.compile(rb'\b(?:\d{1,3}\.){3}\d{1,3}(?::\d{1,5})?\b')
@@ -1779,7 +1779,7 @@ class BinaryURLScanner:
     _CTX_KW     = [b'url', b'host', b'connect', b'endpoint', b'server',
                    b'proxy', b'gateway', b'base', b'api', b'link', b'path']
     _CHUNK      = 8 * 1024 * 1024
-    _CARRY      = 512
+    _CARRY      = 1024
     _CONTEXT    = 60
 
     # Private IP ranges — excluded from host results to reduce noise
@@ -1817,6 +1817,10 @@ class BinaryURLScanner:
             if not self._ctx_ok(data, match.start(), match.end()):
                 continue
             host = match.group(1)
+            # Valid DNS names are limited to 253 bytes; reject pathological
+            # binary runs before they can create unbounded cross-chunk matches.
+            if len(host) > 253:
+                continue
             port = match.group(2) or b''
             add('HOST', host + (b':' + port if port else b''))
 
