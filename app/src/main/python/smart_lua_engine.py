@@ -80,9 +80,20 @@ def _source_probe(p: Path) -> tuple[bool, str]:
 
 
 def run_lua_smart(input_path, output_dir, jars_dir=None):
-    """Compatibility wrapper exposing the canonical Smart Lua orchestrator to callers/tests."""
+    """Compatibility wrapper plus analysis-only shared recovery IR integration."""
     from alvsia_features import run_lua_smart as _run
-    return _run(input_path, output_dir, jars_dir=jars_dir)
+    result = dict(_run(input_path, output_dir, jars_dir=jars_dir) or {})
+    if result.get("ok") and result.get("out") and str(result.get("final_status", "")).upper() in {
+        "SUCCESS", "STRUCTURALLY_VALID"
+    }:
+        try:
+            detected = detect(input_path)
+            if detected.get("version") == "0x53":
+                from recovery_ir import analyze_lua_bytecode
+                result["recovery_ir"] = analyze_lua_bytecode(str(input_path))
+        except Exception as exc:
+            result["recovery_ir"] = {"ok": False, "error": f"{type(exc).__name__}: {exc}"}
+    return result
 
 
 def decompile(input_path, output_dir, jars_dir=None) -> dict:
