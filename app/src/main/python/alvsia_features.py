@@ -99,9 +99,11 @@ def _pick_jar(jars_dir, prefer=("unluac_2025_12_23.jar", "unluac_pro.jar", "unlu
 
 def _prepare_lua_input(input_path, out_dir):
     input_path = Path(input_path); out_dir = Path(out_dir)
-    raw = input_path.read_bytes()
-    if not raw.startswith(b"\x78\xda"):
+    with input_path.open("rb") as probe:
+        magic = probe.read(2)
+    if magic != b"\x78\xda":
         return input_path, None
+    raw = input_path.read_bytes()
     payload, ci = unwrap_lua_container(raw)
     if not payload.startswith((b"\x1bLua", b"\x1bLJ")):
         raise ValueError("compressed input did not contain Lua/LuaJIT bytecode")
@@ -1225,7 +1227,11 @@ def run_rebrand_tree(src_dir, out_dir, out_root=None, brand=None, channel=None, 
             continue
         if f.suffix.lower() not in (".lua", ".txt", ".ini", ".json", ".xml", ".csv", ".uasset", ".uexp"):
             # still try lua-named without suffix
-            if b"\x1bLua" == f.read_bytes()[:4] if f.stat().st_size > 4 else False:
+            magic = b""
+            if f.stat().st_size > 4:
+                with f.open("rb") as probe:
+                    magic = probe.read(4)
+            if magic == b"\x1bLua":
                 pass
             elif f.suffix.lower() not in (".lua", ".txt", ".ini"):
                 continue
