@@ -199,7 +199,10 @@ class TestT24VariantRouting(unittest.TestCase):
             src = Path(td) / "t24.luac"
             dst = Path(td) / "t24.lua"
             src.write_bytes(raw)
-            with patch("lua_engine.streaming_decompiler.decompile_bytes",
+            # The streaming wrapper imports the strict parser locally from
+            # decompiler53; patch that real dependency rather than a removed
+            # module-level alias.
+            with patch("lua_engine.decompiler53.decompile_bytes",
                        side_effect=fake_decompile):
                 with patch("lua_engine.t24.convert_t24_to_standard",
                            side_effect=fake_t24):
