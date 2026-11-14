@@ -270,6 +270,31 @@ def _looks_like_key_literal(value: str) -> bool:
     return True
 
 
+def _looks_like_historical_sm4_candidate(value: str) -> bool:
+    """Detect the three known SM4 candidate families without storing their values."""
+    if not isinstance(value, str) or len(value) != 20:
+        return False
+    # SM4_SECRET_NEW: lower/upper/digit repeating, with a 2-char tail.
+    if all(
+        ch.islower() if i % 3 == 0 else ch.isupper() if i % 3 == 1 else ch.isdigit()
+        for i, ch in enumerate(value)
+    ):
+        return True
+    # SM4_SECRET_4: lowercase + digits only, digit-heavy.
+    if (value.isalnum()
+            and sum(ch.isdigit() for ch in value) >= 10
+            and sum(ch.islower() for ch in value) >= 5
+            and not any(ch.isupper() for ch in value)):
+        return True
+    # SM4_SECRET_2: punctuation marker plus mixed alphanumeric composition.
+    if (any(ch in "$*" for ch in value)
+            and sum(ch.isupper() for ch in value) >= 5
+            and sum(ch.islower() for ch in value) >= 3
+            and any(ch.isdigit() for ch in value)):
+        return True
+    return False
+
+
 for py_file in sorted(PY.rglob("*.py")):
     rel = py_file.relative_to(ROOT)
     try:
@@ -283,6 +308,11 @@ for py_file in sorted(PY.rglob("*.py")):
         fail.append(f"python module does not parse ({rel}): {exc}")
         continue
     for node in ast.walk(tree):
+        if (isinstance(node, ast.Constant)
+                and isinstance(node.value, str)
+                and _looks_like_historical_sm4_candidate(node.value)):
+            fail.append(f"historical SM4 candidate-shaped literal found in {rel}")
+            continue
         targets = []
         value = None
         if isinstance(node, ast.Assign):
