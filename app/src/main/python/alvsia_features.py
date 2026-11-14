@@ -894,6 +894,8 @@ def run_pubg_lua_decrypt(input_path, out_dir, key_hex=None):
     except ValueError:
         return {"ok": False, "error": "Lua XOR key is not valid hexadecimal"}
     try:
+        if input_path.stat().st_size > 32 * 1024 * 1024:
+            return {"ok": False, "error": "BGMI transform input exceeds the 32 MiB safety cap"}
         raw = input_path.read_bytes()
         out = transform_bgmi_lua(raw, key, decrypt=True)
         dest = out_dir / (input_path.stem + "_decrypted.luac")
