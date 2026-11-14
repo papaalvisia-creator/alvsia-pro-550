@@ -172,11 +172,14 @@ def test_smart_decompile_runs_before_optional_intelligence_and_survives_analysis
 
     def fake_legacy(input_path, out_dir, jars_dir=None):
         marker.write_text("validated output was produced")
+        candidate = Path(out_dir) / "input_decompiled.lua"
+        candidate.write_text("return 42\n", encoding="utf-8")
         return {
             "ok": True,
             "final_status": "SUCCESS",
             "selected_engine": "fixture_engine",
-            "out": None,
+            "source_recovered": True,
+            "out": str(candidate),
         }
 
     def failing_intelligence(*args, **kwargs):
