@@ -23,6 +23,9 @@ def test_security_scanner_does_not_embed_plaintext_key_values():
     assert "FORBIDDEN_SM4_LITERALS =" not in scanner
     assert "FORBIDDEN_" + "LITERALS =" not in test_source
     assert "SECRET_NAME_PREFIXES" in scanner
+    assert "_looks_like_historical_sm4_candidate" in scanner
+    assert "value.isalnum()" in scanner
+    assert 'ch in "$*"' in scanner
     assert "PY.rglob(\"*.py\")" in scanner
 
 
