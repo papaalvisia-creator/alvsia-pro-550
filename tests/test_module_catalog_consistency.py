@@ -60,7 +60,9 @@ assert "for ((index, stageRoute) in routes.withIndex())" in main
 for provider_id in range(1, 21):
     assert f"            {provider_id} ->" in planner, f"Smart planner missing provider {provider_id}"
 assert "detection?.suggestedSubtool" in planner
-asset_group_calls = re.findall(r'(?m)^\s*assetGroup\(\)\s*
+asset_group_calls = [line for line in group_section.splitlines() if line.strip() == "assetGroup()"]
+assert len(asset_group_calls) == 1
+assert len(legacy_ids) + len(asset_group_calls) == 20
 assert "SMART ASSET MODDING ENGINE" in submenus
 assert "asset_smart" in submenus
 assert "legacyModuleId = 20" in submenus
