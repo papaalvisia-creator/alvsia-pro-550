@@ -397,6 +397,32 @@ def stream_decompile_lua53(input_path: Path, out_path: Path) -> Tuple[bool, str]
     else:
         failures.append("standard candidate skipped: mod-guard signature detected (rotated producer)")
 
+    # T24 is a separate 64-bit-size_t producer profile. It has its own
+    # opcode-name shuffle and delta/checkpoint line-info representation; it
+    # must not be routed through the 32-bit BGMI/HePing adapters.
+    if (
+        len(data) >= 34
+        and data[:4] == bytes((0x1B,)) + b"Lua"
+        and data[4] == 0x53
+        and data[13] == 8
+    ):
+        try:
+            from lua_engine.t24 import convert_t24_to_standard
+            from alvsia_private import ALVSIA_BGMI_XOR_KEY
+            normalized, t24_report = convert_t24_to_standard(
+                bytes(data), ALVSIA_BGMI_XOR_KEY
+            )
+            ok, note = _try_candidate("t24", normalized)
+            if ok:
+                return True, note + (
+                    f"; t24_protos={t24_report.get('prototypes', 0)}"
+                    f"; t24_line_checkpoints={t24_report.get('lineinfo_checkpoints', 0)}"
+                )
+            failures.append("t24: " + note)
+            del normalized
+        except Exception as exc:
+            failures.append(f"t24_normalize_failed: {str(exc)[:240]}")
+
     # Existing BGMI/HePing normalizers remain enabled, but share the same
     # total deadline so a failed standard candidate cannot trigger an
     # unbounded chain of additional parser attempts.
