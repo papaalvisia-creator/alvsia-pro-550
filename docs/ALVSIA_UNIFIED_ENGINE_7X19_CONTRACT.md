@@ -34,7 +34,8 @@ Base: feat/alvsia-smart-premium-v1-20261112
 | SMART DATA | SMART DECRYPT ENGINE | 13 | AES, SM4, SIMPLE1 and explicitly labelled compatibility transforms |
 | SMART ANALYSIS | SMART SO ANALYZER | 10 | SO analysis, URL/string extraction, AES pattern analysis, safe patch workflow |
 | SMART ANALYSIS | SMART JNI TRACE | 11 | Frida/JNI script generation and trace command generation |
-| SMART ANALYSIS | SMART ANTI-RE AUDIT | 17 | APK, Lua, SO and source triage audits |\n| SMART ANALYSIS | SMART ASSET MODDING ENGINE | 20 | Asset fingerprinting, contextual ID discovery, safe user-mapped patching and validation |
+| SMART ANALYSIS | SMART ANTI-RE AUDIT | 17 | APK, Lua, SO and source triage audits |
+| SMART ANALYSIS | SMART ASSET MODDING ENGINE | 20 | Asset fingerprinting, contextual ID discovery, safe user-mapped patching and validation |
 | WORKSPACE & REPORT | SMART WORKSPACE | 7 | Workspace lifecycle and safe cleanup |
 | WORKSPACE & REPORT | SMART REPORT EXPORT | 8 | File/session report export |
 | WORKSPACE & REPORT | SMART REBRAND | 9 | Auto/manual rebrand and brand scan |
