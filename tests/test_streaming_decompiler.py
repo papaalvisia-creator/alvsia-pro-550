@@ -171,12 +171,15 @@ class TestLuaCandidateDeduplication(unittest.TestCase):
 
 class TestT24VariantRouting(unittest.TestCase):
     def test_t24_candidate_is_tried_after_standard_parser_rejects(self):
+        # Lua 5.3 header: magic/version/format, six-byte LUAC_DATA,
+        # then the five size fields. T24 uses size_t=8 at byte offset 13.
         raw = (
-            b"\\x1bLua\\x53\\x00\\x19\\x93\\x0d\\x0a\\x1a\\x0a"
+            b"\x1bLua\x53\x00"
+            + b"\x19\x93\x0d\x0a\x1a\x0a"
             + bytes([4, 8, 4, 8, 8])
             + struct.pack("<q", 0x5678)
             + struct.pack("<d", 370.5)
-            + b"\\x00"
+            + b"\x00"
         )
         normalized = raw + b"T24_NORMALIZED"
         calls = []
