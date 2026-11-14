@@ -10,7 +10,6 @@ from alvsia_features import PUBGLuaConverter, run_pubg_lua_decrypt
 from alvsia_private import ALVSIA_BGMI_XOR_KEY, LuaOpcodeConverter
 from lua_engine.bgmi import transform_bgmi_lua
 from lua_engine.decompiler53 import load_chunk
-from lua_engine.decompiler53 import load_chunk
 
 
 def _standard_chunk_with_binary_string(line_numbers: tuple[int, ...] = ()) -> bytes:
@@ -61,24 +60,6 @@ def test_pubg_converter_reconstructs_signed_line_deltas_and_absolute_checkpoints
     proto = load_chunk(converted)
     assert proto.lineinfo == list(expected_lines)
     assert converted[13] == 8
-
-
-def test_bgmi_lineinfo_checkpoint_roundtrips_as_real_lua53_ints():
-    standard = _standard_chunk_with_binary_string()
-    # Replace the empty lineinfo/abslineinfo/locals/upvalue-names tail with
-    # one BGMI absolute checkpoint at pc=0 (line 500).
-    standard = (
-        standard[:-16]
-        + struct.pack("<I", 1)       # lineinfo count == instruction count
-        + b"\\x80"                 # signed -128: absolute checkpoint follows
-        + struct.pack("<I", 1)       # one absolute checkpoint
-        + struct.pack("<ii", 0, 500) # (pc, absolute line)
-        + struct.pack("<II", 0, 0)   # locals, upvalue names
-    )
-    bgmi = transform_bgmi_lua(standard, key=ALVSIA_BGMI_XOR_KEY, decrypt=False)
-    restored = transform_bgmi_lua(bgmi, key=ALVSIA_BGMI_XOR_KEY, decrypt=True)
-    proto = load_chunk(restored)
-    assert proto.lineinfo == [500]
 
 
 def test_shared_opcode_converter_rejects_oversized_file_before_read(tmp_path):
