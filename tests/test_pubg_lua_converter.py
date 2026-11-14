@@ -51,7 +51,7 @@ def test_pubg_converter_uses_structured_bgmi_parser_and_preserves_binary_strings
 
 def test_pubg_converter_rejects_unknown_variant_instead_of_bytewise_corruption():
     standard = _standard_chunk_with_binary_string()
-    with pytest.raises(ValueError, match="unsupported PUBG/BGMI variant"):
+    with pytest.raises(ValueError, match="unsupported variant field sizes"):
         PUBGLuaConverter().convert_bytes(standard)
 
 
