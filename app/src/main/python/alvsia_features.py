@@ -735,7 +735,7 @@ def _attach_verified_recovery_ir(result: dict, input_path: Path) -> dict:
     return result
 
 
-def run_lua_smart(input_path, out_dir, jars_dir=None):
+def _run_lua_smart_internal(input_path, out_dir, jars_dir=None):
     """Program-intelligence front door with legacy engine orchestration as a validated adapter."""
     input_path = Path(input_path)
     out_dir = Path(out_dir)
@@ -1015,6 +1015,88 @@ def run_lua_smart(input_path, out_dir, jars_dir=None):
         # Candidate scoring must never turn a valid legacy result into a crash.
         result["candidate_fusion_error"] = f"{type(exc).__name__}: {exc}"
     return result
+
+def run_lua_smart(input_path, out_dir, jars_dir=None):
+    """Public Smart Lua entry point with a strict pure-source publish gate.
+
+    All diagnostics, intermediate bytecode, strings, candidates and reports are
+    generated in a private temporary workspace. The caller-visible OUT folder
+    receives exactly one validated Lua source file, or remains empty.
+    """
+    input_path = Path(input_path)
+    public_out = Path(out_dir)
+    public_out.mkdir(parents=True, exist_ok=True)
+
+    # A task owns its OUT directory. Remove stale artifacts from previous
+    # attempts so a failed decompile can never leave misleading output behind.
+    for child in public_out.iterdir():
+        try:
+            if child.is_dir() and not child.is_symlink():
+                shutil.rmtree(child)
+            else:
+                child.unlink(missing_ok=True)
+        except OSError:
+            pass
+
+    internal_dir = Path(tempfile.mkdtemp(prefix="alvsia-smart-lua-"))
+    try:
+        result = _run_lua_smart_internal(input_path, internal_dir, jars_dir=jars_dir)
+        result = dict(result or {})
+
+        candidate_value = result.get("out")
+        candidate = Path(str(candidate_value)) if candidate_value else None
+        source_status = str(result.get("final_status") or "").upper()
+        source_recovered = bool(result.get("source_recovered"))
+
+        # Only a concrete .lua artifact that passes the same source validator
+        # used by the decompiler is eligible for publication. Partial strings,
+        # constants, XOR material, reports, IR and intermediate bytecode never
+        # cross this boundary.
+        publishable = (
+            source_recovered
+            and source_status in {"SUCCESS", "STRUCTURALLY_VALID"}
+            and candidate is not None
+            and candidate.is_file()
+            and candidate.suffix.lower() == ".lua"
+            and candidate.stat().st_size > 0
+        )
+        validation_note = None
+        if publishable:
+            valid, validation_note = validate_lua_source(candidate)
+            publishable = bool(valid)
+            result["publish_validation"] = validation_note
+
+        if publishable:
+            dest = public_out / f"{input_path.stem}_decompiled.lua"
+            shutil.copyfile(candidate, dest)
+            result["ok"] = True
+            result["out"] = str(dest)
+            result["source_recovered"] = True
+            result["artifact_kind"] = "lua_source"
+            result["final_status"] = "SUCCESS"
+            result["publish_gate"] = "PASSED"
+            result["published_files"] = [dest.name]
+            result["internal_workspace"] = "sealed"
+        else:
+            result["ok"] = False
+            result["out"] = None
+            result["source_recovered"] = False
+            result["publish_gate"] = "BLOCKED"
+            result["published_files"] = []
+            result["note"] = (
+                "No validated Lua source was published. Recovery diagnostics and "
+                "partial artifacts remain internal only."
+            )
+            # A source candidate that failed validation is not a user result.
+            if source_status in {"SUCCESS", "STRUCTURALLY_VALID"}:
+                result["final_status"] = "FAILED_SOURCE_VALIDATION"
+            else:
+                result["final_status"] = source_status or "FAILED"
+
+        return result
+    finally:
+        shutil.rmtree(internal_dir, ignore_errors=True)
+
 
 # ---------------------------------------------------------------------------
 # LUA ENGINE v5.5 — unified detection / analysis / fallback
