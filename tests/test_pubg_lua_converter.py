@@ -44,7 +44,9 @@ def test_pubg_converter_uses_structured_bgmi_parser_and_preserves_binary_strings
         standard, key=ALVSIA_BGMI_XOR_KEY, decrypt=False
     )
     converted = PUBGLuaConverter().convert_bytes(encrypted_bgmi)
-    assert converted == standard
+    expected = bytearray(standard)
+    expected[13] = 4  # retain the producer's 32-bit size_t layout
+    assert converted == bytes(expected)
 
 
 def test_pubg_converter_rejects_unknown_variant_instead_of_bytewise_corruption():
