@@ -51,6 +51,8 @@ jobs:
         run: timeout 120s python -m pytest -vv -ra tests/test_module_adapters.py tests/test_lua_processing_watchdog.py
       - name: Run Lua module unittest suite
         run: timeout 120s python -m unittest discover -s tests -p 'test_lua*.py' -v
+      - name: Run T24 and PUBG Lua converter regressions
+        run: timeout 120s python -m pytest -vv -ra tests/test_t24_lua.py tests/test_pubg_lua_converter.py
       - name: Run streaming decompiler unittest suite
         run: timeout 120s python -m unittest discover -s tests -p 'test_streaming_decompiler.py' -v
       - name: Run large-file bounded-memory regression tests
