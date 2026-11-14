@@ -828,18 +828,72 @@ def run_lua_smart(input_path, out_dir, jars_dir=None):
             )
         except Exception as exc:
             recovery = {"ok": False, "error": f"{type(exc).__name__}: {exc}"}
+        # A bounded string recovery artifact is a real partial result. It must
+        # not be downgraded to a fatal failure merely because no reconstructed
+        # .lua source exists. The caller can then expose the artifact and the
+        # next recovery route instead of painting the operation red.
+        string_artifact = None
+        string_count = 0
+        for step in recovery.get("steps", []) if isinstance(recovery, dict) else []:
+            candidate = step.get("out")
+            if candidate:
+                p = Path(str(candidate))
+                if p.is_file() and p.stat().st_size > 0 and "_strings_" in p.name:
+                    string_artifact = p
+                    try:
+                        string_count = int(step.get("count") or 0)
+                    except (TypeError, ValueError):
+                        string_count = 0
+                    break
+        if string_artifact is not None:
+            return {
+                "ok": True,
+                "mode": "smart_streaming_large_input",
+                "final_status": "PARTIAL_STRING_RECOVERY",
+                "artifact_kind": "string_recovery",
+                "source_recovered": False,
+                "strings_recovered": True,
+                "string_artifact": str(string_artifact),
+                "out": str(string_artifact),
+                "selected_engine": "string_recovery",
+                "string_count": string_count,
+                "input_bytes": input_size,
+                "stream_unwrap": unwrap_report,
+                "decompile": decompile_report,
+                "native_decompile": native_report,
+                "streaming_recovery": recovery,
+                "next_actions": [
+                    "classify Lua dialect/header",
+                    "inspect prototype and instruction boundaries",
+                    "attempt bounded native decompiler candidates",
+                    "lift recoverable bytecode into IR/CFG",
+                    "reconstruct source candidate and validate it",
+                ],
+                "note": (
+                    "Large input was processed with bounded memory. String artifacts "
+                    "were recovered, but no validated Lua source was reconstructed."
+                ),
+            }
         return {
             "ok": False,
             "mode": "smart_streaming_large_input",
             "final_status": "PARTIAL",
+            "artifact_kind": "diagnostics_only",
+            "source_recovered": False,
+            "strings_recovered": False,
             "input_bytes": input_size,
             "stream_unwrap": unwrap_report,
             "decompile": decompile_report,
             "native_decompile": native_report,
             "streaming_recovery": recovery,
+            "next_actions": [
+                "inspect Lua dialect/header",
+                "attempt protected-format adapters",
+                "attempt bounded bytecode reconstruction",
+            ],
             "note": (
-                "Large input was processed without whole-file RAM loading. "
-                "Recovery artifacts are diagnostic; no full decompile SUCCESS is claimed."
+                "Large input was processed without whole-file RAM loading, but no "
+                "recoverable source or string artifact was produced."
             ),
         }
 
