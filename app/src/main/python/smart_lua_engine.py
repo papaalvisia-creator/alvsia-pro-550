@@ -130,6 +130,14 @@ def decompile(input_path, output_dir, jars_dir=None) -> dict:
 
     result = dict(run_lua_smart(p, out, jars_dir=jars_dir) or {})
     result.update({"module": "lua", "operation": "decompile"})
+    # Convert observations into an explicit next-step plan. This is execution
+    # metadata for the in-app intelligence layer, not a claim that an LLM has
+    # magically reconstructed unavailable source information.
+    try:
+        from recovery_planner import build_recovery_plan
+        result["recovery_plan"] = build_recovery_plan(result, domain="lua")
+    except Exception as exc:
+        result["recovery_plan_error"] = f"{type(exc).__name__}: {exc}"
     if result.get("final_status") == "PARTIAL_STRING_RECOVERY":
         artifact_value = result.get("out") or result.get("string_artifact")
         artifact = Path(str(artifact_value)) if artifact_value else None
