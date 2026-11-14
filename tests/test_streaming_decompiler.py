@@ -214,11 +214,11 @@ class TestT24VariantRouting(unittest.TestCase):
                         with patch("lua_engine.streaming_decompiler.validate_lua_source",
                                    return_value=(True, "fixture source accepted")):
                             ok, message = stream_decompile_lua53(src, dst)
-
-        self.assertTrue(ok, message)
-        self.assertIn("variant=t24", message)
-        self.assertIn(normalized, calls)
-        self.assertEqual(dst.read_text(encoding="utf-8"), "return 42\\n")
+            # Assert before TemporaryDirectory cleans the output path.
+            self.assertTrue(ok, message)
+            self.assertIn("variant=t24", message)
+            self.assertIn(normalized, calls)
+            self.assertEqual(dst.read_text(encoding="utf-8"), "return 42\\n")
 
 
 class TestStreamInflate(unittest.TestCase):
