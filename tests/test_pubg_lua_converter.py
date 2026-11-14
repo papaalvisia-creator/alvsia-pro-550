@@ -6,7 +6,8 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "app" / "src" / "main" / "python"))
 
-from alvsia_features import PUBG_XOR_KEY, PUBGLuaConverter, run_pubg_lua_decrypt
+from alvsia_features import PUBGLuaConverter, run_pubg_lua_decrypt
+from alvsia_private import ALVSIA_BGMI_XOR_KEY
 from lua_engine.bgmi import transform_bgmi_lua
 
 
@@ -40,7 +41,7 @@ def _standard_chunk_with_binary_string() -> bytes:
 def test_pubg_converter_uses_structured_bgmi_parser_and_preserves_binary_strings():
     standard = _standard_chunk_with_binary_string()
     encrypted_bgmi = transform_bgmi_lua(
-        standard, key=PUBG_XOR_KEY, decrypt=False
+        standard, key=ALVSIA_BGMI_XOR_KEY, decrypt=False
     )
     converted = PUBGLuaConverter().convert_bytes(encrypted_bgmi)
     assert converted == standard
