@@ -1769,7 +1769,7 @@ class BinaryURLScanner:
         _re.IGNORECASE,
     )
     _RE_HOST    = _re.compile(
-        rb'([a-zA-Z0-9-]{2,63}(?:\.[a-zA-Z0-9-]{1,63})+\.[a-zA-Z]{2,10})'
+        rb'([a-zA-Z0-9-]{2,63}(?:\.[a-zA-Z0-9-]{1,63}){1,4}\.[a-zA-Z]{2,10})'
         rb'(?::(\d{1,5}))?',
     )
     _RE_IP      = _re.compile(rb'\b(?:\d{1,3}\.){3}\d{1,3}(?::\d{1,5})?\b')
@@ -1793,7 +1793,7 @@ class BinaryURLScanner:
         ctx = data[lo:hi].lower()
         return any(k in ctx for k in self._CTX_KW)
 
-    def _scan_buffer(self, data: bytes, base: int, final: bool,
+    def _scan_buffer(self, data: bytes, final: bool,
                      results: list, seen: set) -> None:
         """Scan a bounded window; defer tail matches until full context is present."""
         safe_start = len(data) if final else max(
@@ -1837,7 +1837,7 @@ class BinaryURLScanner:
         """Scan an in-memory buffer; results match the streaming file scanner."""
         results: list = []
         seen: set = set()
-        self._scan_buffer(data, 0, True, results, seen)
+        self._scan_buffer(data, True, results, seen)
         return results
 
     def scan_file(self, filepath) -> list:
@@ -1845,19 +1845,16 @@ class BinaryURLScanner:
         results: list = []
         seen: set = set()
         carry = b''
-        offset = 0
         chunk_size = max(1024, int(self._CHUNK))
         with Path(filepath).open("rb") as handle:
             while True:
                 block = handle.read(chunk_size)
                 final = not block
                 window = carry + block
-                base = offset - len(carry)
-                self._scan_buffer(window, base, final, results, seen)
+                self._scan_buffer(window, final, results, seen)
                 if final:
                     break
                 carry = window[-self._CARRY:]
-                offset += len(block)
         return results
 
     def scan_folder(self, folder_path: str, exts=('.so', '.obb', '.apk')) -> dict:
