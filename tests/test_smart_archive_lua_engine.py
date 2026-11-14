@@ -86,3 +86,25 @@ def test_execute_batch_isolates_failures_and_aggregates(tmp_path):
     by_path = {r["path"]: r for r in summary["results"]}
     assert by_path[str(missing)]["ok"] is False
     assert by_path[str(good)]["ok"] is True
+
+
+def test_authorized_sm4_method_keys_are_loaded_from_task_local_config_and_wiped(tmp_path):
+    import json
+    import sm4_material
+    from smart_archive_engine import _load_authorized_sm4_material
+
+    work = tmp_path / "WORK"
+    work.mkdir()
+    keys = {str(method): f"authorized-{method}" for method in range(31, 56)}
+    (work / "sm4_material.json").write_text(
+        json.dumps({"method_keys": keys}), encoding="utf-8"
+    )
+
+    report = _load_authorized_sm4_material(work)
+    assert report["ok"] is True
+    assert report["candidate_count"] == 25
+    assert report["source"] == "sm4_material.json"
+    assert tuple(sm4_material.get_candidates()) == tuple(keys[str(m)] for m in range(31, 56))
+
+    sm4_material.clear_material()
+    assert not sm4_material.is_available()
