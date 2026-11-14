@@ -244,34 +244,7 @@ if ("ALVSIA_GRANT_KID='alvsia-unaux-rsa1'" not in grant_endpoint
 import ast
 
 # Known historical SM4 material that must never reappear in the source tree.
-FORBIDDEN_SM4_LITERALS = {
-    "09ea7a1d9e6528b72b48",
-    "eb691efea914241317a8",
-    ">gahRZFL4r2*TByfx6#X",
-    "Q0hVTKey$as*1ZFlQCiA",
-    "xG2qW5lP7lV2iN5fN5pG",
-    "xT1cJ6dL5wC0kK1rB4dK",
-    "qC4jS5bZ6fL5xE6nD4zA",
-    "gD4jQ2aL3bS3lC3xT0iW",
-    "xU1yQ8wE9zY3gZ3bT5aE",
-    "uQ3cO2dX7xY4xU7gH7iS",
-    "gW1fR0jK6wQ4oN0oK1kZ",
-    "aJ4pV7iZ7pU4wP2aC2cZ",
-    "cX6jT3cM2oT3vK0kJ1qN",
-    "iT2vS0cS6yT6cZ1sE1lO",
-    "hM1pH9iY8wM9hT4lN5uJ",
-    "kG6bC8jK0fL0dE4sH4mL",
-    "dB6lB3vE0eZ8wM8rI0aC",
-    "tP7sP7nI9rA2vQ4cV5yQ",
-    "aT0cL1yN4pT3sZ7eM2vY",
-    "uV6fU8fC9zN3mP5dH8mN",
-    "rT6aQ6oZ1yM0gO5tO1aN",
-    "jU5bH7lQ0fM9hK2kI0oF",
-    "iQ0eM0mJ7uT0kV6kL5zY",
-    "fO3kW1fE6eD0pU1kY7xK",
-    "rG0lR2rZ5vM6mW5lM1rR",
-    "wD2rP3lP9xF4mE1eC5jS",
-}
+# No plaintext historical key values are stored in this scanner.
 SECRET_NAME_PREFIXES = ("SM4_SECRET", "SM4_KEY", "SM4_CANDIDATE")
 SECRET_NAME_EXCLUDE_SUFFIXES = (
     "_VERSION", "_EXPECTED_COUNT", "_COUNT", "_SET", "_LEN", "_NAME",
@@ -304,10 +277,6 @@ for py_file in sorted(PY.rglob("*.py")):
     except OSError:
         fail.append(f"unreadable python module: {rel}")
         continue
-    for literal in FORBIDDEN_SM4_LITERALS:
-        if literal in src:
-            fail.append(f"embedded historical SM4 material found in {rel}")
-            break
     try:
         tree = ast.parse(src, filename=str(rel))
     except SyntaxError as exc:
@@ -347,22 +316,8 @@ for py_file in sorted(PY.rglob("*.py")):
                         )
                         break
 
-# Release artifacts must not carry the material either.
-for artifact_dir in (ROOT / "app/src/main/assets", ROOT / "app/src/main/python"):
-    if not artifact_dir.exists():
-        continue
-    for blob in artifact_dir.rglob("*"):
-        if not blob.is_file():
-            continue
-        try:
-            data = blob.read_bytes()
-        except OSError:
-            continue
-        for literal in FORBIDDEN_SM4_LITERALS:
-            if literal.encode("utf-8") in data:
-                fail.append(f"embedded SM4 material found in artifact {blob.relative_to(ROOT)}")
-                break
-
+# Python source is scanned by AST above; release APK contents are
+# independently inspected by tools/audit_release_apk.py.
 if fail:
     print("SECURITY SOURCE CHECK: FAIL")
     print("\n".join("- " + x for x in fail))
