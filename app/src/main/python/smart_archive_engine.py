@@ -66,9 +66,6 @@ def execute(operation: str, input_path, output_dir, work_dir=None,
     out = Path(output_dir)
     work = Path(work_dir) if work_dir else out.parent / "WORK"
     out.mkdir(parents=True, exist_ok=True)
-    material_report = _load_authorized_sm4_material(work)
-    if not material_report.get("ok"):
-        return {"ok": False, "engine": "SMART ARCHIVE", "error": material_report.get("error", "SM4 material rejected")}
     if op not in {"inspect", "extract", "rebuild", "integrity", "smart-recover"}:
         return {"ok": False, "engine": "SMART ARCHIVE", "error": "unsupported archive operation"}
 
@@ -130,14 +127,21 @@ def execute(operation: str, input_path, output_dir, work_dir=None,
 
     if op == "extract":
         target = out / source.stem
-        result = dict(extract_archive(source, target) or {})
-        result["sm4_material"] = {
-            "source": material_report.get("source"),
-            "candidate_count": material_report.get("candidate_count", 0),
-        }
-        if result.get("ok"):
-            result.update({"engine": "SMART ARCHIVE", "format": fmt, "out": str(target)})
-        return result
+        material_report = _load_authorized_sm4_material(work)
+        if not material_report.get("ok"):
+            return {"ok": False, "engine": "SMART ARCHIVE", "error": material_report.get("error", "SM4 material rejected")}
+        try:
+            result = dict(extract_archive(source, target) or {})
+            result["sm4_material"] = {
+                "source": material_report.get("source"),
+                "candidate_count": material_report.get("candidate_count", 0),
+            }
+            if result.get("ok"):
+                result.update({"engine": "SMART ARCHIVE", "format": fmt, "out": str(target)})
+            return result
+        finally:
+            from sm4_material import clear_material
+            clear_material()
 
     report_path = out / (source.name + ".integrity.json")
     try:
