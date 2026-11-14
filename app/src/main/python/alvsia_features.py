@@ -555,6 +555,18 @@ def _run_lua_smart_legacy(input_path, out_dir, jars_dir=None):
         if pattern_candidate is not None:
             pattern_candidate.unlink(missing_ok=True)
         report["steps"].append({"step": "engine_orchestrator", **pipeline})
+        if pipeline.get("selected_engine") == "bgmi_structure_only":
+            # The opcode structure may be recoverable, but string constants
+            # remain encrypted without an authorized XOR key. Never promote it
+            # to a complete source recovery.
+            protected_partial_seen = True
+            vm_partial_seen = True
+            report["steps"].append({
+                "step": "bgmi_structure_only_classification",
+                "ok": True,
+                "final_status": "PARTIAL",
+                "note": "opcode structure normalized; encrypted string constants were not decrypted",
+            })
         if pipeline.get("ok"):
             report["ok"] = True
             report["vm_obfuscated"] = bool(vm_partial_seen)
