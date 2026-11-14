@@ -38,3 +38,44 @@ def test_candidate_ranking_is_deterministic_and_evidence_only():
     assert ranked[0]["name"] == "source"
     assert ranked[0]["score"] > ranked[1]["score"]
     assert ranked[0]["rank"] == 1
+
+
+def test_lua53_bytecode_lifts_to_shared_ir(tmp_path):
+    import struct
+    from recovery_ir import analyze_lua_bytecode
+    # Minimal valid Lua 5.3 chunk with one RETURN instruction and no debug data.
+    header = (
+        b"\x1bLua\x53\x00\x19\x93\x0d\x0a\x1a\x0a"
+        + bytes([4, 8, 4, 8, 8])
+        + struct.pack("<q", 0x5678)
+        + struct.pack("<d", 370.5)
+        + bytes([0])
+    )
+    proto = (
+        bytes([0]) + struct.pack("<iiBBB", 0, 0, 0, 0, 2)
+        + struct.pack("<iI", 1, 0x01000026)
+        + struct.pack("<i", 0) + struct.pack("<i", 0)
+        + struct.pack("<i", 1) + bytes([0]) + struct.pack("<i", 0)
+        + struct.pack("<i", 0) + struct.pack("<i", 0)
+    )
+    path = tmp_path / "fixture.luac"
+    path.write_bytes(header + proto)
+    result = analyze_lua_bytecode(str(path))
+    assert result["ok"] is True, result
+    assert result["instruction_count"] == 1
+    assert result["block_count"] == 1
+    assert result["ir"]["domain"] == "lua"
+
+
+def test_planner_exposes_recovery_pipeline():
+    from recovery_planner import build_recovery_plan
+    plan = build_recovery_plan({
+        "ok": True,
+        "final_status": "PARTIAL_STRING_RECOVERY",
+        "artifact_kind": "string_recovery",
+        "strings_recovered": True,
+    }, domain="lua")
+    assert [stage["stage"] for stage in plan["pipeline"]] == [
+        "observe", "route", "lift_ir", "cfg_ssa", "reconstruct", "validate", "promote"
+    ]
+    assert plan["pipeline"][2]["state"] == "pending"
