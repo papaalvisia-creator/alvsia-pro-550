@@ -13,6 +13,8 @@ def test_android_runner_configures_native_unluac_from_native_library_dir():
         ROOT / "app/src/main/python/lua_engine/orchestrator.py"
     ).read_text(encoding="utf-8")
 
+    manifest = (ROOT / "app/src/main/AndroidManifest.xml").read_text(encoding="utf-8")
+    assert 'android:extractNativeLibs="true"' in manifest
     assert "applicationInfo?.nativeLibraryDir" in kotlin
     assert 'File(nativeLibDir, "libunluac-cli.so")' in kotlin
     assert "nativeCli.canExecute()" in kotlin
