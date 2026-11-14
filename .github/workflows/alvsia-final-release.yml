@@ -2,13 +2,14 @@ name: ALVSIA SMART PREMIUM Final Release Pipeline
 
 on:
   push:
-    branches: [ main, feat/alvsia-smart-premium-security-final-20261111, fix/task-output-routing-20261111, feat/combined-smart-lua-xop-release-20261110, feat/lua-intelligence-orchestrator-20261107, feat/alvsia-smart-premium-v1-20261112 ]
+    branches: [main, feat/alvsia-smart-premium-security-final-20261111, fix/task-output-routing-20261111, feat/combined-smart-lua-xop-release-20261110, feat/lua-intelligence-orchestrator-20261107, feat/alvsia-smart-premium-v1-20261112, fix/engine-repair-20261114, feat/alvsia-capability-expansion-security-20261114-clean]
     paths:
       - '.github/workflows/alvsia-final-release.yml'
       - '.github/workflows/android-validation.yml'
       - 'app/**'
       - 'tools/**'
       - 'tests/**'
+      - 'research/**'
       - 'build.gradle.kts'
       - 'settings.gradle.kts'
       - 'gradle/**'
@@ -19,6 +20,7 @@ on:
       - 'app/**'
       - 'tests/**'
       - 'tools/**'
+      - 'research/**'
       - 'settings.gradle.kts'
       - 'gradle/**'
   workflow_dispatch:
@@ -89,11 +91,16 @@ jobs:
           python3 tests/test_release_apk_audit_policy.py
           python3 -m unittest tests.test_security_wiring tests.test_security_fabric
           python3 -m pip install --disable-pip-version-check pycryptodome pytest && python3 -m pytest -q tests/test_tool_dispatch.py
+          python3 -m pytest -q tests/test_sm4_material_isolation.py
+          python3 -m pytest -q tests/test_binary_url_scanner.py
+          python3 -m pytest -q tests/test_pubg_lua_converter.py
+          python3 -m pytest -q tests/test_native_lua_runtime_wiring.py
           python3 -m unittest tests.test_live_workspace_and_file_limits
           python3 -m py_compile app/src/main/python/smart_lua_engine.py app/src/main/python/smart_pak_lua_engine.py app/src/main/python/sm4_secret_registry.py app/src/main/python/smart_archive_engine.py app/src/main/python/smart_data_engine.py app/src/main/python/module_adapters.py app/src/main/python/alvsia_bridge_impl.py
           python3 tests/test_smart_lua_streaming.py
+          python3 -m pytest -q tests/test_large_lua_memory_budget.py
           python3 tests/test_smart_archive_engine.py
-          python3 tests/test_smart_pak_lua_pipeline.py
+          python3 -m pytest -q tests/test_smart_pak_lua_pipeline.py
           python3 tests/test_smart_data_engine.py
           python3 -m pip install --disable-pip-version-check zstandard
           python3 -m pytest -q tests/test_pak_extraction_contract.py
@@ -262,6 +269,44 @@ jobs:
           "$APKSIGNER" verify --verbose --print-certs validation-artifacts/ALVSIA_SMART_PREMIUM_6.0.0-xop-signed.apk
           python3 tools/audit_release_apk.py validation-artifacts/ALVSIA_SMART_PREMIUM_6.0.0-xop-signed.apk
           sha256sum validation-artifacts/ALVSIA_SMART_PREMIUM_6.0.0-xop-signed.apk
+
+      - name: Create clean source snapshot and verify export hygiene
+        run: |
+          set -euo pipefail
+          SOURCE_COMMIT="$(git rev-parse HEAD)"
+          SOURCE_ZIP="validation-artifacts/ALVSIA_SMART_PREMIUM_6.0.0-source-${SOURCE_COMMIT}.zip"
+          mkdir -p validation-artifacts "$RUNNER_TEMP/alvsia-source-audit"
+          git archive --format=zip --prefix=ALVSIA_SMART_PREMIUM_6.0.0/ "$SOURCE_COMMIT" > "$SOURCE_ZIP"
+          unzip -q "$SOURCE_ZIP" -d "$RUNNER_TEMP/alvsia-source-audit"
+          python3 "$RUNNER_TEMP/alvsia-source-audit/ALVSIA_SMART_PREMIUM_6.0.0/tools/security_release_check.py"
+          python3 - "$SOURCE_COMMIT" "$SOURCE_ZIP" <<'PY'
+          import hashlib, json, pathlib, sys
+          commit, archive = sys.argv[1], pathlib.Path(sys.argv[2])
+          manifest = {
+              "product": "ALVSIA SMART PREMIUM 6.0.0",
+              "source_commit": commit,
+              "archive": archive.name,
+              "sha256": hashlib.sha256(archive.read_bytes()).hexdigest(),
+              "format": "git archive ZIP",
+              "git_metadata_included": False,
+              "untracked_files_included": False,
+              "export_hygiene_check": "PASS",
+          }
+          archive.with_suffix(".manifest.json").write_text(
+              json.dumps(manifest, indent=2) + "\n", encoding="utf-8"
+          )
+          print(json.dumps(manifest, indent=2))
+          PY
+
+      - name: Upload clean source snapshot
+        uses: actions/upload-artifact@v4
+        with:
+          name: ALVSIA_SMART_PREMIUM_6.0.0-source-snapshot
+          path: |
+            validation-artifacts/ALVSIA_SMART_PREMIUM_6.0.0-source-*.zip
+            validation-artifacts/ALVSIA_SMART_PREMIUM_6.0.0-source-*.manifest.json
+          if-no-files-found: error
+          retention-days: 30
 
       - name: Upload final APK and audit
         uses: actions/upload-artifact@v4

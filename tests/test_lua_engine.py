@@ -1,9 +1,10 @@
-import json, tempfile, zlib
+import json, tempfile, zlib, struct
+from unittest.mock import patch
 from pathlib import Path
 import sys
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "app/src/main/python"))
 from lua_engine import detect_lua, analyze_lua, validate_lua_source, unwrap_lua_container, decompile_lua
-from lua_engine.bgmi import transform_bgmi_lua
+from lua_engine.bgmi import is_bgmi_lua, transform_bgmi_lua
 
 def main():
     with tempfile.TemporaryDirectory() as td:
@@ -134,6 +135,103 @@ def main():
         plain, ci = unwrap_lua_container(lua_payload)
         assert plain == lua_payload and not ci.wrapped
 
+        # Structure-only BGMI conversion must preserve arbitrary encrypted
+        # string bytes exactly when no authorized XOR key is supplied.
+        standard_bgmi_header = (
+            b"\x1bLua\x53\x00\x19\x93\x0d\x0a\x1a\x0a"
+            + b"\x04\x08\x04\x08\x08"
+            + bytes.fromhex("7856000000000000")
+            + bytes.fromhex("0000000000287740")
+        )
+        standard_bgmi_chunk = (
+            standard_bgmi_header
+            + struct.pack("<B", 0)              # main upvalue count
+            + struct.pack("<B", 0)              # source = NULL
+            + struct.pack("<ii", 0, 0)          # line-defined / last-line
+            + struct.pack("<BBB", 0, 0, 2)      # params / vararg / stack
+            + struct.pack("<I", 1)              # one instruction
+            + struct.pack("<I", 38)             # RETURN
+            + struct.pack("<I", 1)              # one constant
+            + struct.pack("<BB", 4, 4)          # short string, size incl NUL
+            + b"\xff\xfeA"                    # deliberately non-UTF8 bytes
+            + struct.pack("<I", 0)              # upvalues
+            + struct.pack("<I", 0)              # nested prototypes
+            + struct.pack("<I", 0)              # Lua 5.3 line info
+            + struct.pack("<I", 0)              # local variables
+            + struct.pack("<I", 0)              # upvalue names
+        )
+        bgmi_structural = transform_bgmi_lua(
+            standard_bgmi_chunk, key=None, decrypt=False
+        )
+        assert is_bgmi_lua(bgmi_structural)
+        bgmi_roundtrip = transform_bgmi_lua(
+            bgmi_structural, key=None, decrypt=True
+        )
+        assert bgmi_roundtrip == standard_bgmi_chunk
+
+        # Keyed conversion must also preserve non-UTF8 Lua string bytes.
+        fixture_key = b"unit-test-bgmi-key"
+        encrypted_bgmi = transform_bgmi_lua(
+            standard_bgmi_chunk, key=fixture_key, decrypt=False
+        )
+        keyed_roundtrip = transform_bgmi_lua(
+            encrypted_bgmi, key=fixture_key, decrypt=True
+        )
+        assert keyed_roundtrip == standard_bgmi_chunk
+
+        # The large-file streaming normalizer must reuse the one input buffer
+        # across standard/mod-guard/BGMI candidates instead of rereading 30 MiB.
+        from alvsia_private import ALVSIA_BGMI_XOR_KEY
+        import lua_engine.decompiler53 as decompiler53
+        from lua_engine.streaming_decompiler import stream_decompile_lua53
+        canonical_bgmi = transform_bgmi_lua(
+            standard_bgmi_chunk, key=ALVSIA_BGMI_XOR_KEY, decrypt=False
+        )
+        stream_bgmi_path = td / "sample_streaming.bgmi"
+        stream_bgmi_path.write_bytes(canonical_bgmi)
+        stream_bgmi_out = td / "sample_streaming.lua"
+        original_read_bytes = Path.read_bytes
+        read_count = 0
+
+        def counted_read_bytes(path):
+            nonlocal read_count
+            if Path(path) == stream_bgmi_path:
+                read_count += 1
+            return original_read_bytes(path)
+
+        decode_calls = 0
+
+        def force_bgmi_normalization(candidate, **kwargs):
+            nonlocal decode_calls
+            decode_calls += 1
+            if decode_calls == 1:
+                raise ValueError("fixture forces BGMI normalization")
+            return "return"
+
+        with patch.object(Path, "read_bytes", counted_read_bytes):
+            with patch.object(decompiler53, "decompile_bytes", force_bgmi_normalization):
+                stream_ok, stream_note = stream_decompile_lua53(
+                    stream_bgmi_path, stream_bgmi_out
+                )
+        assert stream_ok, stream_note
+        assert read_count == 1, f"large input was read {read_count} times"
+        assert stream_bgmi_out.is_file()
+        assert b"\xff\xfeA" in bgmi_roundtrip
+
+        # The Smart Lua orchestrator may use this only as a last-resort,
+        # explicitly PARTIAL candidate after ordinary engines reject the file.
+        bgmi_path = td / "sample_structure_only.bgmi"
+        bgmi_path.write_bytes(bgmi_structural)
+        bgmi_source = td / "sample_structure_only.lua"
+        from lua_engine.orchestrator import _run_bgmi_structure_only
+        bgmi_ok, bgmi_note = _run_bgmi_structure_only(bgmi_path, bgmi_source)
+        assert bgmi_ok, bgmi_note
+        assert "structure-only" in bgmi_note
+        bgmi_valid, bgmi_validation = validate_lua_source(
+            bgmi_source, expected_version="Lua 5.3"
+        )
+        assert bgmi_valid, bgmi_validation
+
         # Unknown BGMI opcodes must fail closed, never pass through as standard
         # Lua opcodes and create a misleading decompile result.
         bgmi_header = (
@@ -145,7 +243,6 @@ def main():
         assert len(bgmi_header) == 33
         # main upvalue, source=nil, line-defined, last-line, proto flags,
         # instruction count, then one raw instruction whose opcode is 6.
-        import struct
         unknown_opcode_chunk = (
             bgmi_header
             + struct.pack("<B", 0)       # main upvalue count

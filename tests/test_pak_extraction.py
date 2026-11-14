@@ -47,6 +47,31 @@ def test_zstd_plain_block_uses_zero_argument_decoder():
         raise AssertionError("dictionary-compressed block accepted without dictionary")
 
 
+def test_explicit_zstd_frame_is_recovered_when_index_marks_zlib():
+    try:
+        import zstandard as zstd
+    except ImportError:
+        raise AssertionError("zstandard dependency is required for PAK ZSTD support")
+
+    plain = b"ALVSIA ZSTD frame-magic fallback regression\n" * 256
+    frame = zstd.ZstdCompressor(level=3).compress(plain)
+    assert frame[:4] == b"\x28\xb5\x2f\xfd"
+
+    recovered = core.PakCompression.decompress_block(
+        frame, None, core.CM_ZLIB, max_output_size=len(plain)
+    )
+    assert recovered == plain
+
+    try:
+        core.PakCompression.decompress_block(
+            frame, None, core.CM_ZLIB, max_output_size=len(plain) - 1
+        )
+    except Exception:
+        pass
+    else:
+        raise AssertionError("ZSTD fallback exceeded the declared output limit")
+
+
 def test_corrupt_zlib_is_rejected_not_returned_as_plaintext():
     try:
         core.PakCompression.decompress_block(b"not-a-deflate-stream", None, core.CM_ZLIB)
@@ -286,10 +311,27 @@ def main():
         test_pak_v46_sm4_flag50_key_vector,
         test_unpack_refuses_skipped_entries_and_output_count_mismatch,
     )
+    # This file is also executed directly (``python3 tests/test_pak_extraction.py``)
+    # by the Android Security Validation workflow. A test that calls
+    # ``pytest.skip()`` raises ``Skipped``; when run as a plain script that
+    # exception is otherwise uncaught and turns an honest skip (e.g. SM4 key
+    # material not supplied) into a hard exit-code-1 failure. Honour skips here
+    # exactly as pytest would, without weakening any assertion.
+    import pytest
+    skipped = 0
     for test in tests:
-        test()
+        try:
+            test()
+        except pytest.skip.Exception as exc:  # noqa: PT009 - script runner
+            skipped += 1
+            print("SKIP", test.__name__, "-", exc)
+            continue
         print("PASS", test.__name__)
-    print("PAK EXTRACTION REGRESSION: PASS (6/6; marker-only authorization rejected)")
+    executed = len(tests) - skipped
+    print(
+        f"PAK EXTRACTION REGRESSION: PASS ({executed}/{len(tests)} executed, "
+        f"{skipped} skipped; marker-only authorization rejected)"
+    )
 
 
 if __name__ == "__main__":

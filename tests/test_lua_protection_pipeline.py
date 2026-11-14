@@ -103,7 +103,10 @@ end
 return value, t.value
 '''
     transformed = protect_source(source, "balanced")
-    assert "value =" in transformed
-    assert ":value(" in transformed
-    assert "t.value" in transformed
-    assert "local value" not in transformed
+    # Field keys, method names and member accesses must survive untouched even
+    # though the local variables that happen to share the name are renamed.
+    import re
+    assert re.search(r"value\s*=\s*_a", transformed), transformed  # table field key kept
+    assert ":value(" in transformed, transformed                   # method name kept
+    assert ".value" in transformed, transformed                    # member access kept
+    assert "local value" not in transformed, transformed           # locals renamed

@@ -757,6 +757,9 @@ class LuaOpcodeConverter:
         def u32(self, value: int):
             self.data.extend(_struct.pack('<I', value))
 
+        def u64(self, value: int):
+            self.data.extend(_struct.pack('<Q', value))
+
         def i32(self, value: int):
             self.data.extend(_struct.pack('<i', value))
 
@@ -775,7 +778,7 @@ class LuaOpcodeConverter:
                 self.u8(size)
             else:
                 self.u8(0xFF)
-                self.u32(size)
+                self.u64(size)
             self.raw(value)
 
     def _convert_proto(self, reader, writer, depth: int = 0):
@@ -855,25 +858,48 @@ class LuaOpcodeConverter:
             self._convert_proto(reader, writer, depth + 1)
 
         line_count = reader.u32()
+        if line_count not in (0, code_count):
+            raise ValueError(
+                'lineinfo count %d does not match instruction count %d' %
+                (line_count, code_count)
+            )
         if line_count > (len(reader.data) - reader.pos):
             raise ValueError('invalid compressed lineinfo count %d at offset %d' % (line_count, reader.pos))
-        # Output must be REAL Lua 5.3 debug format: 1-byte signed deltas followed
-        # by an abslineinfo table. The previous 4-byte-int expansion produced
-        # chunks that no real Lua 5.3 loader accepts.
         deltas = []
         for _ in range(line_count):
-            deltas.append(reader.u8())
-        writer.u32(line_count)
-        for delta in deltas:
-            writer.u8(delta)
+            value = reader.u8()
+            deltas.append(value - 256 if value >= 128 else value)
 
-        # The game variant carries an additional abslineinfo table; the emitted
-        # standard chunk keeps an empty one (valid real-format debug section).
+        # The protected producer stores Lua 5.4-style signed line deltas plus
+        # (pc, absolute_line) checkpoints. Convert those into the 4-byte
+        # absolute line-number array required by the genuine Lua 5.3 format.
         abs_count = reader.u32()
         if abs_count > (len(reader.data) - reader.pos) // 8:
             raise ValueError('invalid absolute lineinfo count %d at offset %d' % (abs_count, reader.pos))
-        reader.read(abs_count * 8)
-        writer.u32(0)
+        abs_entries = []
+        previous_pc = -1
+        for _ in range(abs_count):
+            pc = reader.i32()
+            absolute_line = reader.i32()
+            if pc <= previous_pc or pc < 0 or pc >= line_count:
+                raise ValueError('invalid absolute lineinfo pc %d' % pc)
+            if deltas[pc] != -128:
+                raise ValueError('absolute lineinfo pc %d lacks delta sentinel' % pc)
+            abs_entries.append((pc, absolute_line))
+            previous_pc = pc
+        abs_by_pc = dict(abs_entries)
+        writer.u32(line_count)
+        current_line = line_defined
+        for pc, delta in enumerate(deltas):
+            if delta == -128:
+                if pc not in abs_by_pc:
+                    raise ValueError('missing absolute lineinfo checkpoint at pc %d' % pc)
+                current_line = abs_by_pc[pc]
+            else:
+                if pc in abs_by_pc:
+                    raise ValueError('unexpected absolute lineinfo checkpoint at pc %d' % pc)
+                current_line += delta
+            writer.i32(current_line)
 
         local_count = reader.u32()
         if local_count > (len(reader.data) - reader.pos) // 9:
@@ -891,8 +917,12 @@ class LuaOpcodeConverter:
         for _ in range(name_count):
             writer.string(reader.string(encrypted=True))
 
+    MAX_INPUT_BYTES = 32 * 1024 * 1024
+
     def convert_bytes(self, data: bytes) -> bytes:
         """Decode only the known structured game variant; reject partial parses."""
+        if len(data) > self.MAX_INPUT_BYTES:
+            raise ValueError('BGMI input exceeds the 32 MiB safety cap')
         if len(data) < 34 or data[:4] != b'\x1bLua' or data[4] != 0x53:
             raise ValueError('input is not a Lua 5.3 variant chunk')
         if data[5] != 0 or data[6:12] != b'\x19\x93\x0d\x0a\x1a\x0a':
@@ -907,7 +937,8 @@ class LuaOpcodeConverter:
         reader.pos = 33
         writer = self._Writer()
         header = bytearray(data[:33])
-        header[13] = 4
+        # Emit the standard 64-bit size_t ABI used by the ARM64 Lua 5.3 runtime.
+        header[13] = 8
         writer.raw(header)
         writer.u8(reader.u8())  # main closure upvalue count
         self._convert_proto(reader, writer)
@@ -920,7 +951,10 @@ class LuaOpcodeConverter:
         return converted
 
     def convert_file(self, src: str, dst: str | None = None) -> bytes:
-        result = self.convert_bytes(Path(src).read_bytes())
+        source = Path(src)
+        if source.stat().st_size > self.MAX_INPUT_BYTES:
+            raise ValueError('BGMI input exceeds the 32 MiB safety cap')
+        result = self.convert_bytes(source.read_bytes())
         if dst:
             Path(dst).parent.mkdir(parents=True, exist_ok=True)
             Path(dst).write_bytes(result)

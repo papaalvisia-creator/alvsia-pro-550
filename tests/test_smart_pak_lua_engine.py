@@ -44,3 +44,23 @@ def test_regression_sample_fingerprint():
     data = manifest.read_text(encoding="utf-8")
     assert "game_patch_4.7.0.21752.pak" in data
     assert "e47e93bd934ec830b2b908c5806ce1779354237e1825c7b73a8c2b37d8880968" in data
+
+
+def test_select_best_compression_picks_smallest_and_falls_back():
+    from alvsia_core import PakCompression, CM_ZLIB, CM_NONE
+    # Highly compressible payload: a real codec must beat raw.
+    data = b"ALVSIA" * 4096
+    result = PakCompression.select_best_compression(data)
+    assert result["original_size"] == len(data)
+    assert result["method"] in (CM_ZLIB, 6)  # zlib or zstd
+    assert len(result["data"]) < len(data)
+    assert result["saved_bytes"] == len(data) - len(result["data"])
+
+    # Incompressible random payload: must fall back to raw (CM_NONE).
+    import os
+    rnd = os.urandom(2048)
+    fallback = PakCompression.select_best_compression(rnd)
+    assert fallback["method"] == CM_NONE
+    assert fallback["data"] == rnd
+    assert fallback["saved_bytes"] == 0
+

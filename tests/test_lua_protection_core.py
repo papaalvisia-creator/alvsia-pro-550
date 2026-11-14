@@ -13,11 +13,19 @@ def test_strong_encodes_simple_string():
     assert '"hello"' not in out
 
 def test_local_scope_does_not_rename_global_after_block():
+    # Both `x` declarations are locals; a correct protector renames each to a
+    # distinct name and the trailing `return` must bind to the OUTER local
+    # (declared before the `do` block), never to the shadowed inner one.
+    import re
     src = "local x = 1\ndo local x = 2 print(x) end\nreturn x\n"
     out = protect_source(src, "balanced")
-    assert "local _a" in out
-    assert "return x" in out
-    assert "print(_a" in out
+    names = re.findall(r"local (_a\d+)", out)
+    assert len(names) == 2, out
+    outer, inner = names[0], names[1]
+    assert outer != inner, out
+    assert f"print({inner})" in out, out      # inner reference binds to inner local
+    assert f"return {outer}" in out, out      # trailing return binds to outer local
+    assert "return x" not in out, out         # no un-renamed local leaks through
 
 def test_local_declaration_preserves_syntax_spacing():
     src = "local a, b = 1, 2\nreturn a + b\n"

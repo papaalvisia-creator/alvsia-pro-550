@@ -19,6 +19,7 @@ _MAP = {
     "alvsia_ultimate_compat": "alvsia_ultimate_compat.alv",
     "alvsia_features": "alvsia_features.alv",
     "sm4_secret_registry": "sm4_secret_registry.alv",
+    "sm4_material": "sm4_material.alv",
     "pinned_http": "pinned_http.alv",
     "lua_engine.lua_decompiler_final": "lua_engine_lua_decompiler_final.alv",
     "lua_engine.lua_protector": "lua_engine_lua_protector.alv",

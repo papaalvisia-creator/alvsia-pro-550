@@ -2,6 +2,7 @@
 """Source-level release gates for the ALVISIA PRO main-only sealed release pipeline."""
 from pathlib import Path
 import re
+import subprocess
 import sys
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -38,7 +39,7 @@ profile = read(ROOT / "app/src/main/java/com/alvsia/pro/ui/profile/ProfileScreen
 required_modules = {
     "alvsia_bridge_impl.py", "alvsia_metadata.py", "alvsia_private.py", "alvsia_vm_protect.py", "lua_engine/pattern_registry.py",
     "alvsia_core.py", "alvsia_ultimate.py",
-    "alvsia_ultimate_compat.py", "alvsia_features.py", "sm4_secret_registry.py", "pinned_http.py",
+    "alvsia_ultimate_compat.py", "alvsia_features.py", "sm4_secret_registry.py", "sm4_material.py", "pinned_http.py",
     "lua_engine/lua_decompiler_final.py", "lua_engine/lua_protector.py",
     "lua_engine/t24.py",
     "lua_output_validator.py", "lua_string_recover.py",
@@ -237,6 +238,169 @@ if ("ALVSIA_GRANT_KID='alvsia-unaux-rsa1'" not in grant_endpoint
         or "ALVSIA_GRANT_PUBLIC_N_B64URL" not in grant_endpoint):
     fail.append("Unaux endpoint must sign the aligned JWT contract, rate-limit, and enforce 180-second TTL")
 
+# ---------------------------------------------------------------------------
+# Embedded-secret scan across EVERY Python module (not just the registry).
+# This is AST-based so it does not trip on comments or the scanner's own rules.
+# ---------------------------------------------------------------------------
+import ast
+
+# Known historical SM4 material that must never reappear in the source tree.
+# No plaintext historical key values are stored in this scanner.
+SECRET_NAME_PREFIXES = ("SM4_SECRET", "SM4_KEY", "SM4_CANDIDATE")
+SECRET_NAME_EXCLUDE_SUFFIXES = (
+    "_VERSION", "_EXPECTED_COUNT", "_COUNT", "_SET", "_LEN", "_NAME",
+    "_PATTERN", "_LABEL", "_TYPE", "_KIND",
+)
+
+
+def _is_secret_name(name: str) -> bool:
+    if not name.startswith(SECRET_NAME_PREFIXES):
+        return False
+    if name.endswith(SECRET_NAME_EXCLUDE_SUFFIXES):
+        return False
+    return True
+
+
+def _looks_like_key_literal(value: str) -> bool:
+    """Heuristic for a 16..64 char opaque key-ish string literal."""
+    if not isinstance(value, str) or not (16 <= len(value) <= 64):
+        return False
+    if any(ch.isspace() for ch in value):
+        return False
+    # Reject obvious human text / paths / identifiers with spaces or dots.
+    return True
+
+
+def _looks_like_historical_sm4_candidate(value: str) -> bool:
+    """Detect the three known SM4 candidate families without storing their values."""
+    if not isinstance(value, str) or len(value) != 20:
+        return False
+    # SM4_SECRET_NEW: lower/upper/digit repeating, with a 2-char tail.
+    if all(
+        ch.islower() if i % 3 == 0 else ch.isupper() if i % 3 == 1 else ch.isdigit()
+        for i, ch in enumerate(value)
+    ):
+        return True
+    # SM4_SECRET_4: lowercase + digits only, digit-heavy.
+    if (value.isalnum()
+            and sum(ch.isdigit() for ch in value) >= 10
+            and sum(ch.islower() for ch in value) >= 5
+            and not any(ch.isupper() for ch in value)):
+        return True
+    # SM4_SECRET_2: punctuation marker plus mixed alphanumeric composition.
+    if (any(ch in "$*" for ch in value)
+            and sum(ch.isupper() for ch in value) >= 5
+            and sum(ch.islower() for ch in value) >= 3
+            and any(ch.isdigit() for ch in value)):
+        return True
+    return False
+
+
+def _artifact_hygiene_violations(root: Path, tracked_files=None) -> list[str]:
+    """Reject generated caches and local secrets in source deliverables.
+
+    Scan the complete checkout/export, not only Git-tracked paths. This is
+    deliberate: ignored or untracked .pyc files must not evade release checks
+    when a source archive also contains its .git directory.
+    """
+    if tracked_files is None:
+        ignored_dirs = {
+            ".git", ".gradle", ".idea", ".venv", "venv", "node_modules",
+            ".tox", ".mypy_cache", ".ruff_cache", "build",
+        }
+        tracked_files = []
+        for path in root.rglob("*"):
+            try:
+                rel = path.relative_to(root)
+            except ValueError:
+                continue
+            if any(part in ignored_dirs for part in rel.parts):
+                continue
+            if path.is_file():
+                tracked_files.append(path)
+
+    violations = []
+    seen = set()
+    for path in tracked_files:
+        try:
+            rel = path.relative_to(root)
+        except ValueError:
+            continue
+        rel_text = rel.as_posix()
+        if rel_text in seen:
+            continue
+        seen.add(rel_text)
+        parts = set(rel.parts)
+        name = path.name.lower()
+        if path.suffix.lower() == ".pyc" or "__pycache__" in parts:
+            violations.append(f"compiled Python cache in source deliverable: {rel}")
+        if ".pytest_cache" in parts:
+            violations.append(f"pytest cache in source deliverable: {rel}")
+        if name == ".env" or (name.startswith(".env.") and name != ".env.example"):
+            violations.append(f"local environment secret file in source deliverable: {rel}")
+        if path.suffix.lower() in {".jks", ".keystore", ".p12", ".pfx", ".key"}:
+            violations.append(f"local signing/private-key material in source deliverable: {rel}")
+    return violations
+
+
+for py_file in sorted(PY.rglob("*.py")):
+    rel = py_file.relative_to(ROOT)
+    try:
+        src = py_file.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        fail.append(f"unreadable python module: {rel}")
+        continue
+    try:
+        tree = ast.parse(src, filename=str(rel))
+    except SyntaxError as exc:
+        fail.append(f"python module does not parse ({rel}): {exc}")
+        continue
+    for node in ast.walk(tree):
+        if (isinstance(node, ast.Constant)
+                and isinstance(node.value, str)
+                and _looks_like_historical_sm4_candidate(node.value)):
+            fail.append(f"historical SM4 candidate-shaped literal found in {rel}")
+            continue
+        targets = []
+        value = None
+        if isinstance(node, ast.Assign):
+            targets = node.targets
+            value = node.value
+        elif isinstance(node, ast.AnnAssign):
+            targets = [node.target]
+            value = node.value
+        if value is None:
+            continue
+        names = []
+        for t in targets:
+            if isinstance(t, ast.Name):
+                names.append(t.id)
+            elif isinstance(t, ast.Attribute):
+                names.append(t.attr)
+        if not any(_is_secret_name(n) for n in names):
+            continue
+        # Only flag literal string/bytes constants (not calls like os.environ.get).
+        if isinstance(value, ast.Constant) and isinstance(value.value, str):
+            if _looks_like_key_literal(value.value):
+                fail.append(
+                    f"hardcoded secret literal assigned to {names[0]} in {rel}"
+                )
+        elif isinstance(value, (ast.List, ast.Tuple, ast.Set)):
+            for elt in value.elts:
+                if isinstance(elt, ast.Constant) and isinstance(elt.value, str):
+                    if _looks_like_key_literal(elt.value):
+                        fail.append(
+                            f"hardcoded secret literal in {names[0]} collection in {rel}"
+                        )
+                        break
+
+# A clean source export must not carry generated bytecode/cache or local
+# signing material. The full tree is scanned even when .git is present, so
+# ignored/untracked files in an exported archive cannot evade this gate.
+fail.extend(_artifact_hygiene_violations(ROOT))
+
+# Python source is scanned by AST above; release APK contents are
+# independently inspected by tools/audit_release_apk.py.
 if fail:
     print("SECURITY SOURCE CHECK: FAIL")
     print("\n".join("- " + x for x in fail))

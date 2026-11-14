@@ -115,7 +115,7 @@ def convert_t24_to_standard(data, key):
     header[13] = 8
     writer.raw(header)
     stats = {"prototypes": 0, "instructions": 0, "constants": 0,
-             "strings": 0, "strings_decoded": bool(key)}
+             "strings": 0, "strings_decoded": bool(key), "lineinfo_checkpoints": 0}
 
     def read_string():
         size = reader.u8()
@@ -206,15 +206,35 @@ def convert_t24_to_standard(data, key):
         line_count = reader.i32()
         if line_count < 0 or line_count > MAX_ITEMS:
             raise ValueError("invalid T24 line-info count")
-        line_bytes = reader.raw(line_count)
+        if line_count not in (0, code_count):
+            raise ValueError("T24 line-info count does not match instruction count")
+        delta_bytes = reader.raw(line_count)
         absolute_count = reader.i32()
-        if absolute_count < 0 or absolute_count > MAX_ITEMS:
+        if absolute_count < 0 or absolute_count > line_count:
             raise ValueError("invalid T24 absolute-line count")
-        reader.raw(absolute_count * 8)
-        # Preserve the reference converter's byte-to-int32 normalization.
+        checkpoints = {}
+        previous_pc = -1
+        for _ in range(absolute_count):
+            pc = reader.i32()
+            absolute_line = reader.i32()
+            if pc <= previous_pc or pc < 0 or pc >= line_count:
+                raise ValueError("invalid T24 absolute-line checkpoint index")
+            if delta_bytes[pc] != 0x80:
+                raise ValueError("T24 absolute-line checkpoint lacks sentinel delta")
+            checkpoints[pc] = absolute_line
+            previous_pc = pc
         writer.i32(line_count)
-        for line_value in line_bytes:
-            writer.i32(line_value)
+        current_line = line_defined
+        for pc, delta_byte in enumerate(delta_bytes):
+            delta = delta_byte - 256 if delta_byte >= 0x80 else delta_byte
+            if delta == -128:
+                if pc not in checkpoints:
+                    raise ValueError("missing T24 absolute-line checkpoint at pc %d" % pc)
+                current_line = checkpoints[pc]
+            else:
+                current_line += delta
+            writer.i32(current_line)
+        stats["lineinfo_checkpoints"] += absolute_count
 
         local_count = reader.i32()
         if local_count < 0 or local_count > MAX_ITEMS:

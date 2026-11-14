@@ -21,6 +21,7 @@ EXPECTED_SEALED = {
     "alvsia_ultimate_compat.alv",
     "alvsia_features.alv",
     "sm4_secret_registry.alv",
+    "sm4_material.alv",
     "pinned_http.alv",
     "lua_engine_lua_decompiler_final.alv",
     "lua_engine_lua_protector.alv",
@@ -42,7 +43,7 @@ EXPECTED_SEALED = {
 }
 PROTECTED_MODULES = {
     "alvsia_bridge_impl", "alvsia_metadata", "alvsia_private", "alvsia_vm_protect", "alvsia_core", "alvsia_ultimate", "alvsia_ultimate_compat",
-    "alvsia_features", "sm4_secret_registry", "pinned_http", "lua_engine/lua_decompiler_final",
+    "alvsia_features", "sm4_secret_registry", "sm4_material", "pinned_http", "lua_engine/lua_decompiler_final",
     "lua_engine/lua_protector", "lua_engine/pattern_registry",
     "lua_output_validator", "lua_string_recover",
     "lua_engine/engine", "lua_engine/decompiler53", "lua_engine/bgmi", "lua_engine/t24",

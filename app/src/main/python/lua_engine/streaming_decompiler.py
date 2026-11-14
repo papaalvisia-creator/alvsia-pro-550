@@ -288,10 +288,19 @@ def stream_decompile_lua53(input_path: Path, out_path: Path) -> Tuple[bool, str]
     except Exception as exc:
         return False, f"decompiler53_import_failed: {exc}"
     input_size = Path(input_path).stat().st_size
-    max_parser_bytes = int(os.environ.get(
-        "ALVSIA_LUA53_MAX_IN_MEMORY_BYTES", str(256 * 1024 * 1024)
-    ))
-    max_parser_bytes = max(16 * 1024 * 1024, min(max_parser_bytes, 512 * 1024 * 1024))
+    # This recovery path materializes the input and may hold a normalized
+    # candidate alongside it. Keep the hard ceiling independent of an
+    # environment override so an untrusted file cannot request a 512 MiB
+    # allocation inside the Android process. Files above the cap still get
+    # header/container diagnostics and are reported PARTIAL by the caller.
+    hard_limit = 32 * 1024 * 1024
+    try:
+        configured_limit = int(os.environ.get(
+            "ALVSIA_LUA53_MAX_IN_MEMORY_BYTES", str(hard_limit)
+        ))
+    except (TypeError, ValueError):
+        configured_limit = hard_limit
+    max_parser_bytes = max(8 * 1024 * 1024, min(configured_limit, hard_limit))
     if input_size > max_parser_bytes:
         return False, (
             f"lua53_parser_memory_limit: input={input_size} bytes "
@@ -388,6 +397,32 @@ def stream_decompile_lua53(input_path: Path, out_path: Path) -> Tuple[bool, str]
     else:
         failures.append("standard candidate skipped: mod-guard signature detected (rotated producer)")
 
+    # T24 is a separate 64-bit-size_t producer profile. It has its own
+    # opcode-name shuffle and delta/checkpoint line-info representation; it
+    # must not be routed through the 32-bit BGMI/HePing adapters.
+    if (
+        len(data) >= 34
+        and data[:4] == bytes((0x1B,)) + b"Lua"
+        and data[4] == 0x53
+        and data[13] == 8
+    ):
+        try:
+            from lua_engine.t24 import convert_t24_to_standard
+            from alvsia_private import ALVSIA_BGMI_XOR_KEY
+            normalized, t24_report = convert_t24_to_standard(
+                bytes(data), ALVSIA_BGMI_XOR_KEY
+            )
+            ok, note = _try_candidate("t24", normalized)
+            if ok:
+                return True, note + (
+                    f"; t24_protos={t24_report.get('prototypes', 0)}"
+                    f"; t24_line_checkpoints={t24_report.get('lineinfo_checkpoints', 0)}"
+                )
+            failures.append("t24: " + note)
+            del normalized
+        except Exception as exc:
+            failures.append(f"t24_normalize_failed: {str(exc)[:240]}")
+
     # Existing BGMI/HePing normalizers remain enabled, but share the same
     # total deadline so a failed standard candidate cannot trigger an
     # unbounded chain of additional parser attempts.
@@ -402,7 +437,9 @@ def stream_decompile_lua53(input_path: Path, out_path: Path) -> Tuple[bool, str]
     sanitized_bytes = None
     try:
         from lua_engine.modguard import detect_mod_guard, sanitize_mod_guard
-        raw = Path(input_path).read_bytes()
+        # Reuse the single bounded input buffer; do not read the same large
+        # Lua file again for mod-guard detection/sanitization.
+        raw = data
         detection = detect_mod_guard(raw)
         if detection and detection.get("detected"):
             patched, mg_report = sanitize_mod_guard(raw)
@@ -425,9 +462,7 @@ def stream_decompile_lua53(input_path: Path, out_path: Path) -> Tuple[bool, str]
                 failures.append("remaining normalization candidates skipped: total time budget exhausted")
                 break
             try:
-                original = Path(input_path).read_bytes()
-                if sanitized_bytes is not None:
-                    original = sanitized_bytes
+                original = sanitized_bytes if sanitized_bytes is not None else data
                 converted = LuaOpcodeConverter(variant=variant).convert_bytes(original)
                 if modguard_note:
                     note_with_mg = f"{modguard_note}; {variant} normalize"

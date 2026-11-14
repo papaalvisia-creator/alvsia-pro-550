@@ -159,6 +159,44 @@ def _copy_lua_source(src: Path, dst: Path) -> tuple[bool, str]:
     return True, "validated Lua source passthrough"
 
 
+def _run_bgmi_structure_only(src: Path, dst: Path) -> tuple[bool, str]:
+    """Normalize a recognized BGMI chunk without guessing its XOR string key.
+
+    This is a last-resort structural candidate only. It can recover the opcode
+    stream when the format is recognized, but encrypted string constants remain
+    unchanged and the caller must classify the result as PARTIAL.
+    """
+    try:
+        if src.stat().st_size > 32 * 1024 * 1024:
+            return False, "BGMI structure-only candidate exceeds the 32 MiB safety cap"
+        with src.open("rb") as handle:
+            head = handle.read(14)
+        if len(head) < 14 or head[:5] != b"\x1bLua\x53" or head[13] != 4:
+            return False, "input does not match the BGMI 4-byte size_t signature"
+        from .bgmi import is_bgmi_lua, transform_bgmi_lua
+        data = src.read_bytes()
+        if not is_bgmi_lua(data):
+            return False, "BGMI structural/opcode validation rejected the input"
+        normalized = transform_bgmi_lua(data, key=None, decrypt=True)
+        temp_path = dst.with_name(dst.stem + ".bgmi-normalized.luac")
+        try:
+            temp_path.write_bytes(normalized)
+            from .streaming_decompiler import stream_decompile_lua53
+            ok, note = stream_decompile_lua53(temp_path, dst)
+            if not ok:
+                dst.unlink(missing_ok=True)
+                return False, note
+            return True, (
+                "BGMI structure-only recovery; string constants remain encoded "
+                "because no authorized XOR key was supplied; " + str(note)
+            )
+        finally:
+            temp_path.unlink(missing_ok=True)
+    except Exception as exc:
+        dst.unlink(missing_ok=True)
+        return False, f"BGMI structure-only recovery failed: {type(exc).__name__}: {exc}"
+
+
 def build_engine_registry(info, jars_dir: Optional[str] = None) -> list[EngineSpec]:
     """Return only engines compatible with the detected format/version."""
     from .streaming_decompiler import (
@@ -221,6 +259,11 @@ def build_engine_registry(info, jars_dir: Optional[str] = None) -> list[EngineSp
             "unluac_jar", ("luac", "luac-unknown"),
             lambda src, dst: stream_unluac_jar(src, dst, jars_dir=jars_dir),
             30,
+        ))
+    if info.format == "luac" and info.version == "Lua 5.3":
+        # Run only after ordinary parsers; it is explicitly a PARTIAL fallback.
+        specs.append(EngineSpec(
+            "bgmi_structure_only", ("luac",), _run_bgmi_structure_only, 100,
         ))
     return sorted(specs, key=lambda item: item.priority)
 

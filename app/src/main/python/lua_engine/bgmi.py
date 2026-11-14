@@ -208,9 +208,12 @@ def transform_bgmi_lua(data: bytes, key: bytes | None = None, decrypt=True) -> b
         if sz == 0:
             return None
         raw = r.raw(sz - 1)
+        # Lua strings are byte sequences, not necessarily UTF-8 text. Preserve
+        # them as bytes after optional XOR so both binary and textual constants
+        # survive a structure conversion without replacement-character loss.
         if decrypt:
             raw = _xor(raw, key)
-        return raw.decode("utf-8", "replace")
+        return raw
 
     def swrite(s):
         if s is None:
@@ -246,12 +249,22 @@ def transform_bgmi_lua(data: bytes, key: bytes | None = None, decrypt=True) -> b
             Bx = (raw >> 14) & 0x3ffff
             Ax = (raw >> 6) & 0x3ffffff
             sBx = Bx - MAXARG_sBx
+            # Validate every prototype, not only the top-level code array.
+            # Unknown nested opcodes must fail closed instead of being copied
+            # through as if their semantics were understood.
+            op_map = BGMI_STD if decrypt else STD_BGMI
+            if op not in op_map:
+                raise ValueError(f"unsupported BGMI opcode {op} in prototype")
             if decrypt:
-                sop = BGMI_STD.get(op, op)
-                fmt = STD_FMT[sop] if sop < len(STD_FMT) else 0
+                sop = op_map[op]
+                if not 0 <= sop < len(STD_FMT):
+                    raise ValueError(f"unsupported normalized Lua opcode {sop}")
+                fmt = STD_FMT[sop]
             else:
-                sop = STD_BGMI.get(op, op)
-                fmt = STD_FMT[op] if op < len(STD_FMT) else 0
+                sop = op_map[op]
+                if not 0 <= op < len(STD_FMT):
+                    raise ValueError(f"unsupported standard Lua opcode {op}")
+                fmt = STD_FMT[op]
             if fmt == 0:
                 res = (sop & 63) | (A << 6) | (C << 14) | (B << 23)
             elif fmt == 1:
@@ -294,41 +307,57 @@ def transform_bgmi_lua(data: bytes, key: bytes | None = None, decrypt=True) -> b
 
         # -- debug: line info -------------------------------------------------
         nln = r.u32()
-        if nln > 0x200000:
-            raise ValueError("lineinfo count out of range")
+        if nln > n or nln not in (0, n):
+            raise ValueError("lineinfo count does not match instruction count")
         if decrypt:
-            # BGMI input: nln signed-byte deltas, then an absolute-line record count.
-            # Output must be REAL Lua 5.3 debug format: 1-byte deltas + abslineinfo.
+            # BGMI uses signed byte deltas plus (pc, absolute_line) checkpoints.
+            # Standard Lua 5.3 stores one absolute int32 line per instruction.
             deltas = []
             for _ in range(nln):
-                d = r.byte()
-                deltas.append(d)
+                value = r.byte()
+                deltas.append(value - 256 if value >= 128 else value)
             abs_count = r.u32()
-            if abs_count > 0x200000:
+            if abs_count > nln:
                 raise ValueError("absolute line record count out of range")
+            checkpoints = {}
+            previous_pc = -1
             for _ in range(abs_count):
-                r.raw(8)          # absolute (line, pc) records - not needed for source
+                pc, absolute_line = r.i32(), r.i32()
+                if pc <= previous_pc or pc < 0 or pc >= nln or deltas[pc] != -128:
+                    raise ValueError("invalid BGMI absolute line checkpoint")
+                checkpoints[pc] = absolute_line
+                previous_pc = pc
             w.u32(nln)
-            for d in deltas:
-                w.byte(d)
-            w.u32(0)              # empty abslineinfo table (valid real-format chunk)
+            current_line = ldef
+            for pc, delta in enumerate(deltas):
+                if delta == -128:
+                    if pc not in checkpoints:
+                        raise ValueError("missing BGMI absolute line checkpoint at pc %d" % pc)
+                    current_line = checkpoints[pc]
+                else:
+                    current_line += delta
+                w.i32(current_line)
         else:
-            # Standard input (real Lua 5.3 debug format): nln signed-byte deltas
-            # followed by the abslineinfo table. The code array is unchanged by
-            # this transform, so both sections are copied verbatim into the
-            # BGMI chunk (same debug layout on both sides of the transform).
+            # Standard Lua 5.3 absolute lines -> BGMI delta/checkpoint encoding.
+            lines = [r.i32() for _ in range(nln)]
             deltas = []
-            for _ in range(nln):
-                deltas.append(r.byte())
-            abs_count = r.u32()
-            if abs_count > 0x200000:
-                raise ValueError("absolute line record count out of range")
+            checkpoints = []
+            previous_line = ldef
+            for pc, line in enumerate(lines):
+                delta = line - previous_line
+                if -127 <= delta <= 127:
+                    deltas.append(delta & 0xff)
+                else:
+                    deltas.append(0x80)
+                    checkpoints.append((pc, line))
+                previous_line = line
             w.u32(nln)
-            for d in deltas:
-                w.byte(d)
-            w.u32(abs_count)
-            for _ in range(abs_count):
-                w.raw(r.raw(8))
+            for delta in deltas:
+                w.byte(delta)
+            w.u32(len(checkpoints))
+            for pc, line in checkpoints:
+                w.i32(pc)
+                w.i32(line)
 
         nloc = r.u32()
         if nloc > 0x100000:

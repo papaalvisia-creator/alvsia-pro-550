@@ -1,0 +1,1663 @@
+{
+  "samples/pak/game_patch_4.7.0.21752.pak": {
+    "size": 2704793,
+    "version": 14,
+    "entries_total": 2,
+    "dump": {
+      "ok": true,
+      "expected_files": 2,
+      "written_files": 2,
+      "skipped_files": 0,
+      "skipped_directories": 0,
+      "written_bytes": 22755773,
+      "failures": [],
+      "index_parse": {
+        "file_entries": 2,
+        "directory_records": 6,
+        "loaded_directories": 2,
+        "skipped_bad_refs": 0,
+        "skipped_bad_paths": 0,
+        "reader_cursor": 6007,
+        "index_length": 6007
+      }
+    },
+    "extracted": 2,
+    "lua_files": [
+      {
+        "path": "ShadowTrackerExtra/Content/Lua/GameLua/GameCore/Framework/CharacterBase.lua",
+        "size": 22755773,
+        "sha256": "98a03e13d75c0709717cdcee851efdcbfb3946a8173768bd6533e74fd59d7e21",
+        "lua": true,
+        "magic": "1b4c756153001993"
+      }
+    ],
+    "nonlua_files": [
+      {
+        "path": "ShadowTrackerExtra/1.txt",
+        "size": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "lua": false,
+        "magic": ""
+      }
+    ],
+    "out_dir": "/workspace/pak_extract/samples__pak__game_patch_4.7.0.21752.pak"
+  },
+  "samples/pak/game_patch_4.7.0.21756.pak": {
+    "size": 713299,
+    "version": 14,
+    "entries_total": 7,
+    "dump": {
+      "ok": false,
+      "expected_files": 7,
+      "written_files": 5,
+      "skipped_files": 2,
+      "skipped_directories": 0,
+      "written_bytes": 518893,
+      "failures": [
+        {
+          "path": "Config/DefaultEngineRedirects_BLUEHOLE.ini",
+          "error": "RuntimeError: SM4 candidate material is not authorized/supplied"
+        },
+        {
+          "path": "Config/DefaultEngineRedirects_JAPANKOREA.ini",
+          "error": "RuntimeError: SM4 candidate material is not authorized/supplied"
+        }
+      ],
+      "index_parse": {
+        "file_entries": 7,
+        "directory_records": 12,
+        "loaded_directories": 5,
+        "skipped_bad_refs": 0,
+        "skipped_bad_paths": 0,
+        "reader_cursor": 2378,
+        "index_length": 2378
+      }
+    },
+    "extracted": 5,
+    "lua_files": [
+      {
+        "path": "ShadowTrackerExtra/Content/Lua/client/config/pubgm_patch.lua",
+        "size": 1167,
+        "sha256": "fd6e833d5b69acca8db6c8782b2a85c2e223062d105e204c26fc26efc2b3903c",
+        "lua": true,
+        "magic": "2d2d202121212044"
+      },
+      {
+        "path": "ShadowTrackerExtra/Content/Lua/GameLua/Mod/PlanBT/Gameplay/Config/BlueberryOctopusGrenadeConfig.lua",
+        "size": 1508,
+        "sha256": "7028cbee5e79c7b280c7b5a573d3dfbc923343da1a16422b4d196a0df1d29b9c",
+        "lua": true,
+        "magic": "1b4c756153001993"
+      }
+    ],
+    "nonlua_files": [
+      {
+        "path": "ShadowTrackerExtra/1.txt",
+        "size": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "lua": false,
+        "magic": ""
+      },
+      {
+        "path": "ShadowTrackerExtra/Content/BluePrints/Core/BP_PlayerPawn.uasset",
+        "size": 251166,
+        "sha256": "9492e8f260d0a3ed255adcef367f800a316be38954281e5fb2d2ced97c85d101",
+        "lua": false,
+        "magic": "c1832a9ef9ffffff"
+      },
+      {
+        "path": "ShadowTrackerExtra/Content/BluePrints/Core/BP_PlayerPawn.uexp",
+        "size": 265052,
+        "sha256": "67809335432f0b5cbb0f1d1e11ce4253852ff5c5c28fa0bce9b7e7d324593d09",
+        "lua": false,
+        "magic": "2b07000000000000"
+      }
+    ],
+    "out_dir": "/workspace/pak_extract/samples__pak__game_patch_4.7.0.21756.pak"
+  },
+  "FREE PAK 4.6 V1/ANDROID/core_patch_4.6.0.21546.pak": {
+    "size": 2856729,
+    "version": 14,
+    "entries_total": 239,
+    "dump": {
+      "ok": false,
+      "expected_files": 239,
+      "written_files": 163,
+      "skipped_files": 76,
+      "skipped_directories": 0,
+      "written_bytes": 11504094,
+      "failures": [
+        {
+          "path": "Config/DefaultEngineRedirects_BLUEHOLE.ini",
+          "error": "RuntimeError: SM4 candidate material is not authorized/supplied"
+        },
+        {
+          "path": "Config/DefaultEngineRedirects_JAPANKOREA.ini",
+          "error": "RuntimeError: SM4 candidate material is not authorized/supplied"
+        },
+        {
+          "path": "Content/Arts_UI/VersionUpdateSlap/Pages/4_6_0/Lobby_VersionUpdateSlap_Page_002_UIBP.uasset",
+          "error": "RuntimeError: SM4 candidate material is not authorized/supplied"
+        },
+        {
+          "path": "Content/Arts_UI/VersionUpdateSlap/Pages/4_6_0/Lobby_VersionUpdateSlap_Page_002_UIBP.uexp",
+          "error": "RuntimeError: SM4 candidate material is not authorized/supplied"
+        },
+        {
+          "path": "Content/Arts_UI/VersionUpdateSlap/Pages/4_6_0/Lobby_VersionUpdateSlap_Page_002_UIBP_LOD1.uasset",
+          "error": "RuntimeError: SM4 candidate material is not authorized/supplied"
+        },
+        {
+          "path": "Content/Arts_UI/VersionUpdateSlap/Pages/4_6_0/Lobby_VersionUpdateSlap_Page_002_UIBP_LOD1.uexp",
+          "error": "RuntimeError: SM4 candidate material is not authorized/supplied"
+        },
+        {
+          "path": "Content/CSV/CardCollectionCardConfig.uasset",
+          "error": "RuntimeError: SM4 candidate material is not authorized/supplied"
+        },
+        {
+          "path": "Content/CSV/CardCollectionCardConfig.uexp",
+          "error": "RuntimeError: SM4 candidate material is not authorized/supplied"
+        },
+        {
+          "path": "Content/CSV/InFillingBPTable.uasset",
+          "error": "RuntimeError: SM4 candidate material is not authorized/supplied"
+        },
+        {
+          "path": "Content/CSV/InFillingBPTable.uexp",
+          "error": "RuntimeError: SM4 candidate material is not authorized/supplied"
+        },
+        {
+          "path": "Content/CSV/Item_Fixed.uasset",
+          "error": "RuntimeError: SM4 candidate material is not authorized/supplied"
+        },
+        {
+          "path": "Content/CSV/Item_Fixed.uexp",
+          "error": "RuntimeError: SM4 candidate material is not authorized/supplied"
+        },
+        {
+          "path": "Content/CSV/ItemDecomposeID.uasset",
+          "error": "RuntimeError: SM4 candidate material is not authorized/supplied"
+        },
+        {
+          "path": "Content/CSV/ItemDecomposeID.uexp",
+          "error": "RuntimeError: SM4 candidate material is not authorized/supplied"
+        },
+        {
+          "path": "Content/CSV/LocalizationTextFixed.uasset",
+          "error": "RuntimeError: SM4 candidate material is not authorized/supplied"
+        },
+        {
+          "path": "Content/CSV/LocalizationTextFixed.uexp",
+          "error": "RuntimeError: SM4 candidate material is not authorized/supplied"
+        },
+        {
+          "path": "Content/CSV/LocalizationTextFixed_BLUEHOLE.uasset",
+          "error": "RuntimeError: SM4 candidate material is not authorized/supplied"
+        },
+        {
+          "path": "Content/CSV/LocalizationTextFixed_BLUEHOLE.uexp",
+          "error": "RuntimeError: SM4 candidate material is not authorized/supplied"
+        },
+        {
+          "path": "Content/CSV/MainCityUISystem.uasset",
+          "error": "RuntimeError: SM4 candidate material is not authorized/supplied"
+        },
+        {
+          "path": "Content/CSV/MainCityUISystem.uexp",
+          "error": "RuntimeError: SM4 candidate material is not authorized/supplied"
+        },
+        {
+          "path": "Content/CSV/MainUISystem.uasset",
+          "error": "RuntimeError: SM4 candidate material is not authorized/supplied"
+        },
+        {
+          "path": "Content/CSV/MainUISystem.uexp",
+          "error": "RuntimeError: SM4 candidate material is not authorized/supplied"
+        },
+        {
+          "path": "Content/CSV/ReddotCategoryConfig.uasset",
+          "error": "RuntimeError: SM4 candidate material is not authorized/supplied"
+        },
+        {
+          "path": "Content/CSV/ReddotCategoryConfig.uexp",
+          "error": "RuntimeError: SM4 candidate material is not authorized/supplied"
+        },
+        {
+          "path": "Content/CSV/TxMissionItem.uasset",
+          "error": "RuntimeError: SM4 candidate material is not authorized/supplied"
+        },
+        {
+          "path": "Content/CSV/TxMissionItem.uexp",
+          "error": "RuntimeError: SM4 candidate material is not authorized/supplied"
+        },
+        {
+          "path": "Content/CSV/UGCAssetParamPublishCfg.uasset",
+          "error": "RuntimeError: SM4 candidate material is not authorized/supplied"
+        },
+        {
+          "path": "Content/CSV/UGCAssetParamPublishCfg.uexp",
+          "error": "RuntimeError: SM4 candidate material is not authorized/supplied"
+        },
+        {
+          "path": "Content/CSV/XMJumpUrl.uasset",
+          "error": "RuntimeError: SM4 candidate material is not authorized/supplied"
+        },
+        {
+          "path": "Content/CSV/XMJumpUrl.uexp",
+          "error": "RuntimeError: SM4 candidate material is not authorized/supplied"
+        },
+        {
+          "path": "Content/CSV/InGame/EvoBase/CSV/GameGuideUIConfigBluehole.uasset",
+          "error": "RuntimeError: SM4 candidate material is not authorized/supplied"
+        },
+        {
+          "path": "Content/CSV/InGame/EvoBase/CSV/GameGuideUIConfigBluehole.uexp",
+          "error": "RuntimeError: SM4 candidate material is not authorized/supplied"
+        },
+        {
+          "path": "Content/CSV/InGame/EvoBase/CSV/Item_Fixed.uasset",
+          "error": "RuntimeError: SM4 candidate material is not authorized/supplied"
+        },
+        {
+          "path": "Content/CSV/InGame/EvoBase/CSV/Item_Fixed.uexp",
+          "error": "RuntimeError: SM4 candidate material is not authorized/supplied"
+        },
+        {
+          "path": "Content/CSV/InGame/EvoBase/CSV/TabContentConfig.uasset",
+          "error": "RuntimeError: SM4 candidate material is not authorized/supplied"
+        },
+        {
+          "path": "Content/CSV/InGame/EvoBase/CSV/TabContentConfig.uexp",
+          "error": "RuntimeError: SM4 candidate material is not authorized/supplied"
+        },
+        {
+          "path": "Content/CSV/InGame/PlanBT/CSV/llustratedGuideLevelCofig.uasset",
+          "error": "RuntimeError: SM4 candidate material is not authorized/supplied"
+        },
+        {
+          "path": "Content/CSV/InGame/PlanBT/CSV/llustratedGuideLevelCofig.uexp",
+          "error": "RuntimeError: SM4 candidate material is not authorized/supplied"
+        },
+        {
+          "path": "Content/CSV/InGame/TPlan/CSV/Item.uasset",
+          "error": "RuntimeError: SM4 candidate material is not authorized/supplied"
+        },
+        {
+          "path": "Content/CSV/InGame/TPlan/CSV/Item.uexp",
+          "error": "RuntimeError: SM4 candidate material is not authorized/supplied"
+        },
+        {
+          "path": "Content/CSV/JAPANKOREA/CardCollectionCardConfig.uasset",
+          "error": "RuntimeError: SM4 candidate material is not authorized/supplied"
+        },
+        {
+          "path": "Content/CSV/JAPANKOREA/CardCollectionCardConfig.uexp",
+          "error": "RuntimeError: SM4 candidate material is not authorized/supplied"
+        },
+        {
+          "path": "Content/CSV/JAPANKOREA/MainCityUISystem.uasset",
+          "error": "RuntimeError: SM4 candidate material is not authorized/supplied"
+        },
+        {
+          "path": "Content/CSV/JAPANKOREA/MainCityUISystem.uexp",
+          "error": "RuntimeError: SM4 candidate material is not authorized/supplied"
+        },
+        {
+          "path": "Content/CSV/JAPANKOREA/MainUISystem.uasset",
+          "error": "RuntimeError: SM4 candidate material is not authorized/supplied"
+        },
+        {
+          "path": "Content/CSV/JAPANKOREA/MainUISystem.uexp",
+          "error": "RuntimeError: SM4 candidate material is not authorized/supplied"
+        },
+        {
+          "path": "Content/Library/CreativeDL/IG3400/Arts_Player/Scene/mesh/Arts_Scenes/POIbig/Materials/MI_Atlantis_POIsamll_002_Water_4.uasset",
+          "error": "RuntimeError: SM4 candidate material is not authorized/supplied"
+        },
+        {
+          "path": "Content/Library/CreativeDL/IG3400/Arts_Player/Scene/mesh/Arts_Scenes/POIbig/Materials/MI_Atlantis_POIsamll_002_Water_4.uexp",
+          "error": "RuntimeError: SM4 candidate material is not authorized/supplied"
+        },
+        {
+          "path": "Content/Library/Res/Hero/ElementWater/Arts_Effect/Material/M_WaterWall_Ball_Inst1.uasset",
+          "error": "RuntimeError: SM4 candidate material is not authorized/supplied"
+        },
+        {
+          "path": "Content/Library/Res/Hero/ElementWater/Arts_Effect/Material/M_WaterWall_Ball_Inst1.uexp",
+          "error": "RuntimeError: SM4 candidate material is not authorized/supplied"
+        },
+        {
+          "path": "Content/Library/Res/Weapons/BubbleLauncher/Arts_Effect/Mat/M_P_Atlantis_NegWater_Ball_01_ZZQ_03.uasset",
+          "error": "RuntimeError: SM4 candidate material is not authorized/supplied"
+        },
+        {
+          "path": "Content/Library/Res/Weapons/BubbleLauncher/Arts_Effect/Mat/M_P_Atlantis_NegWater_Ball_01_ZZQ_03.uexp",
+          "error": "RuntimeError: SM4 candidate material is not authorized/supplied"
+        },
+        {
+          "path": "Content/Library/Res/Weapons/BubbleLauncher/Arts_Effect/Mat/M_P_Atlantis_PosWater_Ball_01_RF_06.uasset",
+          "error": "RuntimeError: SM4 candidate material is not authorized/supplied"
+        },
+        {
+          "path": "Content/Library/Res/Weapons/BubbleLauncher/Arts_Effect/Mat/M_P_Atlantis_PosWater_Ball_01_RF_06.uexp",
+          "error": "RuntimeError: SM4 candidate material is not authorized/supplied"
+        },
+        {
+          "path": "Content/Library/Res/Weapons/BubbleLauncher/Arts_Effect/Mat/M_P_Atlantis_PosWater_Wall_01_RF_06.uasset",
+          "error": "RuntimeError: SM4 candidate material is not authorized/supplied"
+        },
+        {
+          "path": "Content/Library/Res/Weapons/BubbleLauncher/Arts_Effect/Mat/M_P_Atlantis_PosWater_Wall_01_RF_06.uexp",
+          "error": "RuntimeError: SM4 candidate material is not authorized/supplied"
+        },
+        {
+          "path": "Content/Library/Res/Weapons/BubbleLauncher/Arts_Effect/Mat/M_WaterWall_Inst3.uasset",
+          "error": "RuntimeError: SM4 candidate material is not authorized/supplied"
+        },
+        {
+          "path": "Content/Library/Res/Weapons/BubbleLauncher/Arts_Effect/Mat/M_WaterWall_Inst3.uexp",
+          "error": "RuntimeError: SM4 candidate material is not authorized/supplied"
+        },
+        {
+          "path": "Content/Library/Res/Weapons/BubbleLauncher/Arts_Effect/Mat/M_WaterWall_Inst4.uasset",
+          "error": "RuntimeError: SM4 candidate material is not authorized/supplied"
+        },
+        {
+          "path": "Content/Library/Res/Weapons/BubbleLauncher/Arts_Effect/Mat/M_WaterWall_Inst4.uexp",
+          "error": "RuntimeError: SM4 candidate material is not authorized/supplied"
+        },
+        {
+          "path": "Content/Library/Res/Weapons/BubbleLauncher/Arts_Effect/Mat/M_WaterWall_Low2.uasset",
+          "error": "RuntimeError: SM4 candidate material is not authorized/supplied"
+        },
+        {
+          "path": "Content/Library/Res/Weapons/BubbleLauncher/Arts_Effect/Mat/M_WaterWall_Low2.uexp",
+          "error": "RuntimeError: SM4 candidate material is not authorized/supplied"
+        },
+        {
+          "path": "Content/Library/Res/Weapons/BubbleLauncher/Arts_Effect/Material/M_WaterWall_Ball_01.uasset",
+          "error": "RuntimeError: SM4 candidate material is not authorized/supplied"
+        },
+        {
+          "path": "Content/Library/Res/Weapons/BubbleLauncher/Arts_Effect/Material/M_WaterWall_Ball_01.uexp",
+          "error": "RuntimeError: SM4 candidate material is not authorized/supplied"
+        },
+        {
+          "path": "Content/Library/Res/Weapons/BubbleLauncher/Arts_Effect/Material/M_WaterWall_Ball_Translucent.uasset",
+          "error": "RuntimeError: SM4 candidate material is not authorized/supplied"
+        },
+        {
+          "path": "Content/Library/Res/Weapons/BubbleLauncher/Arts_Effect/Material/M_WaterWall_Ball_Translucent.uexp",
+          "error": "RuntimeError: SM4 candidate material is not authorized/supplied"
+        },
+        {
+          "path": "Content/Res/IG4300/Arts_Player/Characters/Animation/X-Suit/Jacket_3336_int/Parachute/Glider_int_050_Anim.uasset",
+          "error": "RuntimeError: SM4 candidate material is not authorized/supplied"
+        },
+        {
+          "path": "Content/Res/IG4300/Arts_Player/Characters/Animation/X-Suit/Jacket_3336_int/Parachute/Glider_int_050_Anim.uexp",
+          "error": "RuntimeError: SM4 candidate material is not authorized/supplied"
+        },
+        {
+          "path": "Content/Res/IG4300/Arts_PlayerBluePrints/Aircraft/Glider/050/BattleItemHandle_BP_Glider_int_050.uasset",
+          "error": "RuntimeError: SM4 candidate material is not authorized/supplied"
+        },
+        {
+          "path": "Content/Res/IG4300/Arts_PlayerBluePrints/Aircraft/Glider/050/BattleItemHandle_BP_Glider_int_050.uexp",
+          "error": "RuntimeError: SM4 candidate material is not authorized/supplied"
+        },
+        {
+          "path": "Content/Res/IG4500/Arts_Player/Arts_Effect/Weapon/WEP_AUG_int_077/Par/P_AUG_077_Impact_01.uasset",
+          "error": "RuntimeError: SM4 candidate material is not authorized/supplied"
+        },
+        {
+          "path": "Content/Res/IG4500/Arts_Player/Arts_Effect/Weapon/WEP_AUG_int_077/Par/P_AUG_077_Impact_01.uexp",
+          "error": "RuntimeError: SM4 candidate material is not authorized/supplied"
+        },
+        {
+          "path": "Content/Res/IG4600/Arts_Player/Arts_Effect/Weapon/WEP_DP28_int_081/Par/P_DP28_081_Impact_01.uasset",
+          "error": "RuntimeError: SM4 candidate material is not authorized/supplied"
+        },
+        {
+          "path": "Content/Res/IG4600/Arts_Player/Arts_Effect/Weapon/WEP_DP28_int_081/Par/P_DP28_081_Impact_01.uexp",
+          "error": "RuntimeError: SM4 candidate material is not authorized/supplied"
+        },
+        {
+          "path": "Content/Res/IG4600/Arts_Player/Arts_Effect/Weapon/WEP_Mini14_int_071/Par/P_Mini14_071_Impact_01.uasset",
+          "error": "RuntimeError: SM4 candidate material is not authorized/supplied"
+        },
+        {
+          "path": "Content/Res/IG4600/Arts_Player/Arts_Effect/Weapon/WEP_Mini14_int_071/Par/P_Mini14_071_Impact_01.uexp",
+          "error": "RuntimeError: SM4 candidate material is not authorized/supplied"
+        }
+      ],
+      "index_parse": {
+        "file_entries": 239,
+        "directory_records": 227,
+        "loaded_directories": 108,
+        "skipped_bad_refs": 0,
+        "skipped_bad_paths": 0,
+        "reader_cursor": 48692,
+        "index_length": 48704
+      }
+    },
+    "extracted": 163,
+    "lua_files": [
+      {
+        "path": "ShadowTrackerExtra/Content/Lua/client/config/pubgm_patch.lua",
+        "size": 1169,
+        "sha256": "d2fc2992d644dbbd6c68d3bb3430aeec619a4985156b1d13e2aa0c950e8c61b1",
+        "lua": true,
+        "magic": "2d2d202121212044"
+      },
+      {
+        "path": "ShadowTrackerExtra/Content/Lua/client/slua/umg/common/itemtips_panel.lua",
+        "size": 19683,
+        "sha256": "9483a1caa90d6548acbdfd8735a02dd9ce6658d0e78c413d6321cd1805e64143",
+        "lua": true,
+        "magic": "1b4c756153001993"
+      },
+      {
+        "path": "ShadowTrackerExtra/Content/Lua/client/slua/umg/Universal_Popup/TeamQuick_Reserve_Tips_UIBP_2.lua",
+        "size": 13272,
+        "sha256": "9ecc2cf24bbe405d0b247e1fedd379f3c4a091ff196b743581677ccb05678a68",
+        "lua": true,
+        "magic": "1b4c756153001993"
+      },
+      {
+        "path": "ShadowTrackerExtra/Content/Lua/client/slua/logic/ugc/logic_ugc_work_diagnosis.lua",
+        "size": 38839,
+        "sha256": "59095e416cc6c583a6b4b4a9473e3e1e261b28af28b3dc1f3013aed3f391dc39",
+        "lua": true,
+        "magic": "1b4c756153001993"
+      },
+      {
+        "path": "ShadowTrackerExtra/Content/Lua/client/slua/logic/ugc/PrefabMall/logic_ugc_prefab_mall_asset_mgr.lua",
+        "size": 52703,
+        "sha256": "a935b9da8d37bc4389c6944f6ac7f273cc3c39c64ea54385210d761e35d2b860",
+        "lua": true,
+        "magic": "1b4c756153001993"
+      },
+      {
+        "path": "ShadowTrackerExtra/Content/Lua/client/slua/logic/ugc/copilot/config_ugc_copilot.lua",
+        "size": 67843,
+        "sha256": "ce133e30ff3da8f2530c7dfd862dc07d087b15d00ddb32e06d568f4dc60eb181",
+        "lua": true,
+        "magic": "1b4c756153001993"
+      },
+      {
+        "path": "ShadowTrackerExtra/Content/Lua/client/slua/logic/weapon_strength/logic_weapon_strength.lua",
+        "size": 9022,
+        "sha256": "aacfaf2336fbebfc8ae2163dcb174cc7d38e60e8239f6567618d7c8220442211",
+        "lua": true,
+        "magic": "1b4c756153001993"
+      },
+      {
+        "path": "ShadowTrackerExtra/Content/Lua/client/slua/logic/roleInfo/logic_RoleInfoAvatarFrame.lua",
+        "size": 7961,
+        "sha256": "35011dacfa05a30bc7301ee793297585de68b8afe71749da757984b1be712989",
+        "lua": true,
+        "magic": "1b4c756153001993"
+      },
+      {
+        "path": "ShadowTrackerExtra/Content/Lua/client/slua/logic/chat_voice/logic_chat_voice_voice_msg.lua",
+        "size": 34097,
+        "sha256": "dd8314c7bc0f66271fe88d119b9e64588eacf6d62b324ce8c0adf51fcba266b0",
+        "lua": true,
+        "magic": "1b4c756153001993"
+      },
+      {
+        "path": "ShadowTrackerExtra/Content/Lua/GameLua/Mod/BRMod/Client/UMG/Parachute/ParachutingControl.lua",
+        "size": 41063,
+        "sha256": "6439a1addd71f346c942099bef11b3a1ed325895d41e9ccc20245f77ec0a7fd9",
+        "lua": true,
+        "magic": "1b4c756153001993"
+      },
+      {
+        "path": "ShadowTrackerExtra/Content/Lua/GameLua/Mod/CreativeBase/Gameplay/CreativeLua/Both/UGCLuaVehicleDefine.lua",
+        "size": 9680,
+        "sha256": "f0c2811969f694bb088b161b7ba1236af57f27fd6cfb1f33fa331c4a3b8b84e2",
+        "lua": true,
+        "magic": "1b4c756153001993"
+      },
+      {
+        "path": "ShadowTrackerExtra/Content/Lua/GameLua/Mod/CreativeBase/Gameplay/Object/CustomUIWidget/CreativeCustomTalentNode.lua",
+        "size": 25992,
+        "sha256": "99457076255945223fccae0a8ab534b84919ba8ed91ff1f7abcb45ab1c09fb95",
+        "lua": true,
+        "magic": "1b4c756153001993"
+      },
+      {
+        "path": "ShadowTrackerExtra/Content/Lua/GameLua/Mod/CreativeBase/Gameplay/Manager/CreativeActorDataManager.lua",
+        "size": 112890,
+        "sha256": "c1044b31f257b2f956b76a5785cc75993f8e44acc3a9fc7fe2f2e4dbe11522f3",
+        "lua": true,
+        "magic": "1b4c756153001993"
+      },
+      {
+        "path": "ShadowTrackerExtra/Content/Lua/GameLua/Mod/CreativeBase/Gameplay/Subsystem/WoWEditor/WoWEditorWorkAssetSubMgr.lua",
+        "size": 35826,
+        "sha256": "36b794638815513c5b94c7777fc8f80a8ed857629a7342773d9f35f909e01cb0",
+        "lua": true,
+        "magic": "1b4c756153001993"
+      },
+      {
+        "path": "ShadowTrackerExtra/Content/Lua/GameLua/Mod/CreativeBase/Gameplay/Subsystem/CustomTalent/CreativeModeTalentSubSystem.lua",
+        "size": 61972,
+        "sha256": "db6b021932f597d8f4cc08d4518eeb3325b895c169e3b53011596f481054ad9b",
+        "lua": true,
+        "magic": "1b4c756153001993"
+      },
+      {
+        "path": "ShadowTrackerExtra/Content/Lua/GameLua/Mod/CreativeBase/Gameplay/Subsystem/CreativeScript/CreativeScriptSubsystem.lua",
+        "size": 61263,
+        "sha256": "f25655ed067598d966825df9bf397182e5ee1813c176d57bf170d09b42246572",
+        "lua": true,
+        "magic": "1b4c756153001993"
+      },
+      {
+        "path": "ShadowTrackerExtra/Content/Lua/GameLua/Mod/Library/GamePlay/Avatar/Component/WeaponAvatarComponent.lua",
+        "size": 44711,
+        "sha256": "58526005f584ba0936646a7addeb4989c8479829a7659ddcfec6c178c16e0604",
+        "lua": true,
+        "magic": "1b4c756153001993"
+      },
+      {
+        "path": "ShadowTrackerExtra/Content/Lua/GameLua/Mod/Halloween6/Gameplay/Config/WindowBarrierLuaData_Livik.lua",
+        "size": 92091,
+        "sha256": "af799c5a4e96338e0a4959edfa95fb314c5d54e340dc75e503ad9a3eead1c34b",
+        "lua": true,
+        "magic": "1b4c756153001993"
+      },
+      {
+        "path": "ShadowTrackerExtra/Content/Lua/GameLua/Mod/Halloween6/Gameplay/Config/WindowBarrierLuaData_Baltic.lua",
+        "size": 264870,
+        "sha256": "4c9efda4bef9242de204b0ba24da188031ff3da34d679260631ff707b665b10c",
+        "lua": true,
+        "magic": "1b4c756153001993"
+      },
+      {
+        "path": "ShadowTrackerExtra/Content/Lua/GameLua/Mod/Halloween6/Client/Config/UIConfig.lua",
+        "size": 16899,
+        "sha256": "777fc5d686556bb403ba24ad2fe2f83d3549767ac1408b01e7aca1a0929f7d83",
+        "lua": true,
+        "magic": "1b4c756153001993"
+      }
+    ],
+    "nonlua_files": [
+      {
+        "path": "ShadowTrackerExtra/1.txt",
+        "size": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "lua": false,
+        "magic": ""
+      },
+      {
+        "path": "ShadowTrackerExtra/Content/Localization/Fixed/Game/ar/Game.locres",
+        "size": 6579,
+        "sha256": "6ad59710e28deb6210e4a91e6f9dbd31cc3fa9fb7ca24ee67aa7c2cd03f4842b",
+        "lua": false,
+        "magic": "0e147475674a03fc"
+      },
+      {
+        "path": "ShadowTrackerExtra/Content/Localization/Fixed/Game/my/Game.locres",
+        "size": 7771,
+        "sha256": "31d769d3721ad6715f66b41585245b0983aac5943a43daa0f5e6b5fee53c6c17",
+        "lua": false,
+        "magic": "0e147475674a03fc"
+      },
+      {
+        "path": "ShadowTrackerExtra/Content/Localization/Fixed/Game/ru/Game.locres",
+        "size": 7285,
+        "sha256": "9ad65d0ecc3a4bbe25cbc68597a865f6b62fc9ec794478053fe191d7e3794715",
+        "lua": false,
+        "magic": "0e147475674a03fc"
+      },
+      {
+        "path": "ShadowTrackerExtra/Content/Localization/Fixed/Game/th/Game.locres",
+        "size": 6335,
+        "sha256": "6a83725d64e23b7bc0286cc9c069b126ffabca9fdc977554f994b450048f4d0e",
+        "lua": false,
+        "magic": "0e147475674a03fc"
+      },
+      {
+        "path": "ShadowTrackerExtra/Content/Localization/Fixed/Game/es/Game.locres",
+        "size": 7461,
+        "sha256": "95b0ec6d1680298f1bc2dbf7a24ace01715ccead82249b117b5aa049096bc409",
+        "lua": false,
+        "magic": "0e147475674a03fc"
+      },
+      {
+        "path": "ShadowTrackerExtra/Content/Localization/Fixed/Game/hi/Game.locres",
+        "size": 6621,
+        "sha256": "e4376196843fab2e1440ec9ac5544edc891d3f0bb690eee388455974bec51838",
+        "lua": false,
+        "magic": "0e147475674a03fc"
+      },
+      {
+        "path": "ShadowTrackerExtra/Content/Localization/Fixed/Game/de/Game.locres",
+        "size": 7559,
+        "sha256": "a40e7e866a8fb321f67796aad05d906e1bf3aa8a080bdc4b9695b12fbdab6301",
+        "lua": false,
+        "magic": "0e147475674a03fc"
+      },
+      {
+        "path": "ShadowTrackerExtra/Content/Localization/Fixed/Game/ms/Game.locres",
+        "size": 7001,
+        "sha256": "5ad5fcfc77455736362d3a27a27b598cc2f2b77f51e014d31e8a934cfaf71b29",
+        "lua": false,
+        "magic": "0e147475674a03fc"
+      },
+      {
+        "path": "ShadowTrackerExtra/Content/Localization/Fixed/Game/ja/Game.locres",
+        "size": 4717,
+        "sha256": "0c44e39a82fef3743fa05481343355aa4ba74de6f9ac938b92e41173079e07fc",
+        "lua": false,
+        "magic": "0e147475674a03fc"
+      },
+      {
+        "path": "ShadowTrackerExtra/Content/Localization/Fixed/Game/zh/Game.locres",
+        "size": 3957,
+        "sha256": "586c3fa3ba5528106e32fe2d63ece0d822353e7840fb98c2233f09a2fd7f5ee6",
+        "lua": false,
+        "magic": "0e147475674a03fc"
+      },
+      {
+        "path": "ShadowTrackerExtra/Content/Localization/Fixed/Game/zh-HK/Game.locres",
+        "size": 3975,
+        "sha256": "0a86c38362bf91a4cac782fc69bdc2dad6285ad95374a0d0647967cb638852bc",
+        "lua": false,
+        "magic": "0e147475674a03fc"
+      },
+      {
+        "path": "ShadowTrackerExtra/Content/Localization/Fixed/Game/test/Game.locres",
+        "size": 3985,
+        "sha256": "37e2ff1cfefe4faab3370986afa423c335ac43af709b5643b19dc95495782e11",
+        "lua": false,
+        "magic": "0e147475674a03fc"
+      },
+      {
+        "path": "ShadowTrackerExtra/Content/Localization/Fixed/Game/pt/Game.locres",
+        "size": 7331,
+        "sha256": "f91be0c39d8cbff242e8cc43b20ff77ed87d16e8e344b516ee5378079b219b83",
+        "lua": false,
+        "magic": "0e147475674a03fc"
+      },
+      {
+        "path": "ShadowTrackerExtra/Content/Localization/Fixed/Game/zh-TW/Game.locres",
+        "size": 4009,
+        "sha256": "6cb38e68083b3c663a3cb16a932f9011280fe0d741584e1e7fe14fac98516c59",
+        "lua": false,
+        "magic": "0e147475674a03fc"
+      },
+      {
+        "path": "ShadowTrackerExtra/Content/Localization/Fixed/Game/ur/Game.locres",
+        "size": 7191,
+        "sha256": "baeeb147932f0f987a4cc7084dd94945cee86753c11e583bc8b61357a426aa34",
+        "lua": false,
+        "magic": "0e147475674a03fc"
+      },
+      {
+        "path": "ShadowTrackerExtra/Content/Localization/Fixed/Game/vi/Game.locres",
+        "size": 6715,
+        "sha256": "a8809a5605f19fa3a54e370fb68cbff197534be5afcf807f096a90b25fa4d18f",
+        "lua": false,
+        "magic": "0e147475674a03fc"
+      },
+      {
+        "path": "ShadowTrackerExtra/Content/Localization/Fixed/Game/id/Game.locres",
+        "size": 6935,
+        "sha256": "6b72ea8dc04cc3aefdc09df686c022797159a74e6a52546380041502bbd9dd85",
+        "lua": false,
+        "magic": "0e147475674a03fc"
+      },
+      {
+        "path": "ShadowTrackerExtra/Content/Localization/Fixed/Game/uz/Game.locres",
+        "size": 7733,
+        "sha256": "9dd8a32514e8c6e75aab79975158d8d6687bc9c92ec5a902c6097376cf474cd4",
+        "lua": false,
+        "magic": "0e147475674a03fc"
+      },
+      {
+        "path": "ShadowTrackerExtra/Content/Localization/Fixed/Game/ko/Game.locres",
+        "size": 4731,
+        "sha256": "53420a76f0d3d5b993e64435e71c34fb67d0ee9782d08bc6c6ba7147ec0448ad",
+        "lua": false,
+        "magic": "0e147475674a03fc"
+      },
+      {
+        "path": "ShadowTrackerExtra/Content/Localization/Fixed/Game/tr/Game.locres",
+        "size": 7075,
+        "sha256": "13f325d744c25fcafb630d6013e914ba4be18e7182efd9d30957c0e7b6ae6a47",
+        "lua": false,
+        "magic": "0e147475674a03fc"
+      },
+      {
+        "path": "ShadowTrackerExtra/Content/Localization/Fixed/Game/en/Game.locres",
+        "size": 6641,
+        "sha256": "a454517a3ed563b5e0afa6f164835996a5cda03a78654fec8d505cb68030819b",
+        "lua": false,
+        "magic": "0e147475674a03fc"
+      },
+      {
+        "path": "ShadowTrackerExtra/Content/Localization/Fixed/Game/fr/Game.locres",
+        "size": 7831,
+        "sha256": "42bd6fee820f33922465a2c925f351976a450b50884bd59bb0fee99dc170fb22",
+        "lua": false,
+        "magic": "0e147475674a03fc"
+      },
+      {
+        "path": "ShadowTrackerExtra/Content/Localization/Fixed/BLUEHOLE/Game/ar/Game.locres",
+        "size": 6579,
+        "sha256": "6ad59710e28deb6210e4a91e6f9dbd31cc3fa9fb7ca24ee67aa7c2cd03f4842b",
+        "lua": false,
+        "magic": "0e147475674a03fc"
+      },
+      {
+        "path": "ShadowTrackerExtra/Content/Localization/Fixed/BLUEHOLE/Game/my/Game.locres",
+        "size": 7771,
+        "sha256": "31d769d3721ad6715f66b41585245b0983aac5943a43daa0f5e6b5fee53c6c17",
+        "lua": false,
+        "magic": "0e147475674a03fc"
+      },
+      {
+        "path": "ShadowTrackerExtra/Content/Localization/Fixed/BLUEHOLE/Game/ru/Game.locres",
+        "size": 7285,
+        "sha256": "9ad65d0ecc3a4bbe25cbc68597a865f6b62fc9ec794478053fe191d7e3794715",
+        "lua": false,
+        "magic": "0e147475674a03fc"
+      },
+      {
+        "path": "ShadowTrackerExtra/Content/Localization/Fixed/BLUEHOLE/Game/th/Game.locres",
+        "size": 6335,
+        "sha256": "6a83725d64e23b7bc0286cc9c069b126ffabca9fdc977554f994b450048f4d0e",
+        "lua": false,
+        "magic": "0e147475674a03fc"
+      },
+      {
+        "path": "ShadowTrackerExtra/Content/Localization/Fixed/BLUEHOLE/Game/es/Game.locres",
+        "size": 7461,
+        "sha256": "95b0ec6d1680298f1bc2dbf7a24ace01715ccead82249b117b5aa049096bc409",
+        "lua": false,
+        "magic": "0e147475674a03fc"
+      },
+      {
+        "path": "ShadowTrackerExtra/Content/Localization/Fixed/BLUEHOLE/Game/hi/Game.locres",
+        "size": 6621,
+        "sha256": "e4376196843fab2e1440ec9ac5544edc891d3f0bb690eee388455974bec51838",
+        "lua": false,
+        "magic": "0e147475674a03fc"
+      },
+      {
+        "path": "ShadowTrackerExtra/Content/Localization/Fixed/BLUEHOLE/Game/de/Game.locres",
+        "size": 7559,
+        "sha256": "a40e7e866a8fb321f67796aad05d906e1bf3aa8a080bdc4b9695b12fbdab6301",
+        "lua": false,
+        "magic": "0e147475674a03fc"
+      },
+      {
+        "path": "ShadowTrackerExtra/Content/Localization/Fixed/BLUEHOLE/Game/ms/Game.locres",
+        "size": 7001,
+        "sha256": "5ad5fcfc77455736362d3a27a27b598cc2f2b77f51e014d31e8a934cfaf71b29",
+        "lua": false,
+        "magic": "0e147475674a03fc"
+      },
+      {
+        "path": "ShadowTrackerExtra/Content/Localization/Fixed/BLUEHOLE/Game/ja/Game.locres",
+        "size": 4717,
+        "sha256": "0c44e39a82fef3743fa05481343355aa4ba74de6f9ac938b92e41173079e07fc",
+        "lua": false,
+        "magic": "0e147475674a03fc"
+      },
+      {
+        "path": "ShadowTrackerExtra/Content/Localization/Fixed/BLUEHOLE/Game/zh/Game.locres",
+        "size": 3957,
+        "sha256": "586c3fa3ba5528106e32fe2d63ece0d822353e7840fb98c2233f09a2fd7f5ee6",
+        "lua": false,
+        "magic": "0e147475674a03fc"
+      },
+      {
+        "path": "ShadowTrackerExtra/Content/Localization/Fixed/BLUEHOLE/Game/zh-HK/Game.locres",
+        "size": 3975,
+        "sha256": "0a86c38362bf91a4cac782fc69bdc2dad6285ad95374a0d0647967cb638852bc",
+        "lua": false,
+        "magic": "0e147475674a03fc"
+      },
+      {
+        "path": "ShadowTrackerExtra/Content/Localization/Fixed/BLUEHOLE/Game/test/Game.locres",
+        "size": 3985,
+        "sha256": "37e2ff1cfefe4faab3370986afa423c335ac43af709b5643b19dc95495782e11",
+        "lua": false,
+        "magic": "0e147475674a03fc"
+      },
+      {
+        "path": "ShadowTrackerExtra/Content/Localization/Fixed/BLUEHOLE/Game/pt/Game.locres",
+        "size": 7331,
+        "sha256": "f91be0c39d8cbff242e8cc43b20ff77ed87d16e8e344b516ee5378079b219b83",
+        "lua": false,
+        "magic": "0e147475674a03fc"
+      },
+      {
+        "path": "ShadowTrackerExtra/Content/Localization/Fixed/BLUEHOLE/Game/zh-TW/Game.locres",
+        "size": 4009,
+        "sha256": "6cb38e68083b3c663a3cb16a932f9011280fe0d741584e1e7fe14fac98516c59",
+        "lua": false,
+        "magic": "0e147475674a03fc"
+      },
+      {
+        "path": "ShadowTrackerExtra/Content/Localization/Fixed/BLUEHOLE/Game/ur/Game.locres",
+        "size": 7191,
+        "sha256": "baeeb147932f0f987a4cc7084dd94945cee86753c11e583bc8b61357a426aa34",
+        "lua": false,
+        "magic": "0e147475674a03fc"
+      },
+      {
+        "path": "ShadowTrackerExtra/Content/Localization/Fixed/BLUEHOLE/Game/vi/Game.locres",
+        "size": 6715,
+        "sha256": "a8809a5605f19fa3a54e370fb68cbff197534be5afcf807f096a90b25fa4d18f",
+        "lua": false,
+        "magic": "0e147475674a03fc"
+      },
+      {
+        "path": "ShadowTrackerExtra/Content/Localization/Fixed/BLUEHOLE/Game/id/Game.locres",
+        "size": 6935,
+        "sha256": "6b72ea8dc04cc3aefdc09df686c022797159a74e6a52546380041502bbd9dd85",
+        "lua": false,
+        "magic": "0e147475674a03fc"
+      },
+      {
+        "path": "ShadowTrackerExtra/Content/Localization/Fixed/BLUEHOLE/Game/uz/Game.locres",
+        "size": 7733,
+        "sha256": "9dd8a32514e8c6e75aab79975158d8d6687bc9c92ec5a902c6097376cf474cd4",
+        "lua": false,
+        "magic": "0e147475674a03fc"
+      },
+      {
+        "path": "ShadowTrackerExtra/Content/Localization/Fixed/BLUEHOLE/Game/ko/Game.locres",
+        "size": 4731,
+        "sha256": "53420a76f0d3d5b993e64435e71c34fb67d0ee9782d08bc6c6ba7147ec0448ad",
+        "lua": false,
+        "magic": "0e147475674a03fc"
+      },
+      {
+        "path": "ShadowTrackerExtra/Content/Localization/Fixed/BLUEHOLE/Game/tr/Game.locres",
+        "size": 7075,
+        "sha256": "13f325d744c25fcafb630d6013e914ba4be18e7182efd9d30957c0e7b6ae6a47",
+        "lua": false,
+        "magic": "0e147475674a03fc"
+      },
+      {
+        "path": "ShadowTrackerExtra/Content/Localization/Fixed/BLUEHOLE/Game/en/Game.locres",
+        "size": 6641,
+        "sha256": "a454517a3ed563b5e0afa6f164835996a5cda03a78654fec8d505cb68030819b",
+        "lua": false,
+        "magic": "0e147475674a03fc"
+      },
+      {
+        "path": "ShadowTrackerExtra/Content/Localization/Fixed/BLUEHOLE/Game/fr/Game.locres",
+        "size": 7831,
+        "sha256": "42bd6fee820f33922465a2c925f351976a450b50884bd59bb0fee99dc170fb22",
+        "lua": false,
+        "magic": "0e147475674a03fc"
+      },
+      {
+        "path": "ShadowTrackerExtra/Content/Mod/TPlan/Arts_PlayerBluePrints/Pack/Pickup/BP_Activefile_Pickup.uexp",
+        "size": 3574,
+        "sha256": "ceac2924d2ad6856958313e8da5f838ea0e448b800a2003a686687076b564646",
+        "lua": false,
+        "magic": "4a00000000000000"
+      },
+      {
+        "path": "ShadowTrackerExtra/Content/Mod/TPlan/Arts_PlayerBluePrints/Pack/Pickup/BP_Activefile_Pickup.uasset",
+        "size": 5033,
+        "sha256": "0d4a9b807c4ef3ee78d0b663a0fcc47595094e2ce1c9754891fc158ddf55d699",
+        "lua": false,
+        "magic": "c1832a9ef9ffffff"
+      },
+      {
+        "path": "ShadowTrackerExtra/Content/Mod/TPlan/Arts_PlayerBluePrints/Pack/BluePrints/BP_Activefile_BattleItemHandle.uasset",
+        "size": 1694,
+        "sha256": "749b2440f0c89e521e6640dfbec98d06fd0b17777d6241facb5e7eff179ae78b",
+        "lua": false,
+        "magic": "c1832a9ef9ffffff"
+      },
+      {
+        "path": "ShadowTrackerExtra/Content/Mod/TPlan/Arts_PlayerBluePrints/Pack/BluePrints/BP_Activefile_BattleItemHandle.uexp",
+        "size": 117,
+        "sha256": "fb18f270d2120cb7a76a0d65ae5ec0757fb94582ceee8f6b06cc7b4c4339f727",
+        "lua": false,
+        "magic": "1200000000000000"
+      },
+      {
+        "path": "ShadowTrackerExtra/Content/Mod/TPlan/Arts_Scenes/TPlanD_Objects/KuangQu/SceneItem_int_888_04.uasset",
+        "size": 2540,
+        "sha256": "f80c30dbdd040a2ce8541e3d162ea643f244ae48df9633b8836bb939854d8c94",
+        "lua": false,
+        "magic": "c1832a9ef9ffffff"
+      },
+      {
+        "path": "ShadowTrackerExtra/Content/Mod/TPlan/Arts_Scenes/TPlanD_Objects/KuangQu/SceneItem_int_888_04.uexp",
+        "size": 46566,
+        "sha256": "89108388eb5839223516f46f796535311b2e36326ca0a447ddc4a173bc80e91a",
+        "lua": false,
+        "magic": "1a00000000000000"
+      },
+      {
+        "path": "ShadowTrackerExtra/Content/Mod/TPlan/Arts_Scenes/TPlanD_Objects/KuangQu/Materials/SceneItem_int_888_04.uasset",
+        "size": 1566,
+        "sha256": "9461b840c5eecf8fb5130f98f34b91cc9e0c15edb73c1aee8965101844467faa",
+        "lua": false,
+        "magic": "c1832a9ef9ffffff"
+      },
+      {
+        "path": "ShadowTrackerExtra/Content/Mod/TPlan/Arts_Scenes/TPlanD_Objects/KuangQu/Materials/SceneItem_int_888_04.uexp",
+        "size": 672,
+        "sha256": "ba21f20475bf81b9f985bf813c5f9478fd7f7f16dd33e112fc7e40f9bb24f1ae",
+        "lua": false,
+        "magic": "1700000000000000"
+      },
+      {
+        "path": "ShadowTrackerExtra/Content/Mod/CricketTeam/Arts_Scenes/Materials/MI_CSK_mesh_water.uexp",
+        "size": 1412,
+        "sha256": "57ac19d6d3d20be0fadfe982c0f57d341524a7040ef5dd30b1925551cab4522c",
+        "lua": false,
+        "magic": "1e00000000000000"
+      },
+      {
+        "path": "ShadowTrackerExtra/Content/Mod/CricketTeam/Arts_Scenes/Materials/MI_CSK_mesh_water.uasset",
+        "size": 1696,
+        "sha256": "85ab009138af96ba28435202c9ae96c0c09a30703d078adca9a4af7f143d3c91",
+        "lua": false,
+        "magic": "c1832a9ef9ffffff"
+      },
+      {
+        "path": "ShadowTrackerExtra/Content/Mod/Atlantis/Arts_Effect/Mat/MI_Atlants_Water_Generation_01_T_01.uasset",
+        "size": 2550,
+        "sha256": "82453654bb8ad46016ab04c67a0a437a2a305e0cb0c564bfa4dbf89e9e33172e",
+        "lua": false,
+        "magic": "c1832a9ef9ffffff"
+      },
+      {
+        "path": "ShadowTrackerExtra/Content/Mod/Atlantis/Arts_Effect/Mat/MI_Atlants_Water_Generation_01_T_01.uexp",
+        "size": 4565,
+        "sha256": "b70fc336880b8b883057dbff97b2a732e847ad160f8486636238793889ef2962",
+        "lua": false,
+        "magic": "2900000000000000"
+      },
+      {
+        "path": "ShadowTrackerExtra/Content/Mod/Atlantis/Arts_Effect/Materials/M_WaterWall_Ball_Inst1.uasset",
+        "size": 2556,
+        "sha256": "61451668de7087806c254f595d77cef94a41bd1181d218cea0590b76ee824ede",
+        "lua": false,
+        "magic": "c1832a9ef9ffffff"
+      },
+      {
+        "path": "ShadowTrackerExtra/Content/Mod/Atlantis/Arts_Effect/Materials/M_WaterWall_Ball_Inst1.uexp",
+        "size": 4565,
+        "sha256": "85528dd165496c58aaa0f8083f21edb7a2e6881797a9488c5b26f8e8a5637ea1",
+        "lua": false,
+        "magic": "2900000000000000"
+      },
+      {
+        "path": "ShadowTrackerExtra/Content/Mod/Atlantis/Arts_Scenes/POIsmall/Materials/MI_Atlantis_POIsamll_002_Water_2.uexp",
+        "size": 6576,
+        "sha256": "06bbafc787cc91c5dc6614b8a526b3ffc387b8f3af6b02a5f795c8d69eba92f1",
+        "lua": false,
+        "magic": "3300000000000000"
+      },
+      {
+        "path": "ShadowTrackerExtra/Content/Mod/Atlantis/Arts_Scenes/POIsmall/Materials/MI_Atlantis_POIsamll_002_Water_3.uasset",
+        "size": 3244,
+        "sha256": "0e71f69637dd8211bf1d847d6adebfb6fad1e81b171b62610573825bf7247169",
+        "lua": false,
+        "magic": "c1832a9ef9ffffff"
+      },
+      {
+        "path": "ShadowTrackerExtra/Content/Mod/Atlantis/Arts_Scenes/POIsmall/Materials/MI_Atlantis_POIsamll_002_Water_1.uexp",
+        "size": 7294,
+        "sha256": "30c55a28d00f03da88e3d50cb0f7378976607c159eb584ed0a64173f8422d44b",
+        "lua": false,
+        "magic": "3a00000000000000"
+      },
+      {
+        "path": "ShadowTrackerExtra/Content/Mod/Atlantis/Arts_Scenes/POIsmall/Materials/MI_Atlantis_POIsamll_002_Water_1.uasset",
+        "size": 3268,
+        "sha256": "ad565d06d14edcfdb1d74d176e75f2871d0d0a030190aad15db8bf8815e4821d",
+        "lua": false,
+        "magic": "c1832a9ef9ffffff"
+      },
+      {
+        "path": "ShadowTrackerExtra/Content/Mod/Atlantis/Arts_Scenes/POIsmall/Materials/MI_Atlantis_POIsamll_002_Water_3.uexp",
+        "size": 6961,
+        "sha256": "955ef8d177197e66bed63b999b4b405f76d8f9dfc83e0dabe1ada3aad5e8000b",
+        "lua": false,
+        "magic": "3a00000000000000"
+      },
+      {
+        "path": "ShadowTrackerExtra/Content/Mod/Atlantis/Arts_Scenes/POIsmall/Materials/MI_Atlantis_POIsamll_002_Water_2.uasset",
+        "size": 2890,
+        "sha256": "76153bc6891b56debb5ee88b8e8dbaa0abf6841be4788033ae90660725671662",
+        "lua": false,
+        "magic": "c1832a9ef9ffffff"
+      },
+      {
+        "path": "ShadowTrackerExtra/Content/Mod/Halloween4/Arts_Scenes/POIbig/Materials/MI_Atlantis_POIsamll_002_Water_4.uasset",
+        "size": 3237,
+        "sha256": "9c5a99147ed76e162bd686a0f500c310c815cc2fc388c80a3295846217617d85",
+        "lua": false,
+        "magic": "c1832a9ef9ffffff"
+      },
+      {
+        "path": "ShadowTrackerExtra/Content/Mod/Halloween4/Arts_Scenes/POIbig/Materials/MI_Atlantis_POIsamll_002_Water_3.uasset",
+        "size": 3275,
+        "sha256": "74b5b900e0cd942e0983e4dbd1cad1d403d7ce64e802000830d1bea9aaee0ae7",
+        "lua": false,
+        "magic": "c1832a9ef9ffffff"
+      },
+      {
+        "path": "ShadowTrackerExtra/Content/Mod/Halloween4/Arts_Scenes/POIbig/Materials/MI_Atlantis_POIsamll_002_Water_4.uexp",
+        "size": 6754,
+        "sha256": "c8fdc16dd0a4f8d876bf56bf2edd2f178bd22388a0024524107b1c566e34aa8f",
+        "lua": false,
+        "magic": "3800000000000000"
+      },
+      {
+        "path": "ShadowTrackerExtra/Content/Mod/Halloween4/Arts_Scenes/POIbig/Materials/MI_Atlantis_POIsamll_002_Water_3.uexp",
+        "size": 7096,
+        "sha256": "621793b9d692bf706c6719dfb4303c49f72efa3f34e37c4ca5e702c909fc5e3b",
+        "lua": false,
+        "magic": "3a00000000000000"
+      },
+      {
+        "path": "ShadowTrackerExtra/Content/Mod/PlanBTShooting/BluePrints/UI/MonsterHead_Shooting_UIBP.uasset",
+        "size": 76312,
+        "sha256": "23bbf017ebd73c98e564466636e67ca318bee64b2373cc65ed3d8b3f14943ed1",
+        "lua": false,
+        "magic": "c1832a9ef9ffffff"
+      },
+      {
+        "path": "ShadowTrackerExtra/Content/Mod/PlanBTShooting/BluePrints/UI/MonsterHead_Shooting_UIBP.uexp",
+        "size": 764775,
+        "sha256": "d86f5e222277aa82c9f86cc69f12ddf2b78fee14ae889108d51ccb855415d186",
+        "lua": false,
+        "magic": "e500000000000000"
+      },
+      {
+        "path": "ShadowTrackerExtra/Content/Mod/ThemeTDM/Arts_Scenes/POIsmall/Materials/MI_Atlantis_POIsamll_002_Water_2.uexp",
+        "size": 7094,
+        "sha256": "1f7255f70d6f74fac04546d67d36851198e6faef8a3a65d71fee7830a67f7c75",
+        "lua": false,
+        "magic": "3500000000000000"
+      },
+      {
+        "path": "ShadowTrackerExtra/Content/Mod/ThemeTDM/Arts_Scenes/POIsmall/Materials/MI_Atlantis_POIsamll_002_Water_2.uasset",
+        "size": 3054,
+        "sha256": "216c7cec88587fde7ae2a79008187e7fe1429b317ea61eb129fc5d7d3c686a98",
+        "lua": false,
+        "magic": "c1832a9ef9ffffff"
+      },
+      {
+        "path": "ShadowTrackerExtra/Content/Mod/ThemeTDM/Arts_Scenes/POIbig/Materials/MI_Atlantis_POIsamll_002_Water_4.uasset",
+        "size": 3233,
+        "sha256": "0759b8a36c092aa5cef85e0704a18fbbb1620a13016d5f46457a1cacc93902b2",
+        "lua": false,
+        "magic": "c1832a9ef9ffffff"
+      },
+      {
+        "path": "ShadowTrackerExtra/Content/Mod/ThemeTDM/Arts_Scenes/POIbig/Materials/MI_Atlantis_POIsamll_002_Water_3.uasset",
+        "size": 3271,
+        "sha256": "f24ab12f4aabb3da1b026fdfbd81eb511f3d1d26481434d0f624d93e3b74fcf8",
+        "lua": false,
+        "magic": "c1832a9ef9ffffff"
+      },
+      {
+        "path": "ShadowTrackerExtra/Content/Mod/ThemeTDM/Arts_Scenes/POIbig/Materials/MI_Atlantis_POIsamll_002_Water_4.uexp",
+        "size": 6754,
+        "sha256": "e2bd3e150c47951ab0c67b2504ac84bfe63c1171cc1dbcfcabeb06ab327057a6",
+        "lua": false,
+        "magic": "3800000000000000"
+      },
+      {
+        "path": "ShadowTrackerExtra/Content/Mod/ThemeTDM/Arts_Scenes/POIbig/Materials/MI_Atlantis_POIsamll_002_Water_3.uexp",
+        "size": 7096,
+        "sha256": "075360da17757d185efef6073a684a2f792a24f86b0a6802a09a2445ff7b16af",
+        "lua": false,
+        "magic": "3a00000000000000"
+      },
+      {
+        "path": "ShadowTrackerExtra/Content/Mod/PlanBT/BluePrints/UI/MonsterHead_UIBP.uasset",
+        "size": 13345,
+        "sha256": "232ac3c69cb969aafe359d9fe18764152e329e37e613eb85feac2f4d23b27901",
+        "lua": false,
+        "magic": "c1832a9ef9ffffff"
+      },
+      {
+        "path": "ShadowTrackerExtra/Content/Mod/PlanBT/BluePrints/UI/GalleryHead_UIBP.uexp",
+        "size": 8407,
+        "sha256": "48b2d34da9244229e9b59e50b923af5ed9877ad8fedede3b6bc90c7f77da5373",
+        "lua": false,
+        "magic": "5f00000000000000"
+      },
+      {
+        "path": "ShadowTrackerExtra/Content/Mod/PlanBT/BluePrints/UI/BT_HealthBar_UIBP.uasset",
+        "size": 6508,
+        "sha256": "3b80e35aff45cb15f9837ee0ddc96bafec5233e893a5b36fb40b0db4d02f35d3",
+        "lua": false,
+        "magic": "c1832a9ef9ffffff"
+      },
+      {
+        "path": "ShadowTrackerExtra/Content/Mod/PlanBT/BluePrints/UI/Quality_UIBP.uasset",
+        "size": 10998,
+        "sha256": "3daec22cfb359af7ada296ba7a6b702ae6849de213d2d3a9c47a8127724a2aa2",
+        "lua": false,
+        "magic": "c1832a9ef9ffffff"
+      },
+      {
+        "path": "ShadowTrackerExtra/Content/Mod/PlanBT/BluePrints/UI/Quality_UIBP.uexp",
+        "size": 13180,
+        "sha256": "220386db1d0f815bdbc35c9d0fb0ecf618dcc521c4e638b3fab1c87da02fc257",
+        "lua": false,
+        "magic": "3700000000000000"
+      },
+      {
+        "path": "ShadowTrackerExtra/Content/Mod/PlanBT/BluePrints/UI/MonsterHead_UIBP.uexp",
+        "size": 8407,
+        "sha256": "77eeaca1f77b62125abb06e88d3d123ac69acb9828c5c19f15321bade9ff4a4c",
+        "lua": false,
+        "magic": "5f00000000000000"
+      },
+      {
+        "path": "ShadowTrackerExtra/Content/Mod/PlanBT/BluePrints/UI/GalleryHead_UIBP.uasset",
+        "size": 13345,
+        "sha256": "4660106409bdec703d107b4993ce502c5c311acd0ce3be40771929fcfaddd22c",
+        "lua": false,
+        "magic": "c1832a9ef9ffffff"
+      },
+      {
+        "path": "ShadowTrackerExtra/Content/Mod/PlanBT/BluePrints/UI/BT_HealthBar_UIBP.uexp",
+        "size": 5487,
+        "sha256": "cff2ee5c0a7f3830f37744fdd4b86ef3fc61c11de018774e8f8c629048515b35",
+        "lua": false,
+        "magic": "4200000000000000"
+      },
+      {
+        "path": "ShadowTrackerExtra/Content/Mod/PlanBT/BluePrints/UI/IllustratedGuide/PlanBT_IllustratedGuide_Popup_UIBP.uexp",
+        "size": 13689,
+        "sha256": "1991d945ae7272c52048197b530d7d4bedf5954e1da9bd39fb97cac8f319782a",
+        "lua": false,
+        "magic": "7100000000000000"
+      },
+      {
+        "path": "ShadowTrackerExtra/Content/Mod/PlanBT/BluePrints/UI/IllustratedGuide/PlanBT_IllustratedGuide_Popup_UIBP.uasset",
+        "size": 16256,
+        "sha256": "a6a163aa98c011c65ba17307ffbe02c89cae1846ab09570d6cdaeac74ad97b40",
+        "lua": false,
+        "magic": "c1832a9ef9ffffff"
+      },
+      {
+        "path": "ShadowTrackerExtra/Content/Mod/PlanBT/BluePrints/UI/IllustratedGuide/Item/PlanBT_IllustratedGuide_Item_UIBP.uasset",
+        "size": 12708,
+        "sha256": "369130bfc064a6680d677e4a2e1562f6e6f1e14dba9d370c37efe6325c6d0fd6",
+        "lua": false,
+        "magic": "c1832a9ef9ffffff"
+      },
+      {
+        "path": "ShadowTrackerExtra/Content/Mod/PlanBT/BluePrints/UI/IllustratedGuide/Item/PlanBT_IllustratedGuide_Item_UIBP.uexp",
+        "size": 11346,
+        "sha256": "b9383cc18d486c5ba4a7e450fb6ac53cf6c9d1c70b0c61827e19e1abb64b70a6",
+        "lua": false,
+        "magic": "6d00000000000000"
+      },
+      {
+        "path": "ShadowTrackerExtra/Content/Mod/PlanS2022/Arts_Scenes/Matrials/MI_PMGC_New_Word_01.uexp",
+        "size": 1026138,
+        "sha256": "fe96120c089b51d29bd06f441f786eee86c0cb451409396039776e44c01137c3",
+        "lua": false,
+        "magic": "6300000000000000"
+      },
+      {
+        "path": "ShadowTrackerExtra/Content/Mod/PlanS2022/Arts_Scenes/Matrials/MI_PMGC_LOGO_Door_01.uexp",
+        "size": 415957,
+        "sha256": "f1880aa8da403176c882c4dba62728272905d12e28b67ffbdd6e3fe65cd13335",
+        "lua": false,
+        "magic": "5500000000000000"
+      },
+      {
+        "path": "ShadowTrackerExtra/Content/Mod/PlanS2022/Arts_Scenes/Matrials/MI_PMGC_LOGO_Door_01.uasset",
+        "size": 5931,
+        "sha256": "ef0d1fb7b553263da711ef01aef94c1d091f4289800098920aea72ca8b6c8c92",
+        "lua": false,
+        "magic": "c1832a9ef9ffffff"
+      },
+      {
+        "path": "ShadowTrackerExtra/Content/Mod/PlanS2022/Arts_Scenes/Matrials/MI_PMGC_Lamp_02.uasset",
+        "size": 8455,
+        "sha256": "853837d49997911f2e75e040308e5a87b8b2000aff270c2b731e0891e6fcefe3",
+        "lua": false,
+        "magic": "c1832a9ef9ffffff"
+      },
+      {
+        "path": "ShadowTrackerExtra/Content/Mod/PlanS2022/Arts_Scenes/Matrials/MI_PMGC_Ground_02.uasset",
+        "size": 5839,
+        "sha256": "c8f37787af179be1d05ef0fce4e6d3488ddd5702a20d227d24687881c4b11de8",
+        "lua": false,
+        "magic": "c1832a9ef9ffffff"
+      },
+      {
+        "path": "ShadowTrackerExtra/Content/Mod/PlanS2022/Arts_Scenes/Matrials/MI_PMGC_New_Word_01.uasset",
+        "size": 8426,
+        "sha256": "ab78626c13ccb5e9905ca0f421b4d2a73500c0c08be9dff090abd9bfe1875ea8",
+        "lua": false,
+        "magic": "c1832a9ef9ffffff"
+      },
+      {
+        "path": "ShadowTrackerExtra/Content/Mod/PlanS2022/Arts_Scenes/Matrials/MI_PMGC_Ground_02.uexp",
+        "size": 436696,
+        "sha256": "b19976d2bd3d4e23470ec11c23f1c496fa8b510e89e559d542f24732dbf51370",
+        "lua": false,
+        "magic": "5600000000000000"
+      },
+      {
+        "path": "ShadowTrackerExtra/Content/Mod/PlanS2022/Arts_Scenes/Matrials/MI_PMGC_New_Ground_LOGO_01.uexp",
+        "size": 415687,
+        "sha256": "53a5474085ae4f9a70c6de1b63fd7ed9f7005f9842ddb1ac74899fb275c6dc19",
+        "lua": false,
+        "magic": "5400000000000000"
+      },
+      {
+        "path": "ShadowTrackerExtra/Content/Mod/PlanS2022/Arts_Scenes/Matrials/MI_PMGC_Word_01.uasset",
+        "size": 8566,
+        "sha256": "82814d41229c179a6fab67448964cfe7beed33bb150cca3549881c9686cc62a0",
+        "lua": false,
+        "magic": "c1832a9ef9ffffff"
+      },
+      {
+        "path": "ShadowTrackerExtra/Content/Mod/PlanS2022/Arts_Scenes/Matrials/MI_PMGC_Word_01.uexp",
+        "size": 1068177,
+        "sha256": "4d83bc80b09f4c7713e908e6df06108e4edd23b46b037d180810c30cb5d1990c",
+        "lua": false,
+        "magic": "6400000000000000"
+      },
+      {
+        "path": "ShadowTrackerExtra/Content/Mod/PlanS2022/Arts_Scenes/Matrials/MI_PMGC_New_Ground_LOGO_01.uasset",
+        "size": 5795,
+        "sha256": "a33b7a08f82604fc0a5e71d5655aa50e91612256b5fb80bdd779d3bc8cf6eb9b",
+        "lua": false,
+        "magic": "c1832a9ef9ffffff"
+      },
+      {
+        "path": "ShadowTrackerExtra/Content/Mod/PlanS2022/Arts_Scenes/Matrials/MI_PMGC_Lamp_02.uexp",
+        "size": 1067331,
+        "sha256": "505eb837164b02cce284deffcb000e2f35c70281cab1bdb129d5c9a45da1d8b8",
+        "lua": false,
+        "magic": "6300000000000000"
+      },
+      {
+        "path": "ShadowTrackerExtra/Content/Mod/PlanS2022/Arts_Scenes/Matrials/MI_PMGC_New_Ground_02.uasset",
+        "size": 5785,
+        "sha256": "dd210decf94422489303942a6d1f5b4ec9429373bda4943266bcb8544d2ba454",
+        "lua": false,
+        "magic": "c1832a9ef9ffffff"
+      },
+      {
+        "path": "ShadowTrackerExtra/Content/Mod/PlanS2022/Arts_Scenes/Matrials/MI_PMGC_New_Ground_02.uexp",
+        "size": 415444,
+        "sha256": "78cea1fd065e55ae9c5d4f866bd2596c454fb688e63c5ce2c29763f7d5f37326",
+        "lua": false,
+        "magic": "5400000000000000"
+      },
+      {
+        "path": "ShadowTrackerExtra/Content/Mod/Lobby/Split/TeamQuick/Lobby_InviteFriend_TeamQuick_Guide_UIBP.uexp",
+        "size": 347178,
+        "sha256": "2c4b27775c0e1063b46667971670a15a6cac7515dd7bb67421deec87cb402b9e",
+        "lua": false,
+        "magic": "e700000000000000"
+      },
+      {
+        "path": "ShadowTrackerExtra/Content/Mod/Lobby/Split/TeamQuick/Lobby_InviteFriend_TeamQuick_UIBP.uasset",
+        "size": 101871,
+        "sha256": "6c98b96263c47e26dc10da5abe2b42f1503960de3427d78b0b9493747de23780",
+        "lua": false,
+        "magic": "c1832a9ef9ffffff"
+      },
+      {
+        "path": "ShadowTrackerExtra/Content/Mod/Lobby/Split/TeamQuick/Lobby_InviteFriend_TeamQuick_Guide_UIBP.uasset",
+        "size": 51792,
+        "sha256": "95436ac1e6e507570f199ad15496f34877d797eac1ec3f8e96b0369082644523",
+        "lua": false,
+        "magic": "c1832a9ef9ffffff"
+      },
+      {
+        "path": "ShadowTrackerExtra/Content/Mod/Lobby/Split/TeamQuick/Lobby_InviteFriend_TeamQuick_UIBP.uexp",
+        "size": 318642,
+        "sha256": "9e01e0720ea4a1862a9c3f8c8d34fd3ca4a3a1e40e14b7da4cfe1513bdccbbef",
+        "lua": false,
+        "magic": "7b01000000000000"
+      },
+      {
+        "path": "ShadowTrackerExtra/Content/Mod/Lobby/Split/TeamQuick/Item/Lobby_TeamQuick_OneClickTeamUp_UIBP.uasset",
+        "size": 30580,
+        "sha256": "2afdbbcb15027a99a819141e6ba147bfb399b3e6a0a27c293ed5ac0a9d2e490c",
+        "lua": false,
+        "magic": "c1832a9ef9ffffff"
+      },
+      {
+        "path": "ShadowTrackerExtra/Content/Mod/Lobby/Split/TeamQuick/Item/Lobby_TeamQuick_OneClickTeamUp_UIBP.uexp",
+        "size": 82080,
+        "sha256": "b90a0d9d25d36b1186f67a8edecb70422787b0aebeb28e1b5599403a064c9845",
+        "lua": false,
+        "magic": "f500000000000000"
+      },
+      {
+        "path": "ShadowTrackerExtra/Content/Mod/Halloween6/Maps/PUBG_Baltic/Halloween6_militarybase_DSForceLoad.umap",
+        "size": 170452,
+        "sha256": "c7ee47f2a0d457ca93c3fecd4567512c9df59d555659f466392c62b6824413fa",
+        "lua": false,
+        "magic": "c1832a9ef9ffffff"
+      },
+      {
+        "path": "ShadowTrackerExtra/Content/Mod/Halloween6/Maps/PUBG_Baltic/Halloween6_militarybase_DSForceLoad.uexp",
+        "size": 318709,
+        "sha256": "2723a4b392d9eaabb5adcb7a0eb625e2888e7570f1ca67284fa259b294129f37",
+        "lua": false,
+        "magic": "0c02000000000000"
+      },
+      {
+        "path": "ShadowTrackerExtra/Content/Mod/Halloween6/Maps/PUBG_Baltic/Baltic_Object/Baltic_Object_x5y4_Halloween6.uexp",
+        "size": 287383,
+        "sha256": "1063452a62b0c399b1394fdbdbab86ec0c42ca2aeef875a173a7d9086b4a092c",
+        "lua": false,
+        "magic": "a300000000000000"
+      },
+      {
+        "path": "ShadowTrackerExtra/Content/Mod/Halloween6/Maps/PUBG_Baltic/Baltic_Object/Baltic_Object_x5y1_Halloween6.umap",
+        "size": 149512,
+        "sha256": "739b7717b64903b30cf9f513350c0fbe18dff69800919e2d4bb3f8cb6f7f87c7",
+        "lua": false,
+        "magic": "c1832a9ef9ffffff"
+      },
+      {
+        "path": "ShadowTrackerExtra/Content/Mod/Halloween6/Maps/PUBG_Baltic/Baltic_Object/Baltic_Object_x5y4_Halloween6.umap",
+        "size": 77157,
+        "sha256": "36296cc93e2e95126762e684ad233b660f9460933d493709fac28de8128f6251",
+        "lua": false,
+        "magic": "c1832a9ef9ffffff"
+      },
+      {
+        "path": "ShadowTrackerExtra/Content/Mod/Halloween6/Maps/PUBG_Baltic/Baltic_Object/Baltic_Object_x5y1_Halloween6.uexp",
+        "size": 453233,
+        "sha256": "b3963000f968553ab5bba4e27bb0eb23c2db44c7156acf929037c00cf5f46450",
+        "lua": false,
+        "magic": "2201000000000000"
+      },
+      {
+        "path": "ShadowTrackerExtra/Content/Mod/Halloween6/BluePrints/UI/Quest/ContentNWTips_UIBP.uexp",
+        "size": 261099,
+        "sha256": "d6a31352d942a84b8edd36545025bcb38405f7119e48ab175363803d3658a043",
+        "lua": false,
+        "magic": "f000000000000000"
+      },
+      {
+        "path": "ShadowTrackerExtra/Content/Mod/Halloween6/BluePrints/UI/Quest/ContentNWTips_UIBP.uasset",
+        "size": 47299,
+        "sha256": "32788aa3164b86dec660c4f504d1dd36be00e726d65ab131ccba82254b16a927",
+        "lua": false,
+        "magic": "c1832a9ef9ffffff"
+      },
+      {
+        "path": "ShadowTrackerExtra/Content/Mod/Halloween6/Arts_Scenes/Object/Materials/MI_Halloween6_Building_fountain_Water_01.uexp",
+        "size": 7096,
+        "sha256": "621793b9d692bf706c6719dfb4303c49f72efa3f34e37c4ca5e702c909fc5e3b",
+        "lua": false,
+        "magic": "3a00000000000000"
+      },
+      {
+        "path": "ShadowTrackerExtra/Content/Mod/Halloween6/Arts_Scenes/Object/Materials/MI_Halloween6_Building_fountain_Water_01.uasset",
+        "size": 3295,
+        "sha256": "04d6410defb64eaac1bcbe3c5d6b2aa6bb7b8327214362845f72d352114e9448",
+        "lua": false,
+        "magic": "c1832a9ef9ffffff"
+      },
+      {
+        "path": "ShadowTrackerExtra/Content/Mod/Halloween6/Arts_Scenes/Water/M_460_Water_WaterOil_Opaque_Inst.uexp",
+        "size": 168710,
+        "sha256": "9a27cadcc5ec0dc71057797f0395bcb960585097109377b171296f2d1d6f776e",
+        "lua": false,
+        "magic": "4700000000000000"
+      },
+      {
+        "path": "ShadowTrackerExtra/Content/Mod/Halloween6/Arts_Scenes/Water/M_460_Water_WaterOil_Opaque_Inst.uasset",
+        "size": 4799,
+        "sha256": "18d5c7dd061472873768895aff62c170d06efb56b18bc19abd8314fac8ae7f88",
+        "lua": false,
+        "magic": "c1832a9ef9ffffff"
+      },
+      {
+        "path": "ShadowTrackerExtra/Content/Arts/UI/TableIcons/ItemIcon/TPlan/Item/TPlan_Icon_Activefile_256.uasset",
+        "size": 840,
+        "sha256": "39fe98e571142c0676b9812aaf94dd2c8a22b69beecfe628d3c836f662942f8b",
+        "lua": false,
+        "magic": "c1832a9ef9ffffff"
+      },
+      {
+        "path": "ShadowTrackerExtra/Content/Arts/UI/TableIcons/ItemIcon/TPlan/Item/TPlan_Icon_Activefile_128.uasset",
+        "size": 840,
+        "sha256": "d130af603363637ba3cc8744c39a7f7c4daedd47ceaa4668503c5c614c6fd8ff",
+        "lua": false,
+        "magic": "c1832a9ef9ffffff"
+      },
+      {
+        "path": "ShadowTrackerExtra/Content/Arts/UI/TableIcons/ItemIcon/TPlan/Item/TPlan_Icon_Activefile_256.uexp",
+        "size": 65812,
+        "sha256": "9a761a8ed8b5f383b9d18feadbeeb06a22b6b51a5f2b51963360c7335319701f",
+        "lua": false,
+        "magic": "0700000000000000"
+      },
+      {
+        "path": "ShadowTrackerExtra/Content/Arts/UI/TableIcons/ItemIcon/TPlan/Item/TPlan_Icon_Activefile_128.uexp",
+        "size": 16660,
+        "sha256": "38ba50a41d64982106c36a95c93b410231ccdc64ca74340d8c41d08de3a423e2",
+        "lua": false,
+        "magic": "0700000000000000"
+      },
+      {
+        "path": "ShadowTrackerExtra/Content/Res/IG3300/Arts_Player/Arts_Effect/Avatar/Jacket_2830_int/Mat/M_Tunnel.uasset",
+        "size": 3614,
+        "sha256": "630aaaea22328e9cab750d91a4ba883b57ced75ca4691ff3c02391944a6be4be",
+        "lua": false,
+        "magic": "c1832a9ef9ffffff"
+      },
+      {
+        "path": "ShadowTrackerExtra/Content/Res/IG3300/Arts_Player/Arts_Effect/Avatar/Jacket_2830_int/Mat/M_Tunnel.uexp",
+        "size": 155190,
+        "sha256": "cddde90de348caf2df9f3d729bfd379139d7a71b04cf6c1f43b76cf5f5b97ee4",
+        "lua": false,
+        "magic": "4500000000000000"
+      },
+      {
+        "path": "ShadowTrackerExtra/Content/Res/IG2700/Arts_Player/Characters/Mat/M_WaterWall_Inst2.uasset",
+        "size": 4214,
+        "sha256": "2601bd6e62bda9b53f61642872b4fdd74eadc673ce7874d1e1199f265973d4a6",
+        "lua": false,
+        "magic": "c1832a9ef9ffffff"
+      },
+      {
+        "path": "ShadowTrackerExtra/Content/Res/IG2700/Arts_Player/Characters/Mat/M_WaterWall_Low2.uexp",
+        "size": 128613,
+        "sha256": "6a6ba6d6efc62f0958df7df9060750052bb12ab05dc31ac4b18bfa5dce97865f",
+        "lua": false,
+        "magic": "2a00000000000000"
+      },
+      {
+        "path": "ShadowTrackerExtra/Content/Res/IG2700/Arts_Player/Characters/Mat/M_WaterWall_Inst2.uexp",
+        "size": 242904,
+        "sha256": "65c06676d635af207a03d4c753f5715e04b8eff9f99c16844236b57a45fc5425",
+        "lua": false,
+        "magic": "4a00000000000000"
+      },
+      {
+        "path": "ShadowTrackerExtra/Content/Res/IG2700/Arts_Player/Characters/Mat/M_WaterWall_Low2.uasset",
+        "size": 2423,
+        "sha256": "98dd5e7eb7b7a825069e7c24255228f7a7a84042c31957ec6fec54038404c59c",
+        "lua": false,
+        "magic": "c1832a9ef9ffffff"
+      },
+      {
+        "path": "ShadowTrackerExtra/Content/Res/IG2700/Arts_Player/Characters/Mat/M_WaterWall_Low.uexp",
+        "size": 39287,
+        "sha256": "d67d716e85045c8e106e6346159732fb900325a4b0fc3dd80e5542aa45b5c3d7",
+        "lua": false,
+        "magic": "2600000000000000"
+      },
+      {
+        "path": "ShadowTrackerExtra/Content/Res/IG2700/Arts_Player/Characters/Mat/M_WaterWall_Low.uasset",
+        "size": 2377,
+        "sha256": "4468fecab772545fa7ad1c49cccb8ed73bfcddf5c349e12f268764bbb2067e69",
+        "lua": false,
+        "magic": "c1832a9ef9ffffff"
+      },
+      {
+        "path": "ShadowTrackerExtra/Content/Arts_Scenes/Textures/Water/T_Foam_D.uasset",
+        "size": 718,
+        "sha256": "2b9c700cb71b740d3ccad9a8915ac388d049092e3ac91e88c4d09eeee775e7a0",
+        "lua": false,
+        "magic": "c1832a9ef9ffffff"
+      },
+      {
+        "path": "ShadowTrackerExtra/Content/Arts_Scenes/Textures/Water/T_Water_01_N.uexp",
+        "size": 589,
+        "sha256": "28dbd2008e6e20fdf78189b12b20c7d5f88ddf71fbc78c429c81fe36957e1ea5",
+        "lua": false,
+        "magic": "0900000000000000"
+      },
+      {
+        "path": "ShadowTrackerExtra/Content/Arts_Scenes/Textures/Water/T_Foam_D.uexp",
+        "size": 490,
+        "sha256": "6df49212a6b4d367fc915197848659a4c76402decef7ac186b4aa1a13618ce9a",
+        "lua": false,
+        "magic": "0600000000000000"
+      },
+      {
+        "path": "ShadowTrackerExtra/Content/Arts_Scenes/Textures/Water/T_Foam_D.ubulk",
+        "size": 43704,
+        "sha256": "451d0f509cc65048023bb063b8b5e7a097336a3a9e7142f9e72f1d57e0a9b76b",
+        "lua": false,
+        "magic": "486070222082b830"
+      },
+      {
+        "path": "ShadowTrackerExtra/Content/Arts_Scenes/Textures/Water/T_Water_01_N.uasset",
+        "size": 865,
+        "sha256": "31d2efcd947edfc8d5ee0ab9950df40111961adc543f1b65c54f722ced085b33",
+        "lua": false,
+        "magic": "c1832a9ef9ffffff"
+      },
+      {
+        "path": "ShadowTrackerExtra/Content/Arts_Scenes/Textures/Water/T_Water_01_N.ubulk",
+        "size": 174776,
+        "sha256": "83a225852cd0d541fab371becce3ea46c2f9f0ec7dd67d1b995094c24f03637e",
+        "lua": false,
+        "magic": "b381fb3781f3113e"
+      },
+      {
+        "path": "ShadowTrackerExtra/Content/Arts_Scenes/Lobby/Lobby_GoldenSuitShopping_330/M_Stage_Inst.uexp",
+        "size": 175458,
+        "sha256": "4ba28bf9f11a70d5a65985bf459b095b13350af82be36d11848e31648e628835",
+        "lua": false,
+        "magic": "5500000000000000"
+      },
+      {
+        "path": "ShadowTrackerExtra/Content/Arts_Scenes/Lobby/Lobby_GoldenSuitShopping_330/M_Stage_Inst_01.uexp",
+        "size": 234604,
+        "sha256": "9d860dd5033e3bcd48c364ed4aa8b22042fb58fe4e99fe87d73d3c5604214578",
+        "lua": false,
+        "magic": "4e00000000000000"
+      },
+      {
+        "path": "ShadowTrackerExtra/Content/Arts_Scenes/Lobby/Lobby_GoldenSuitShopping_330/M_Stage_Inst_01.uasset",
+        "size": 4704,
+        "sha256": "129c8ed4bf2b0e44705130385074e1818c0842a8cac0b4a8126b36f796ec52c9",
+        "lua": false,
+        "magic": "c1832a9ef9ffffff"
+      },
+      {
+        "path": "ShadowTrackerExtra/Content/Arts_Scenes/Lobby/Lobby_GoldenSuitShopping_330/M_Stage_Inst.uasset",
+        "size": 4610,
+        "sha256": "f7678d7978d2466f4d40b4787c8435f36ea7e5b2224e43f3aa23654726756de2",
+        "lua": false,
+        "magic": "c1832a9ef9ffffff"
+      }
+    ],
+    "out_dir": "/workspace/pak_extract/FREE PAK 4.6 V1__ANDROID__core_patch_4.6.0.21546.pak"
+  },
+  "FREE PAK 4.6 V1/ANDROID/ShadowTrackerExtra/Saved/Paks/core_patch_4.6.0.21546.pak": {
+    "size": 2901321,
+    "version": 14,
+    "entries_total": 1,
+    "dump": {
+      "ok": true,
+      "expected_files": 1,
+      "written_files": 1,
+      "skipped_files": 0,
+      "skipped_directories": 0,
+      "written_bytes": 31008081,
+      "failures": [],
+      "index_parse": {
+        "file_entries": 1,
+        "directory_records": 1,
+        "loaded_directories": 1,
+        "skipped_bad_refs": 0,
+        "skipped_bad_paths": 0,
+        "reader_cursor": 7793,
+        "index_length": 7793
+      }
+    },
+    "extracted": 1,
+    "lua_files": [
+      {
+        "path": "ShadowTrackerExtra/Content/Lua/GameLua/GameCore/Framework/CharacterBase.lua",
+        "size": 31008081,
+        "sha256": "4141d00ea72510a160497e5b1a0ab20cbd14b1b4d99ca056b32b1ff3d45e2c07",
+        "lua": true,
+        "magic": "1b4c756153001993"
+      }
+    ],
+    "nonlua_files": [],
+    "out_dir": "/workspace/pak_extract/FREE PAK 4.6 V1__ANDROID__ShadowTrackerExtra__Saved__Paks__core_patch_4.6.0.21546.pak"
+  },
+  "FREE PAK 4.6 V1/IOS/Paks/core_patch_4.6.0.21546.pak": {
+    "size": 2901321,
+    "version": 14,
+    "entries_total": 1,
+    "dump": {
+      "ok": true,
+      "expected_files": 1,
+      "written_files": 1,
+      "skipped_files": 0,
+      "skipped_directories": 0,
+      "written_bytes": 31008081,
+      "failures": [],
+      "index_parse": {
+        "file_entries": 1,
+        "directory_records": 1,
+        "loaded_directories": 1,
+        "skipped_bad_refs": 0,
+        "skipped_bad_paths": 0,
+        "reader_cursor": 7793,
+        "index_length": 7793
+      }
+    },
+    "extracted": 1,
+    "lua_files": [
+      {
+        "path": "ShadowTrackerExtra/Content/Lua/GameLua/GameCore/Framework/CharacterBase.lua",
+        "size": 31008081,
+        "sha256": "4141d00ea72510a160497e5b1a0ab20cbd14b1b4d99ca056b32b1ff3d45e2c07",
+        "lua": true,
+        "magic": "1b4c756153001993"
+      }
+    ],
+    "nonlua_files": [],
+    "out_dir": "/workspace/pak_extract/FREE PAK 4.6 V1__IOS__Paks__core_patch_4.6.0.21546.pak"
+  }
+}

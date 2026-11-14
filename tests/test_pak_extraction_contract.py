@@ -55,7 +55,10 @@ def test_dump_counts_unexpected_decompression_errors(tmp_path, monkeypatch):
     assert stats["ok"] is False
     assert stats["expected_files"] == 2
     assert stats["written_files"] == 1
-    assert stats["skipped_files"] == 1
+    # A decompression error is a genuine failure, not a safety skip.
+    assert stats["failed_files"] == 1
+    assert stats["skipped_files"] == 0
+    assert stats["blocked_files"] == 0
     assert "content size" in stats["failures"][0]["error"]
 
 
@@ -223,3 +226,133 @@ def test_legacy_manual_extract_does_not_report_partial_success(tmp_path, monkeyp
     assert result["ok"] is False
     assert "incomplete manual PAK extraction" in result["error"]
     assert result["failures"][0]["path"].endswith("two.bin")
+
+
+def test_dump_accounting_invariant_holds_on_mixed_outcomes(tmp_path, monkeypatch):
+    """expected_entries == written + failed + blocked + skipped, always."""
+    pak = object.__new__(core.TencentPakFile)
+    pak._mount_point = PurePath()
+    pak._index = {
+        PurePath("Game"): {
+            "ok.bin": SimpleNamespace(uncompressed_size=3),
+            "blocked.bin": SimpleNamespace(uncompressed_size=3),
+            "broken.bin": SimpleNamespace(uncompressed_size=3),
+            "../escape.bin": SimpleNamespace(uncompressed_size=3),
+        }
+    }
+    pak._index_parse_stats = {"file_entries": 4, "loaded_directories": 1}
+
+    def writer(target, entry):
+        name = Path(target).name
+        if name == "ok.bin":
+            Path(target).write_bytes(b"abc")
+            return
+        if name == "blocked.bin":
+            raise core._sm4_material.Sm4MaterialUnavailable(
+                "SM4 candidate material is not authorized/supplied"
+            )
+        raise RuntimeError("simulated decompression failure")
+
+    pak._write_to_disk = writer
+    monkeypatch.setattr(core, "BASE_DIR", tmp_path / "debug")
+    stats = pak.dump(tmp_path / "out")
+
+    assert stats["expected_entries"] == 4
+    assert stats["written_files"] == 1
+    assert stats["blocked_files"] == 1
+    assert stats["failed_files"] == 1
+    assert stats["skipped_files"] == 1  # the ../escape.bin safety skip
+    assert stats["accounted_entries"] == 4
+    assert stats["accounting_ok"] is True
+    # A safety skip and a real failure keep ok=False.
+    assert stats["ok"] is False
+    # Blocked entries are recorded individually with an honest reason.
+    assert stats["blocked_entries"] == [
+        {"path": "Game/blocked.bin", "reason": "sm4_material_unavailable"}
+    ]
+
+
+def test_dump_blocked_only_is_ok_and_truthful(tmp_path, monkeypatch):
+    """All-blocked (SM4 unavailable) is an honest BLOCKED outcome, not failure."""
+    pak = object.__new__(core.TencentPakFile)
+    pak._mount_point = PurePath()
+    pak._index = {
+        PurePath("Config"): {
+            "a.ini": SimpleNamespace(uncompressed_size=3),
+            "b.ini": SimpleNamespace(uncompressed_size=3),
+        }
+    }
+    pak._index_parse_stats = {"file_entries": 2, "loaded_directories": 1}
+
+    def writer(target, entry):
+        raise core._sm4_material.Sm4MaterialUnavailable(
+            "SM4 candidate material is not authorized/supplied"
+        )
+
+    pak._write_to_disk = writer
+    monkeypatch.setattr(core, "BASE_DIR", tmp_path / "debug")
+    stats = pak.dump(tmp_path / "out")
+
+    assert stats["expected_entries"] == 2
+    assert stats["written_files"] == 0
+    assert stats["blocked_files"] == 2
+    assert stats["failed_files"] == 0
+    assert stats["skipped_files"] == 0
+    assert stats["accounting_ok"] is True
+    assert stats["ok"] is True  # blocked is expected when material is withheld
+    assert len(stats["blocked_entries"]) == 2
+
+
+def test_commit_tmp_rejects_corrupted_entry_hash(tmp_path):
+    """A tampered entry (matches neither plaintext nor raw SHA-1) fails closed."""
+    import hashlib
+    pak = object.__new__(core.TencentPakFile)
+    pak._file_content = memoryview(b"correct-plaintext")
+    # content_hash matches neither the written file nor the raw stored span.
+    wrong_hash = hashlib.sha1(b"something-else-entirely").digest()
+    entry = SimpleNamespace(
+        encryption_method=0,
+        compression_method=core.CM_NONE,
+        offset=0,
+        size=len(b"correct-plaintext"),
+        encrypted=False,
+        uncompressed_size=len(b"correct-plaintext"),
+        compressed_blocks=[],
+        content_hash=wrong_hash,
+    )
+    tmp = tmp_path / "candidate.bin"
+    tmp.write_bytes(b"correct-plaintext")
+    try:
+        pak._commit_tmp(tmp, tmp_path / "final.bin", entry)
+    except ValueError as exc:
+        assert "SHA-1 mismatch" in str(exc)
+    else:
+        raise AssertionError("corrupted entry hash was accepted")
+
+
+def test_commit_tmp_accepts_plaintext_or_raw_hash(tmp_path):
+    """Either plaintext-SHA1 or raw-SHA1 semantics are accepted; size enforced."""
+    import hashlib
+    payload = b"ALVSIA-integrity-payload"
+    pak = object.__new__(core.TencentPakFile)
+    pak._file_content = memoryview(payload)
+    base = dict(
+        encryption_method=0, compression_method=core.CM_NONE, offset=0,
+        size=len(payload), encrypted=False, uncompressed_size=len(payload),
+        compressed_blocks=[],
+    )
+    # plaintext-hash semantics
+    e1 = SimpleNamespace(content_hash=hashlib.sha1(payload).digest(), **base)
+    f1 = tmp_path / "a.bin"; f1.write_bytes(payload)
+    pak._commit_tmp(f1, tmp_path / "a.out", e1)
+    assert (tmp_path / "a.out").read_bytes() == payload
+    # size mismatch still fails even with a valid hash
+    e2 = SimpleNamespace(content_hash=hashlib.sha1(payload).digest(),
+                         **{**base, "uncompressed_size": len(payload) + 1})
+    f2 = tmp_path / "b.bin"; f2.write_bytes(payload)
+    try:
+        pak._commit_tmp(f2, tmp_path / "b.out", e2)
+    except ValueError as exc:
+        assert "size mismatch" in str(exc)
+    else:
+        raise AssertionError("size mismatch was accepted")

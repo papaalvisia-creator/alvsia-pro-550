@@ -1,9 +1,9 @@
 name: Smart Lua Python Validation
 on:
   push:
-    branches: [ feat/alvsia-program-intelligence-core-20261109, feat/smart-lua-recovery-fusion-20261109 ]
+    branches: [ feat/alvsia-program-intelligence-core-20261109, feat/smart-lua-recovery-fusion-20261109, fix/engine-repair-20261114 ]
   pull_request:
-    branches: [ main, feat/full-reference-source-registry-20261106, feat/alvsia-smart-premium-v1-20261112 ]
+    branches: [main, feat/full-reference-source-registry-20261106, feat/alvsia-smart-premium-v1-20261112, fix/engine-repair-20261114, feat/alvsia-capability-expansion-security-20261114-clean]
 permissions:
   contents: read
 jobs:
@@ -22,6 +22,17 @@ jobs:
           sudo apt-get install -y lua5.3
           luac5.3 -v
           python -m pip install --disable-pip-version-check pycryptodome cryptography pytest
+      - name: Set up Rust for pinned native decompiler integration
+        uses: dtolnay/rust-toolchain@stable
+      - name: Build pinned unluac-rs host CLI
+        run: |
+          set -euo pipefail
+          WORK="$RUNNER_TEMP/unluac-rs"
+          git clone --depth 1 --branch v1.4.4 https://github.com/x3zvawq/unluac-rs.git "$WORK"
+          cargo build --locked --release -p unluac-cli --manifest-path "$WORK/Cargo.toml"
+          BIN="$WORK/target/release/unluac-cli"
+          test -x "$BIN"
+          "$BIN" --help >/dev/null
       - name: Compile Lua engine modules
         run: |
           python - <<'PY'
@@ -40,9 +51,15 @@ jobs:
         run: timeout 120s python -m pytest -vv -ra tests/test_module_adapters.py tests/test_lua_processing_watchdog.py
       - name: Run Lua module unittest suite
         run: timeout 120s python -m unittest discover -s tests -p 'test_lua*.py' -v
+      - name: Run T24 and PUBG Lua converter regressions
+        run: timeout 120s python -m pytest -vv -ra tests/test_t24_lua.py tests/test_pubg_lua_converter.py
       - name: Run streaming decompiler unittest suite
         run: timeout 120s python -m unittest discover -s tests -p 'test_streaming_decompiler.py' -v
       - name: Run large-file bounded-memory regression tests
         run: timeout 120s python -m unittest discover -s tests -p 'test_large_file_streaming.py' -v
+      - name: Run native unluac-rs high-work fallback integration
+        run: |
+          ALVSIA_UNLUAC_RS_BIN="$RUNNER_TEMP/unluac-rs/target/release/unluac-cli" \
+            timeout 180s python -m pytest -vv -ra tests/test_unluac_rs_native_fallback.py
       - name: Run Program Intelligence regression suite
         run: timeout 120s python -m unittest discover -s tests -p 'test_lua_intelligence_core.py' -v
