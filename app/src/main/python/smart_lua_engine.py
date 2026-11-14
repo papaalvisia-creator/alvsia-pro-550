@@ -130,6 +130,23 @@ def decompile(input_path, output_dir, jars_dir=None) -> dict:
 
     result = dict(run_lua_smart(p, out, jars_dir=jars_dir) or {})
     result.update({"module": "lua", "operation": "decompile"})
+    if result.get("final_status") == "PARTIAL_STRING_RECOVERY":
+        artifact_value = result.get("out") or result.get("string_artifact")
+        artifact = Path(str(artifact_value)) if artifact_value else None
+        if artifact is None or not artifact.is_file() or artifact.stat().st_size <= 0:
+            return _result(False, "decompile",
+                           error="string recovery reported an artifact but the artifact is missing or empty",
+                           diagnostics=result)
+        return _result(True, "decompile",
+                       out=str(artifact),
+                       selected_engine="string_recovery",
+                       final_status="PARTIAL_STRING_RECOVERY",
+                       artifact_kind="string_recovery",
+                       source_recovered=False,
+                       strings_recovered=True,
+                       output_bytes=artifact.stat().st_size,
+                       note=result.get("note"),
+                       diagnostics=result)
     if not result.get("ok") or not result.get("out"):
         if result.get("ok"):
             return _result(False, "decompile",
