@@ -65,3 +65,24 @@ def test_diverged_bytecode_is_not_counted_as_success(tmp_path):
     assert result["recovery"]["partial"] >= 1
     for r in result["partials"]:
         assert r["status"] in {"STRUCTURALLY_VALID", "PARTIAL_RECOVERY"}
+
+
+def test_execute_batch_isolates_failures_and_aggregates(tmp_path):
+    import zipfile
+    from smart_archive_lua_engine import execute_batch
+
+    good = tmp_path / "good.obb"
+    with zipfile.ZipFile(good, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+        zf.writestr("assets/a.lua", "local x = 1\nreturn x\n")
+    missing = tmp_path / "does-not-exist.obb"
+
+    summary = execute_batch([good, missing], tmp_path / "OUT",
+                            archive_kind="obb", deep_lua=False)
+    assert summary["operation"] == "batch"
+    assert summary["archives"]["total"] == 2
+    assert summary["archives"]["failed"] == 1
+    assert summary["archives"]["processed"] == 1
+    assert (tmp_path / "OUT" / "smart_archive_lua_batch_report.json").is_file()
+    by_path = {r["path"]: r for r in summary["results"]}
+    assert by_path[str(missing)]["ok"] is False
+    assert by_path[str(good)]["ok"] is True

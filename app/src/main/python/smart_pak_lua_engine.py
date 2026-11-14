@@ -249,3 +249,4 @@ def execute(input_path, output_dir, work_dir=None, archive_kind="pak") -> dict[s
     except Exception as exc:
         return {"ok": False, "engine": "SMART PAK/LUA",
                 "stage": "pipeline", "error": _safe_error(exc)}
+

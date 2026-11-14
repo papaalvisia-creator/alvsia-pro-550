@@ -1026,6 +1026,40 @@ class PakCrypto:
 class PakCompression:
 
     @staticmethod
+    def select_best_compression(data: bytes, methods=None) -> dict:
+        """Pick the smallest encoding for ``data`` across the available codecs.
+
+        Returns ``{"method": <CM_*>, "data": <bytes>, "original_size": int,
+        "saved_bytes": int}``. If no codec beats the raw payload, ``CM_NONE``
+        and the original bytes are returned. This is a pure helper: it does not
+        mutate any PAK entry, so existing repack semantics are unchanged.
+        """
+        raw = bytes(data or b"")
+        if methods is None:
+            methods = (CM_ZLIB, CM_ZSTD)
+        best_method = CM_NONE
+        best_data = raw
+        for method in methods:
+            try:
+                if method == CM_ZLIB:
+                    candidate = zlib.compress(raw, level=9)
+                elif method == CM_ZSTD and ZstdCompressor is not None:
+                    candidate = ZstdCompressor(level=19, threads=1).compress(raw)
+                else:
+                    continue
+            except Exception:
+                continue
+            if len(candidate) < len(best_data):
+                best_method = method
+                best_data = candidate
+        return {
+            "method": best_method,
+            "data": best_data,
+            "original_size": len(raw),
+            "saved_bytes": len(raw) - len(best_data),
+        }
+
+    @staticmethod
     @lru_cache(maxsize=1)
     def _zstd_decompressor_without_dict() -> ZstdDecompressor:
         """Create a plain Zstandard decoder without passing a null dictionary."""

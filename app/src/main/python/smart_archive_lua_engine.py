@@ -167,4 +167,70 @@ def execute(input_path, output_dir, work_dir=None, archive_kind="auto",
     return report
 
 
-__all__ = ["execute"]
+
+
+def execute_batch(input_paths, output_dir, work_dir=None, archive_kind="auto",
+                  deep_lua=True) -> dict[str, Any]:
+    """Run the universal Smart Archive->Lua pipeline over many archives.
+
+    Each archive is processed independently into its own sub-directory so one
+    failure never aborts the batch. Returns per-archive summaries plus totals.
+    """
+    out = Path(output_dir)
+    out.mkdir(parents=True, exist_ok=True)
+    work = Path(work_dir) if work_dir else out / "WORK"
+    work.mkdir(parents=True, exist_ok=True)
+
+    paths = [Path(p) for p in (input_paths or [])]
+    if not paths:
+        return {"ok": False, "engine": "SMART ARCHIVE/LUA", "operation": "batch",
+                "error": "no input archives supplied", "results": []}
+
+    results = []
+    for index, source in enumerate(paths):
+        sub_out = out / f"archive_{index:03d}_{source.stem}"
+        sub_work = work / f"archive_{index:03d}"
+        if not source.is_file():
+            results.append({"path": str(source), "ok": False,
+                            "error": "input archive not found"})
+            continue
+        try:
+            report = execute(source, sub_out, work_dir=sub_work,
+                             archive_kind=archive_kind, deep_lua=deep_lua)
+        except Exception as exc:  # one bad archive must not abort the batch
+            report = {"ok": False, "engine": "SMART ARCHIVE/LUA",
+                      "stage": "pipeline", "error": _safe_error(exc)}
+        results.append({
+            "path": str(source),
+            "ok": bool(report.get("ok")),
+            "format": report.get("format"),
+            "scan": report.get("scan"),
+            "recovery": report.get("recovery"),
+            "out": report.get("out"),
+            "report": report.get("report"),
+            "error": report.get("error"),
+        })
+
+    processed = [r for r in results if r.get("ok")]
+    total_candidates = sum((r.get("scan") or {}).get("lua_candidates", 0) for r in results)
+    total_recovered = sum((r.get("recovery") or {}).get("success", 0) for r in results)
+    summary = {
+        "ok": bool(processed),
+        "engine": "SMART ARCHIVE/LUA",
+        "operation": "batch",
+        "archive_kind": archive_kind,
+        "archives": {"total": len(results), "processed": len(processed),
+                     "failed": len(results) - len(processed)},
+        "totals": {"lua_candidates": total_candidates,
+                   "recovered": total_recovered},
+        "results": results,
+        "out": str(out),
+    }
+    report_path = out / "smart_archive_lua_batch_report.json"
+    report_path.write_text(json.dumps(summary, indent=2, sort_keys=True, ensure_ascii=False),
+                           encoding="utf-8")
+    summary["report"] = str(report_path)
+    return summary
+
+
+__all__ = ["execute", "execute_batch"]
