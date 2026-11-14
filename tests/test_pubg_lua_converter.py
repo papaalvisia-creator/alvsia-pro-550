@@ -12,24 +12,32 @@ from lua_engine.bgmi import transform_bgmi_lua
 from lua_engine.decompiler53 import load_chunk
 
 
-def _standard_chunk_with_binary_string(line_numbers: tuple[int, ...] = ()) -> bytes:
+def _standard_chunk_with_binary_string(
+    line_numbers: tuple[int, ...] = (), string_value: bytes = b"\xff\xfeA"
+) -> bytes:
     header = (
         b"\x1bLua\x53\x00\x19\x93\x0d\x0a\x1a\x0a"
         + b"\x04\x08\x04\x08\x08"
         + bytes.fromhex("7856000000000000")
         + bytes.fromhex("0000000000287740")
     )
+    encoded_size = len(string_value) + 1
+    if encoded_size < 0xFF:
+        encoded_string = bytes((encoded_size,)) + string_value
+    else:
+        encoded_string = b"\xff" + struct.pack("<Q", encoded_size) + string_value
+    instruction_count = max(1, len(line_numbers))
     return (
         header
         + struct.pack("<B", 0)
         + struct.pack("<B", 0)
         + struct.pack("<ii", 0, 0)
         + struct.pack("<BBB", 0, 0, 2)
-        + struct.pack("<I", max(1, len(line_numbers)))
-        + b"".join(struct.pack("<I", 38) for _ in range(max(1, len(line_numbers))))
+        + struct.pack("<I", instruction_count)
+        + b"".join(struct.pack("<I", 38) for _ in range(instruction_count))
         + struct.pack("<I", 1)
-        + struct.pack("<BB", 4, 4)
-        + b"\xff\xfeA"
+        + struct.pack("<B", 4)
+        + encoded_string
         + struct.pack("<I", 0)  # upvalue count
         + struct.pack("<I", 0)  # nested prototype count
         + struct.pack("<I", len(line_numbers))
@@ -84,6 +92,18 @@ def test_shared_opcode_converter_rejects_oversized_file_before_read(tmp_path):
     with patch.object(Path, "read_bytes", side_effect=AssertionError("must reject before buffering")):
         with pytest.raises(ValueError, match="32 MiB safety cap"):
             converter.convert_file(str(source))
+
+
+def test_pubg_converter_preserves_long_string_with_arm64_size_t():
+    value = b"ALVSIA-LONG-STRING-" * 20
+    standard = _standard_chunk_with_binary_string(string_value=value)
+    encrypted_bgmi = transform_bgmi_lua(
+        standard, key=ALVSIA_BGMI_XOR_KEY, decrypt=False
+    )
+    converted = PUBGLuaConverter().convert_bytes(encrypted_bgmi)
+    proto = load_chunk(converted)
+    assert proto.constants[0] == value.decode("ascii")
+    assert converted[13] == 8
 
 
 def test_pubg_converter_rejects_unknown_variant_instead_of_bytewise_corruption():
