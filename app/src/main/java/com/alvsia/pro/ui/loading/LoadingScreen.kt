@@ -59,7 +59,7 @@ fun LoadingScreen(
             )
             Spacer(Modifier.height(5.dp))
             Text(
-                "JANGAN LUPA NGELOCO SEBELUM BERAKTIFITAS",
+                "JANGAN LUPA NGELOCO SEBELUM BERAKTIVITAS",
                 color = AlvisiaSilver,
                 fontWeight = FontWeight.Bold,
                 fontSize = 10.sp,
