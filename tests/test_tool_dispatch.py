@@ -56,7 +56,10 @@ def test_python_auth_normalizes_java_string_and_lua_avoids_art_oom():
     legacy = features[legacy_start:legacy_end if legacy_end >= 0 else None]
     streaming = (ROOT / "app/src/main/python/lua_engine/streaming_decompiler.py").read_text(encoding="utf-8")
     assert "_run_lua_smart_internal(" in smart and "publish_gate" in smart
-    assert "analyze_file(" in legacy
+    internal_start = features.index("def _run_lua_smart_internal(")
+    internal_end = features.index("\ndef run_lua_smart(", internal_start)
+    internal = features[internal_start:internal_end]
+    assert "analyze_file(" in internal
     assert "decompile_large(" in legacy and "preflight_only=True" in legacy
     assert "build_engine_registry" in legacy and "run_decompiler_pipeline" in legacy
     assert "def decompile_large(" in streaming and "preflight_only" in streaming
