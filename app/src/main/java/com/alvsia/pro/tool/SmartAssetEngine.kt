@@ -22,7 +22,7 @@ object SmartAssetEngine {
                 "asset_fingerprint" -> fingerprint(f, out)
                 "asset_scan_ids" -> scanIds(f, out)
                 "asset_context" -> context(f, out)
-                "asset_patch" -> patch(f, out)
+                "asset_patch" -> patch(f, out, taskId)
                 "asset_validate" -> validate(f, out)
                 else -> listOf("X Unsupported Smart Asset operation: " + subId)
             }
