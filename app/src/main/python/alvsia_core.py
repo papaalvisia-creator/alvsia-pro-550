@@ -1123,6 +1123,24 @@ class PakCompression:
                         except zlib.error:
                             result = None
                 if result is None:
+                    # Some Tencent entries have a ZSTD frame even when the
+                    # surrounding index advertises the zlib method. Only try
+                    # this fallback when the canonical ZSTD frame magic is
+                    # present; never guess a codec for arbitrary bytes.
+                    if bytes(block[:4]) == b"\\x28\\xb5\\x2f\\xfd":
+                        if ZstdDecompressor is None:
+                            raise ValueError(
+                                "ZSTD frame detected in zlib-marked block but zstandard is unavailable"
+                            )
+                        limit = int(max_output_size or (64 * 1024 * 1024))
+                        if limit <= 0 or limit > 512 * 1024 * 1024:
+                            raise ValueError("invalid ZSTD fallback output limit")
+                        result = PakCompression._zstd_decompressor(None).decompress(
+                            block, max_output_size=limit
+                        )
+                        if len(result) > limit:
+                            raise ValueError("ZSTD fallback block exceeds declared output limit")
+                        return result
                     raise ValueError(
                         "decompression failed: block is neither valid zlib nor raw DEFLATE"
                     )
