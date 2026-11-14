@@ -640,11 +640,39 @@ def _run_lua_smart_legacy(input_path, out_dir, jars_dir=None):
     report["stage_report"] = str(stage_path)
     report["final_status"] = final_status
 
+    string_artifact = None
+    string_count = 0
+    for cand in out_dir.glob("*_strings.txt"):
+        try:
+            if cand.is_file() and cand.stat().st_size > 0:
+                string_artifact = cand
+                string_count = sum(1 for _ in cand.open("r", encoding="utf-8", errors="replace"))
+                break
+        except OSError:
+            continue
+    if string_artifact is not None:
+        final_status = "PARTIAL_STRING_RECOVERY"
+        report["artifact_kind"] = "string_recovery"
+        report["source_recovered"] = False
+        report["strings_recovered"] = True
+        report["string_artifact"] = str(string_artifact)
+        report["string_count"] = string_count
+        report["selected_engine"] = "string_recovery"
+        report["out"] = str(string_artifact)
+        report["note"] = (
+            "String recovery produced usable artifacts, but no validated Lua source "
+            "was reconstructed. No synthetic source was generated."
+        )
     return {
-        "ok": final_status == "SUCCESS",
+        "ok": string_artifact is not None,
         "mode": "smart_fallback",
         "final_status": final_status,
-        "note": "PARTIAL: detect/unpack/strings may exist; decompile source NOT validated",
+        "artifact_kind": report.get("artifact_kind"),
+        "source_recovered": bool(report.get("source_recovered", False)),
+        "strings_recovered": bool(report.get("strings_recovered", False)),
+        "out": report.get("out"),
+        "selected_engine": report.get("selected_engine"),
+        "note": report.get("note", "PARTIAL: detect/unpack/strings may exist; decompile source NOT validated"),
         **report,
     }
 
