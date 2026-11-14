@@ -402,7 +402,9 @@ def stream_decompile_lua53(input_path: Path, out_path: Path) -> Tuple[bool, str]
     sanitized_bytes = None
     try:
         from lua_engine.modguard import detect_mod_guard, sanitize_mod_guard
-        raw = Path(input_path).read_bytes()
+        # Reuse the single bounded input buffer; do not read the same large
+        # Lua file again for mod-guard detection/sanitization.
+        raw = data
         detection = detect_mod_guard(raw)
         if detection and detection.get("detected"):
             patched, mg_report = sanitize_mod_guard(raw)
@@ -425,9 +427,7 @@ def stream_decompile_lua53(input_path: Path, out_path: Path) -> Tuple[bool, str]
                 failures.append("remaining normalization candidates skipped: total time budget exhausted")
                 break
             try:
-                original = Path(input_path).read_bytes()
-                if sanitized_bytes is not None:
-                    original = sanitized_bytes
+                original = sanitized_bytes if sanitized_bytes is not None else data
                 converted = LuaOpcodeConverter(variant=variant).convert_bytes(original)
                 if modguard_note:
                     note_with_mg = f"{modguard_note}; {variant} normalize"
