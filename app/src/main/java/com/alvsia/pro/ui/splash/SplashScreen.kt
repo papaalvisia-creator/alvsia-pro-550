@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
@@ -42,6 +43,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
@@ -61,6 +63,7 @@ import kotlin.random.Random
 @Composable
 fun SplashScreen(onFinished: () -> Unit) {
     val context = LocalContext.current
+    val uriHandler = LocalUriHandler.current
     val logoAlpha = remember { Animatable(0f) }
     val logoScale = remember { Animatable(0.72f) }
     val textAlpha = remember { Animatable(0f) }
@@ -229,11 +232,34 @@ fun SplashScreen(onFinished: () -> Unit) {
             )
             Spacer(Modifier.height(6.dp))
             Text(
-                "HELLO RAJA COLAY MUKA BOKEP",
-                color = AlvisiaBlue.copy(alpha = 0.85f),
-                fontSize = 11.sp,
+                "HALLO MUKA BOKEP",
+                color = AlvisiaBlue.copy(alpha = 0.92f),
+                fontSize = 12.sp,
                 fontFamily = FontFamily.Monospace,
+                fontWeight = FontWeight.Black,
                 modifier = Modifier.alpha(textAlpha.value)
+            )
+            Spacer(Modifier.height(5.dp))
+            Text(
+                "JANGAN LUPA NGELOCO SEBELUM BERAKTIFITAS",
+                color = AlvisiaSilver.copy(alpha = 0.82f),
+                fontSize = 9.sp,
+                fontFamily = FontFamily.Monospace,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.alpha(textAlpha.value)
+            )
+            Spacer(Modifier.height(9.dp))
+            Text(
+                "✈  @ALVISIACHANEL  ·  OFFICIAL CHANNEL",
+                color = AlvisiaCyan.copy(alpha = 0.86f),
+                fontSize = 9.sp,
+                fontFamily = FontFamily.Monospace,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier
+                    .alpha(textAlpha.value)
+                    .clip(RoundedCornerShape(8.dp))
+                    .clickable { uriHandler.openUri("https://t.me/ALVISIACHANEL") }
+                    .padding(horizontal = 10.dp, vertical = 6.dp)
             )
         }
 
