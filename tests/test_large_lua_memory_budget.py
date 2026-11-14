@@ -120,7 +120,9 @@ def test_large_declared_work_uses_strict_native_engine_when_available(tmp_path, 
     assert result.get("ok") is True, result
     assert result.get("mode") == "smart_native_large_input", result
     assert result.get("selected_engine") == "unluac_rs_v1_4_4", result
-    assert result.get("final_status") == "SUCCESS", result
+    assert result.get("final_status") == "STRUCTURALLY_VALID", result
+    assert result.get("validation_level") == "syntax_only", result
+    assert result.get("roundtrip_proof") == "NOT_RUN", result
     assert Path(result["out"]).is_file()
 
 
