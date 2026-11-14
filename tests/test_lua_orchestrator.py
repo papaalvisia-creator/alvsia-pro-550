@@ -519,4 +519,7 @@ def test_string_only_recovery_is_partial_success_not_adapter_failure(tmp_path):
     assert result["artifact_kind"] == "string_recovery"
     assert result["source_recovered"] is False
     assert result["strings_recovered"] is True
+    assert result["recovery_plan"]["planner"] == "ALVSIA_RECOVERY_PLANNER"
+    assert result["recovery_plan"]["status"] == "PARTIAL_STRING_RECOVERY"
+    assert result["recovery_plan"]["actions"][0]["action"] == "classify_dialect"
     assert Path(result["out"]).read_text(encoding="utf-8").splitlines() == ["PLAYER_HEALTH", "WEAPON_ID"]
