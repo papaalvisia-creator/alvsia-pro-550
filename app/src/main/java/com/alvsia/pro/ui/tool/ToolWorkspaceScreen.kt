@@ -126,6 +126,31 @@ fun ToolWorkspaceScreen(
         else -> AlvisiaSilver
     }
 
+    // Resolve the output folder from this task's explicit success path, never
+    // from the generic IN staging log. Require a real non-empty artifact before
+    // showing the Output action.
+    val verifiedOutputDir = remember(logs) {
+        val rawPath = logs.asReversed().firstNotNullOfOrNull { line ->
+            listOf("OK OUT -> ", "OK OUTPUT -> ").firstNotNullOfOrNull { prefix ->
+                if (line.startsWith(prefix)) line.removePrefix(prefix).trim().takeIf { it.isNotBlank() }
+                else null
+            }
+        }
+        runCatching {
+            if (rawPath.isNullOrBlank()) return@runCatching null
+            WorkPaths.bindApp(ctx)
+            val root = WorkPaths.alvsiaRoot().canonicalFile
+            val candidate = File(rawPath).canonicalFile
+            val rootPrefix = root.path.trimEnd(File.separatorChar) + File.separator
+            if (!candidate.path.startsWith(rootPrefix)) return@runCatching null
+            val folder = if (candidate.isDirectory) candidate else candidate.parentFile
+                ?: return@runCatching null
+            if (!folder.isDirectory) return@runCatching null
+            val hasArtifact = folder.walkTopDown().take(10001).any { it.isFile && it.length() > 0L }
+            if (hasArtifact) folder else null
+        }.getOrNull()
+    }
+
     // Inline config form state: map of field name → user input value
     val configSchema = remember(operation.id) { subToolConfig(operation.id) }
     val configValues = remember(operation.id) {
@@ -472,8 +497,8 @@ fun ToolWorkspaceScreen(
             }
         }
 
-        // ── UX Sprint 2: Output preview inline + OPEN FOLDER ────────────
-        if (!running && logs.any { it.startsWith("OK ") }) {
+        // ── Per-task Output: visible only after a real artifact exists ──
+        if (!running && errorLine == null && verifiedOutputDir != null) {
             Spacer(Modifier.height(4.dp))
             Text("OUTPUT", color = AlvisiaSilver.copy(alpha = 0.4f), fontSize = 9.sp)
             Spacer(Modifier.height(2.dp))
@@ -482,34 +507,37 @@ fun ToolWorkspaceScreen(
                 horizontalArrangement = Arrangement.spacedBy(4.dp)
             ) {
                 TextButton(onClick = {
-                    // Open OUT/ folder via Intent
+                    val folder = verifiedOutputDir
                     try {
-                        val outDir = java.io.File(
-                            android.os.Environment.getExternalStoragePublicDirectory(
-                                android.os.Environment.DIRECTORY_DOWNLOADS),
-                            "ALVSIA/OUT"
-                        )
                         val uri = androidx.core.content.FileProvider.getUriForFile(
-                            ctx, "${ctx.packageName}.provider", outDir
+                            ctx, "${ctx.packageName}.provider", folder
                         )
-                        val intent = android.content.Intent(android.content.Intent.ACTION_VIEW).apply {
+                        val intent = Intent(Intent.ACTION_VIEW).apply {
                             setDataAndType(uri, "resource/folder")
-                            addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                         }
-                        ctx.startActivity(android.content.Intent.createChooser(intent, "Open folder"))
+                        ctx.startActivity(Intent.createChooser(intent, "Pilih File Manager"))
                     } catch (_: Exception) {
-                        // Fallback: open file manager at Downloads
+                        // Android has no universal direct-open-folder intent. If no
+                        // file manager accepts resource/folder, expose the exact
+                        // output directory through the system document picker.
                         try {
-                            val intent = android.content.Intent(android.content.Intent.ACTION_GET_CONTENT).apply {
-                                type = "*/*"
+                            val intent = Intent(android.content.Intent.ACTION_OPEN_DOCUMENT_TREE).apply {
+                                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or
+                                    Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION)
                             }
-                            ctx.startActivity(intent)
-                        } catch (_: Exception) {}
+                            ctx.startActivity(Intent.createChooser(intent, "Buka lokasi output"))
+                        } catch (_: Exception) { }
                     }
                 }) {
-                    Text("📂 OPEN FOLDER", color = AlvisiaCyan, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                    Text("📂 OPEN OUTPUT FOLDER", color = AlvisiaCyan, fontSize = 10.sp, fontWeight = FontWeight.Bold)
                 }
             }
+            Text(
+                verifiedOutputDir.absolutePath,
+                color = AlvisiaSilver.copy(alpha = 0.55f),
+                fontSize = 9.sp
+            )
         }
 
         if (confirmClearWorkspace) {
