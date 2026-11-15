@@ -5,6 +5,7 @@ import android.content.Context
 import com.alvsia.pro.sec.SessionGate
 import com.alvsia.pro.asset.AssetVault
 import android.net.Uri
+import android.provider.DocumentsContract
 // Chaquopy imported via PythonBridgeRunner reflection — no direct compile-time dep
 import java.io.BufferedInputStream
 import java.io.File
@@ -155,9 +156,123 @@ class ToolEngine(private val context: Context) {
         }
     }
 
+    private fun copyDocumentTree(uri: Uri, destination: File): Pair<Long, Int>? {
+        val root = destination.canonicalFile
+        var totalBytes = 0L
+        var fileCount = 0
+        val maxTreeBytes = 10L * 1024L * 1024L * 1024L
+        val maxEntries = 50_000
+        return try {
+            root.mkdirs()
+            val rootDocumentId = DocumentsContract.getTreeDocumentId(uri)
+
+            fun copyChildren(parentDocumentId: String, parentDirectory: File, depth: Int) {
+                if (depth > 64) throw IllegalArgumentException("selected folder nesting limit exceeded")
+                val childrenUri = DocumentsContract.buildChildDocumentsUriUsingTree(uri, parentDocumentId)
+                val columns = arrayOf(
+                    DocumentsContract.Document.COLUMN_DOCUMENT_ID,
+                    DocumentsContract.Document.COLUMN_DISPLAY_NAME,
+                    DocumentsContract.Document.COLUMN_MIME_TYPE,
+                    DocumentsContract.Document.COLUMN_SIZE
+                )
+                val cursor = context.contentResolver.query(childrenUri, columns, null, null, null)
+                    ?: throw IllegalStateException("cannot enumerate selected folder")
+                cursor.use { rows ->
+                    val idColumn = rows.getColumnIndexOrThrow(DocumentsContract.Document.COLUMN_DOCUMENT_ID)
+                    val nameColumn = rows.getColumnIndexOrThrow(DocumentsContract.Document.COLUMN_DISPLAY_NAME)
+                    val mimeColumn = rows.getColumnIndexOrThrow(DocumentsContract.Document.COLUMN_MIME_TYPE)
+                    val sizeColumn = rows.getColumnIndex(DocumentsContract.Document.COLUMN_SIZE)
+                    while (rows.moveToNext()) {
+                        val documentId = rows.getString(idColumn) ?: throw IllegalArgumentException("folder entry has no document ID")
+                        val name = rows.getString(nameColumn)?.trim().orEmpty()
+                        if (name.isBlank() || name == "." || name == ".." ||
+                            name.contains('/') || name.contains('\\') || name.any { it.code == 0 }) {
+                            throw IllegalArgumentException("unsafe folder entry name rejected")
+                        }
+                        val target = File(parentDirectory, name).canonicalFile
+                        if (target.parentFile != parentDirectory.canonicalFile) {
+                            throw IllegalArgumentException("folder entry escapes selected root")
+                        }
+                        val mime = rows.getString(mimeColumn).orEmpty()
+                        if (mime == DocumentsContract.Document.MIME_TYPE_DIR) {
+                            if (!target.exists() && !target.mkdirs()) {
+                                throw IllegalStateException("cannot create folder entry")
+                            }
+                            if (!target.isDirectory) throw IllegalArgumentException("folder entry conflicts with a file")
+                            copyChildren(documentId, target, depth + 1)
+                        } else {
+                            fileCount += 1
+                            if (fileCount > maxEntries) throw IllegalArgumentException("selected folder contains too many files")
+                            val declared = if (sizeColumn >= 0 && !rows.isNull(sizeColumn)) rows.getLong(sizeColumn) else -1L
+                            if (declared > MAX_DIRECT_FILE_BYTES) {
+                                throw IllegalArgumentException("folder file exceeds the 5 GB per-file limit")
+                            }
+                            val documentUri = DocumentsContract.buildDocumentUriUsingTree(uri, documentId)
+                            val temporary = File(parentDirectory, ".${name}.alvsia-tmp-${System.nanoTime()}")
+                            var copied = 0L
+                            try {
+                                val input = context.contentResolver.openInputStream(documentUri)
+                                    ?: throw IllegalStateException("cannot read selected folder file")
+                                input.use { source ->
+                                    FileOutputStream(temporary).use { output ->
+                                        val buffer = ByteArray(1024 * 1024)
+                                        while (true) {
+                                            val count = source.read(buffer)
+                                            if (count < 0) break
+                                            copied += count
+                                            totalBytes += count
+                                            if (copied > MAX_DIRECT_FILE_BYTES || totalBytes > maxTreeBytes) {
+                                                throw IllegalArgumentException("selected folder exceeds import size limits")
+                                            }
+                                            output.write(buffer, 0, count)
+                                        }
+                                        output.fd.sync()
+                                    }
+                                }
+                                if (declared >= 0L && copied != declared) {
+                                    throw IllegalStateException("folder file size verification failed")
+                                }
+                                if (target.exists() || !temporary.renameTo(target)) {
+                                    throw IllegalStateException("cannot atomically publish folder file")
+                                }
+                            } finally {
+                                temporary.delete()
+                            }
+                        }
+                    }
+                }
+            }
+
+            copyChildren(rootDocumentId, root, 0)
+            if (fileCount <= 0) throw IllegalArgumentException("selected folder contains no files")
+            totalBytes to fileCount
+        } catch (_: Exception) {
+            root.deleteRecursively()
+            null
+        }
+    }
+
     private fun stageInput(uri: Uri?, moduleId: Int, taskId: String, onProgress: ((String, Int?) -> Unit)? = null): Pair<String, List<String>> {
         val notes = mutableListOf<String>()
         if (uri == null) return "" to notes
+        if (DocumentsContract.isTreeUri(uri)) {
+            if (moduleId != 4) {
+                notes.add("X Folder input is supported only by SMART OBB rebuild")
+                return "" to notes
+            }
+            val treeRoot = File(WorkPaths.taskModuleWork(taskId, moduleId), "OBB")
+            treeRoot.deleteRecursively()
+            onProgress?.invoke("STAGING OBB FOLDER", 0)
+            val stats = copyDocumentTree(uri, treeRoot)
+            if (stats == null) {
+                notes.add("X OBB folder import failed; no folder output was published")
+                return "" to notes
+            }
+            notes.add("OK OBB folder staged -> ${treeRoot.absolutePath}")
+            notes.add("files ${stats.second} bytes ${stats.first}")
+            onProgress?.invoke("INPUT VERIFIED", null)
+            return treeRoot.absolutePath to notes
+        }
         val nameHint = uri.lastPathSegment?.substringAfterLast('/') ?: "input.bin"
         val safe = nameHint.replace(Regex("[^A-Za-z0-9._-]"), "_").ifBlank { "input.bin" }
         val declaredSize = context.contentResolver.query(
