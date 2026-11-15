@@ -81,6 +81,19 @@ jobs:
           cargo build --locked --release -p unluac-cli --manifest-path "$WORK/Cargo.toml"
           test -x "$WORK/target/release/unluac-cli"
 
+      - name: Prepare optional authorized PAK SM4 material
+        if: steps.corpus-auth.outputs.available == 'true'
+        env:
+          PAK_SM4_MATERIAL_JSON: ${{ secrets.REFERENCE_PAK_SM4_MATERIAL }}
+        run: |
+          set -euo pipefail
+          if [[ -n "${PAK_SM4_MATERIAL_JSON:-}" ]]; then
+            printf "%s" "$PAK_SM4_MATERIAL_JSON" > "$RUNNER_TEMP/alvsia_sm4_material.json"
+            echo "ALVSIA_SM4_MATERIAL_FILE=$RUNNER_TEMP/alvsia_sm4_material.json" >> "$GITHUB_ENV"
+            echo "authorized PAK SM4 material: configured"
+          else
+            echo "authorized PAK SM4 material: not configured; encrypted entries remain fail-closed"
+          fi
       - name: Verify reference corpus
         if: steps.corpus-auth.outputs.available == 'true'
         run: |
