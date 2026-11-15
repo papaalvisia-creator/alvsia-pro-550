@@ -143,8 +143,11 @@ def execute(operation: str, input_path, output_dir, work_dir=None,
                 result.update({"engine": "SMART ARCHIVE", "format": fmt, "out": str(target)})
             return result
         finally:
-            from sm4_material import clear_material
-            clear_material()
+            # Task-local material is ephemeral and must be wiped. External
+            # caller-installed material is preserved across batch extracts.
+            if material_report.get("source") not in (None, "none"):
+                from sm4_material import clear_material
+                clear_material()
 
     report_path = out / (source.name + ".integrity.json")
     try:
