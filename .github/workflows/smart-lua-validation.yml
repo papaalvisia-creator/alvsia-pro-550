@@ -47,6 +47,8 @@ jobs:
         run: timeout 120s python tests/test_lua_engine.py
       - name: Run Smart Lua orchestrator regression tests
         run: timeout 120s python -m pytest -vv -ra tests/test_lua_orchestrator.py
+      - name: Run partial artifact lifecycle contract regression
+        run: timeout 120s python -m pytest -vv -ra tests/test_lua_partial_artifact_contract.py
       - name: Run adapter routing and processing watchdog regressions
         run: timeout 120s python -m pytest -vv -ra tests/test_module_adapters.py tests/test_lua_processing_watchdog.py
       - name: Run Lua module unittest suite
