@@ -348,6 +348,22 @@ def set_authorized_sm4_candidates(candidates) -> bool:
     PakCrypto._derive_sm4_key.cache_clear()
     return True
 
+def set_authorized_sm4_method_keys(method_keys) -> bool:
+    try:
+        values = {int(method): value for method, value in dict(method_keys or {}).items()}
+    except (TypeError, ValueError):
+        return False
+    if not all(
+        0 <= method <= 0xFFFFFFFF
+        and isinstance(key, str)
+        and 1 <= len(key) <= 64
+        for method, key in values.items()
+    ):
+        return False
+    _sm4_material.install_material(method_keys=values, source="alvsia_core")
+    PakCrypto._derive_sm4_key.cache_clear()
+    return True
+
 def clear_authorized_sm4_candidates() -> None:
     global _SM4_AUTHORIZED_CANDIDATES
     _SM4_AUTHORIZED_CANDIDATES = ()
@@ -847,13 +863,17 @@ class PakCrypto:
         elif encryption_method == EM_SM4_4:
             _sbd281f3d3181 = _sm4_material.require_secret_4()
         elif encryption_method == EM_UNKNOWN_17:
-            candidates = _sm4_material.require_candidates()
-            _s2b8e7b87d9f2 = (encryption_method - EM_SM4_NEW_BASE) % len(candidates)
-            _sbd281f3d3181 = candidates[_s2b8e7b87d9f2]
+            _sbd281f3d3181 = _sm4_material.get_method_key(encryption_method)
+            if _sbd281f3d3181 is None:
+                candidates = _sm4_material.require_candidates()
+                _s2b8e7b87d9f2 = (encryption_method - EM_SM4_NEW_BASE) % len(candidates)
+                _sbd281f3d3181 = candidates[_s2b8e7b87d9f2]
         else:
-            candidates = _sm4_material.require_candidates()
-            _s2b8e7b87d9f2 = (encryption_method - EM_SM4_NEW_BASE) % len(candidates)
-            _sbd281f3d3181 = f'{candidates[_s2b8e7b87d9f2]}{encryption_method}'
+            _sbd281f3d3181 = _sm4_material.get_method_key(encryption_method)
+            if _sbd281f3d3181 is None:
+                candidates = _sm4_material.require_candidates()
+                _s2b8e7b87d9f2 = (encryption_method - EM_SM4_NEW_BASE) % len(candidates)
+                _sbd281f3d3181 = f'{candidates[_s2b8e7b87d9f2]}{encryption_method}'
         return SHA1.new(str(_s5faefbac755f + _sbd281f3d3181).encode()).digest()[:SM4.key_length()]
 
     @staticmethod
