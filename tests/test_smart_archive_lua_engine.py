@@ -102,9 +102,33 @@ def test_authorized_sm4_method_keys_are_loaded_from_task_local_config_and_wiped(
 
     report = _load_authorized_sm4_material(work)
     assert report["ok"] is True
-    assert report["candidate_count"] == 25
+    assert report["candidate_count"] == 0
+    assert report["method_key_count"] == 25
     assert report["source"] == "sm4_material.json"
-    assert tuple(sm4_material.get_candidates()) == tuple(keys[str(m)] for m in range(31, 56))
+    assert sm4_material.get_method_key(53) == keys["53"]
+    assert sm4_material.get_method_key(31) == keys["31"]
 
     sm4_material.clear_material()
     assert not sm4_material.is_available()
+
+
+def test_sparse_sm4_method_key_is_enough_for_single_pak_method(tmp_path):
+    import hashlib
+    import sm4_material
+    import alvsia_core
+
+    sm4_material.clear_material()
+    secret = "authorized-method-53"
+    sm4_material.install_material(method_keys={"53": secret}, source="test")
+    alvsia_core.PakCrypto._derive_sm4_key.cache_clear()
+
+    key = alvsia_core.PakCrypto._derive_sm4_key(
+        Path("Config/DefaultEngineRedirects_BLUEHOLE.ini"), 53
+    )
+    assert len(key) == 16
+    assert key == hashlib.sha1(
+        f"defaultengineredirects_bluehole.ini{secret}53".encode()
+    ).digest()[:16]
+
+    sm4_material.clear_material()
+    alvsia_core.PakCrypto._derive_sm4_key.cache_clear()
