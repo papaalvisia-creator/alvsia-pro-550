@@ -111,20 +111,6 @@ fun ToolWorkspaceScreen(
     var logMode by remember(operation.id) { mutableStateOf("simple") }
     var confirmClearWorkspace by remember(operation.id) { mutableStateOf(false) }
     val errorLine = logs.firstOrNull { it.startsWith("X ") }
-    val successLine = logs.firstOrNull { it.startsWith("OK ") }
-    val simpleSummary = when {
-        running -> "ALVSIA sedang memproses pekerjaan ini. Tunggu sampai status selesai."
-        errorLine != null -> errorLine.removePrefix("X ").trim()
-        successLine != null -> "Proses selesai. ${successLine.removePrefix("OK ").trim()}"
-        logs.isNotEmpty() -> "Pekerjaan belum memiliki hasil final. Periksa log lanjutan jika diperlukan."
-        else -> "Pilih input dan tekan RUN untuk memulai pekerjaan."
-    }
-    val summaryColor = when {
-        running -> AlvisiaCyan
-        errorLine != null -> AlvisiaRed
-        successLine != null -> Color(0xFF00E676)
-        else -> AlvisiaSilver
-    }
 
     // Resolve the output folder from this task's explicit success path, never
     // from the generic IN staging log. Require a real non-empty artifact before
@@ -149,6 +135,21 @@ fun ToolWorkspaceScreen(
             val hasArtifact = folder.walkTopDown().take(10001).any { it.isFile && it.length() > 0L }
             if (hasArtifact) folder else null
         }.getOrNull()
+    }
+
+    val successLine = verifiedOutputDir?.name
+    val simpleSummary = when {
+        running -> "ALVSIA sedang memproses pekerjaan ini. Tunggu sampai status selesai."
+        errorLine != null -> errorLine.removePrefix("X ").trim()
+        verifiedOutputDir != null -> "Proses selesai. Hasil tervalidasi tersedia di ${verifiedOutputDir.name}."
+        logs.isNotEmpty() -> "Proses belum menghasilkan file output yang tervalidasi. Periksa diagnosis atau status pemulihan parsial."
+        else -> "Pilih input dan tekan RUN untuk memulai pekerjaan."
+    }
+    val summaryColor = when {
+        running -> AlvisiaCyan
+        errorLine != null -> AlvisiaRed
+        verifiedOutputDir != null -> Color(0xFF00E676)
+        else -> AlvisiaSilver
     }
 
     // Inline config form state: map of field name → user input value
