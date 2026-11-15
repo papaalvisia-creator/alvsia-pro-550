@@ -1,7 +1,7 @@
 name: ALVSIA Reference Corpus Runtime Gate
 
 env:
-  REFERENCE_CORPUS_REV: 087ad74d5524048ec07a45c0c343e601af328364
+  REFERENCE_CORPUS_REV: d2725d8b14e7ac356598f799da5726324e8a2c04
 
 on:
   push:
