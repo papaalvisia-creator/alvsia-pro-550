@@ -139,7 +139,6 @@ fun ToolWorkspaceScreen(
         }.getOrNull()
     }
 
-    val successLine = verifiedOutputDir?.name
     val simpleSummary = when {
         running -> "ALVSIA sedang memproses pekerjaan ini. Tunggu sampai status selesai."
         errorLine != null -> errorLine.removePrefix("X ").trim()
