@@ -71,6 +71,18 @@ class LiveWorkspaceTests(unittest.TestCase):
             self.assertIn('"' + operation + '"', submenus)
             self.assertIn('"' + operation + '"', bridge)
 
+    def test_obb_rebuild_accepts_saf_folder_and_safe_tree_copy(self):
+        engine = ENGINE.read_text(encoding='utf-8')
+        workspace = WORKSPACE.read_text(encoding='utf-8')
+        self.assertIn('DocumentsContract.isTreeUri(uri)', engine)
+        self.assertIn('copyDocumentTree(uri, treeRoot)', engine)
+        self.assertIn('DocumentsContract.buildChildDocumentsUriUsingTree', engine)
+        self.assertIn('selected folder exceeds import size limits', engine)
+        self.assertIn('ActivityResultContracts.OpenDocumentTree()', workspace)
+        self.assertIn('operation.id == "obb_rezip"', workspace)
+        self.assertIn('folderPicker.launch(null)', workspace)
+        self.assertIn('manuallySelectedAction', workspace)
+
     def test_five_gb_limit_is_per_file_not_cumulative(self):
         engine = ENGINE.read_text(encoding='utf-8')
         workspace = WORKSPACE.read_text(encoding='utf-8')
