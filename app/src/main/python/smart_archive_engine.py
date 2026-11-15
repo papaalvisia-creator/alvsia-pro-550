@@ -28,20 +28,22 @@ def _load_authorized_sm4_material(work: Path) -> dict:
                 return {"ok": False, "error": "SM4 material config must be a JSON object"}
             raw = payload.get("candidates")
             method_keys = payload.get("method_keys")
-            if isinstance(method_keys, dict):
-                ordered = []
-                for method in range(31, 56):
-                    value = method_keys.get(str(method))
-                    if value is None:
-                        return {"ok": False, "error": f"SM4 method key {method} is missing"}
-                    ordered.append(value)
-                raw = ordered
-            if raw is None:
+            if raw is None and not isinstance(method_keys, dict):
                 return {"ok": False, "error": "SM4 material config requires candidates or method_keys"}
             from sm4_material import install_material
-            install_material(candidates=raw, source="WORK/authorized-sm4-material")
+            kwargs = {"source": "WORK/authorized-sm4-material"}
+            if raw is not None:
+                kwargs["candidates"] = raw
+            if isinstance(method_keys, dict):
+                kwargs["method_keys"] = method_keys
+            install_material(**kwargs)
             source = name
-            return {"ok": True, "source": source, "candidate_count": len(tuple(raw))}
+            return {
+                "ok": True,
+                "source": source,
+                "candidate_count": len(tuple(raw or ())),
+                "method_key_count": len(method_keys or {}),
+            }
         except Exception as exc:
             return {"ok": False, "error": f"SM4 material config rejected: {type(exc).__name__}: {exc}"}
     return {"ok": True, "source": "none", "candidate_count": 0}
@@ -135,6 +137,7 @@ def execute(operation: str, input_path, output_dir, work_dir=None,
             result["sm4_material"] = {
                 "source": material_report.get("source"),
                 "candidate_count": material_report.get("candidate_count", 0),
+                "method_key_count": material_report.get("method_key_count", 0),
             }
             if result.get("ok"):
                 result.update({"engine": "SMART ARCHIVE", "format": fmt, "out": str(target)})
