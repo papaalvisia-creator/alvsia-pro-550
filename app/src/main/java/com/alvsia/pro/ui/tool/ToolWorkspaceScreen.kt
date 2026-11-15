@@ -528,7 +528,7 @@ fun ToolWorkspaceScreen(
                     when {
                         running -> "PROCESSING"
                         errorLine != null -> "NEEDS ATTENTION"
-                        successLine != null -> "COMPLETED"
+                        verifiedOutputDir != null -> "COMPLETED"
                         else -> "READY"
                     },
                     color = summaryColor,
@@ -548,7 +548,7 @@ fun ToolWorkspaceScreen(
                     }
                 }
                 Text(simpleSummary, color = Color.White, fontSize = 12.sp)
-                if (successLine != null && errorLine == null) {
+                if (verifiedOutputDir != null && errorLine == null) {
                     Text("Lihat folder OUT untuk membuka hasil pekerjaan.",
                         color = AlvisiaSilver.copy(alpha = 0.65f), fontSize = 10.sp)
                 }
