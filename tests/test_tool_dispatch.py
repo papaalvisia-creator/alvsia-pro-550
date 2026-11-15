@@ -563,3 +563,5 @@ if __name__ == "__main__":
         test()
         print("PASS", test.__name__)
     print(f"TOOL DISPATCH TEST: PASS ({len(tests)}/{len(tests)})")
+
+# Corpus-gate regression trigger: strict research classifications are validated in CI.
