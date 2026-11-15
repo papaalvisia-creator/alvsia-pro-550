@@ -152,7 +152,7 @@ def install_material(
 
 
 def clear_material() -> None:
-    global _SECRET_2, _SECRET_4, _CANDIDATES, _SOURCE
+    global _SECRET_2, _SECRET_4, _CANDIDATES, _METHOD_KEYS, _SOURCE
     with _LOCK:
         _SECRET_2 = None
         _SECRET_4 = None
@@ -166,7 +166,7 @@ def _load_from_environment() -> None:
     """Best-effort load from env on first access. Never raises."""
     global _SOURCE
     with _LOCK:
-        if _SECRET_2 or _SECRET_4 or _CANDIDATES:
+        if _SECRET_2 or _SECRET_4 or _CANDIDATES or _METHOD_KEYS:
             return
         payload = os.environ.get(ENV_INLINE)
         if not payload:
@@ -205,7 +205,7 @@ def _ensure_loaded() -> None:
 
 def is_available() -> bool:
     _ensure_loaded()
-    return bool(_SECRET_2 or _SECRET_4 or _CANDIDATES)
+    return bool(_SECRET_2 or _SECRET_4 or _CANDIDATES or _METHOD_KEYS)
 
 
 def get_secret_2() -> Optional[str]:
