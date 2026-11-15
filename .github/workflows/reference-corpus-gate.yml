@@ -61,6 +61,25 @@ jobs:
         with:
           python-version: "3.12"
 
+      - name: Run private corpus source and harness checks
+        if: steps.corpus-auth.outputs.available == 'true'
+        env:
+          PYTHONPATH: reference-corpus/source-tools
+        run: |
+          set -euo pipefail
+          python -m py_compile \
+            reference-corpus/source-tools/incoming/GAME_PATCH_TOOL.py \
+            reference-corpus/tools/alvsia_engine_research.py \
+            reference-corpus/tools/run_strict_engine_research.py \
+            reference-corpus/tools/research_corpus.py
+          bash -n reference-corpus/tools/run_research_termux.sh
+          python -m unittest discover -s reference-corpus/source-tools/tests -v
+          python reference-corpus/source-tools/tools/audit_sources.py \
+            --root reference-corpus \
+            --output reference-corpus-gate-report/source-audit.json
+          ! grep -Eiq 'NADEEM|raw\\.githubusercontent\\.com|AUTH_URL|KEY_URL|EXPIRY_URL|120 FPS UNLOCK|AvatarBPTable' \
+            reference-corpus/source-tools/incoming/GAME_PATCH_TOOL.py
+
       - name: Install research dependencies
         if: steps.corpus-auth.outputs.available == 'true'
         run: |
