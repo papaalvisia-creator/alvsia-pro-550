@@ -108,6 +108,8 @@ fun ToolWorkspaceScreen(
     var detectionResult by remember { mutableStateOf<FileMagic.DetectionResult?>(null) }
     var selectedSize by remember { mutableStateOf<Long?>(null) }
     var sizeRejected by remember { mutableStateOf(false) }
+    var selectedFolder by remember(sub.id) { mutableStateOf(false) }
+    var manuallySelectedAction by remember(sub.id) { mutableStateOf(false) }
     var logMode by remember(operation.id) { mutableStateOf("simple") }
     var confirmClearWorkspace by remember(operation.id) { mutableStateOf(false) }
     val errorLine = logs.firstOrNull { it.startsWith("X ") }
@@ -160,7 +162,7 @@ fun ToolWorkspaceScreen(
     var recentFiles by remember { mutableStateOf(UXStore.getRecentDisplayNames(ctx)) }
 
     fun autoResolve(selectedUri: Uri?, detection: FileMagic.DetectionResult?) {
-        if (selectedUri == null) return
+        if (selectedUri == null || manuallySelectedAction) return
         WorkPaths.bindApp(ctx)
         val selectedName = selectedDisplayName(ctx, selectedUri)
             ?: selectedUri.lastPathSegment?.substringAfterLast('/') ?: ""
@@ -184,6 +186,7 @@ fun ToolWorkspaceScreen(
         ActivityResultContracts.GetContent()
     ) { u ->
         uri = u
+        selectedFolder = false
         selectedSize = u?.let { selectedSizeBytes(ctx, it) }
         sizeRejected = selectedSize?.let { it > MAX_DIRECT_FILE_BYTES } == true
         if (u != null) {
@@ -191,6 +194,24 @@ fun ToolWorkspaceScreen(
             recentFiles = UXStore.getRecentDisplayNames(ctx)
             detectionResult = FileMagic.detect(ctx, u)
             autoResolve(u, detectionResult)
+        }
+    }
+
+    val folderPicker = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocumentTree()
+    ) { folderUri ->
+        uri = folderUri
+        selectedFolder = folderUri != null
+        selectedSize = null
+        sizeRejected = false
+        detectionResult = null
+        if (folderUri != null) {
+            manuallySelectedAction = true
+            runCatching {
+                ctx.contentResolver.takePersistableUriPermission(
+                    folderUri, Intent.FLAG_GRANT_READ_URI_PERMISSION
+                )
+            }
         }
     }
 
@@ -236,7 +257,19 @@ fun ToolWorkspaceScreen(
                 actions.forEach { action ->
                     val selected = action.id == operation.id
                     TextButton(
-                        onClick = { if (!running) onSelectAction(action) },
+                        onClick = {
+                            if (!running) {
+                                manuallySelectedAction = true
+                                if (action.id != operation.id) {
+                                    uri = null
+                                    selectedFolder = false
+                                    selectedSize = null
+                                    sizeRejected = false
+                                    detectionResult = null
+                                }
+                                onSelectAction(action)
+                            }
+                        },
                         enabled = !running,
                         modifier = Modifier
                             .clip(RoundedCornerShape(8.dp))
@@ -289,12 +322,12 @@ fun ToolWorkspaceScreen(
         // ── File picker ────────────────────────────────────────────────
         if (operation.needsFile || actions.any { it.needsFile }) {
             Button(
-                onClick = { picker.launch("*/*") },
+                onClick = { if (operation.id == "obb_rezip") folderPicker.launch(null) else picker.launch("*/*") },
                 colors = ButtonDefaults.buttonColors(containerColor = AlvisiaBlue),
                 shape = RoundedCornerShape(10.dp),
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Text(if (uri != null) "FILE SELECTED" else "+ SELECT FILE",
+                Text(if (uri != null) { if (selectedFolder) "FOLDER SELECTED" else "FILE SELECTED" } else if (operation.id == "obb_rezip") "+ SELECT OBB FOLDER" else "+ SELECT FILE",
                     fontWeight = FontWeight.Bold, fontSize = 12.sp)
             }
             Spacer(Modifier.height(6.dp))
