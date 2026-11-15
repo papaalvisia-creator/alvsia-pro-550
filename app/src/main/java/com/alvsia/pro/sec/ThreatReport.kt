@@ -32,6 +32,15 @@ object ThreatReport {
 
         // The legacy license argument is retained for source compatibility,
         // but deliberately ignored. PanelClient binds the relay to its active session.
-        TelegramNotifier.notify(ctx, event, safeDetail)
+        // Isolated hook-library and proxy-port observations are low-confidence
+        // heuristics, not proof of active compromise. Keep them in local RASP
+        // diagnostics and reserve Telegram alerts for corroborated threats.
+        val signals = safeDetail.split('|').map { it.trim() }.filter { it.isNotEmpty() }
+        val lowConfidenceOnly = signals.isNotEmpty() && signals.all { signal ->
+            signal.startsWith("executable_hook_library:shadowhook", ignoreCase = true) ||
+                Regex("(?i)^proxy_port:[0-9]{1,5}$").matches(signal)
+        }
+        val routedEvent = if (event == "THREAT" && lowConfidenceOnly) "SOFT_THREAT" else event
+        TelegramNotifier.notify(ctx, routedEvent, safeDetail)
     }
 }
