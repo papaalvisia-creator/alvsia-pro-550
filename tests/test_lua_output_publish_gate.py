@@ -53,3 +53,32 @@ def test_smart_lua_publish_gate_publishes_only_validated_lua(monkeypatch, tmp_pa
     assert Path(result["out"]).name == "sample_decompiled.lua"
     assert [p.name for p in out.iterdir()] == ["sample_decompiled.lua"]
     assert Path(result["out"]).read_text(encoding="utf-8") == "return 42\\n"
+
+
+def test_smart_lua_publish_gate_preserves_structural_validation_level(monkeypatch, tmp_path):
+    source = tmp_path / "high_work.luac"
+    source.write_bytes(b"fixture")
+    out = tmp_path / "OUT"
+
+    def fake_internal(_input, workspace, jars_dir=None):
+        candidate = Path(workspace) / "high_work_native.lua"
+        candidate.write_text("local x = 42\\nreturn x\\n", encoding="utf-8")
+        return {
+            "ok": True,
+            "final_status": "STRUCTURALLY_VALID",
+            "validation_level": "syntax_only",
+            "roundtrip_proof": "NOT_RUN",
+            "artifact_kind": "lua_source",
+            "source_recovered": True,
+            "out": str(candidate),
+        }
+
+    monkeypatch.setattr(alvsia_features, "_run_lua_smart_internal", fake_internal)
+    result = alvsia_features.run_lua_smart(source, out)
+
+    assert result["ok"] is True
+    assert result["publish_gate"] == "PASSED"
+    assert result["final_status"] == "STRUCTURALLY_VALID"
+    assert result["validation_level"] == "syntax_only"
+    assert result["roundtrip_proof"] == "NOT_RUN"
+    assert [p.name for p in out.iterdir()] == ["high_work_decompiled.lua"]
