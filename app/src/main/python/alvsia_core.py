@@ -1989,6 +1989,7 @@ class TencentPakFile:
                             stats['blocked_entries'].append({
                                 'path': relative_name,
                                 'reason': 'sm4_material_unavailable',
+                                'encryption_method': int(getattr(entry, 'encryption_method', 0) or 0),
                             })
                     else:
                         stats['failed_files'] += 1
