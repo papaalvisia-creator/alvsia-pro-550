@@ -131,4 +131,6 @@ def test_sparse_sm4_method_key_is_enough_for_single_pak_method(tmp_path):
     ).digest()[:16]
 
     sm4_material.clear_material()
+    assert sm4_material.get_method_key(53) is None
+    assert not sm4_material.is_available()
     alvsia_core.PakCrypto._derive_sm4_key.cache_clear()
