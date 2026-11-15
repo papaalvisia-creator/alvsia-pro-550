@@ -27,8 +27,9 @@ if ids != list(range(1, 8)):
 print("PASS: catalog defines all seven Smart module IDs")
 
 profile_text = profile.read_text(encoding="utf-8")
-if "ALVSIA PRIVATE" not in profile_text or '"7"' not in profile_text:
-    fail("profile must retain the private Smart module and seven-module count")
+module_chips = re.findall(r'ModuleChip\(\s*"[^"]*"\s*,\s*"([^"]+)"\s*\)', profile_text)
+if "ALVSIA PRIVATE" not in module_chips or len(module_chips) != 7:
+    fail(f"profile must retain the private Smart module and exactly seven visible modules; found {module_chips}")
 print("PASS: profile retains the private Smart module")
 
 manifest_text = manifest.read_text(encoding="utf-8")
