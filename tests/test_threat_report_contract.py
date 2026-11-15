@@ -15,7 +15,7 @@ class ThreatReportContractTests(unittest.TestCase):
         self.assertIn("fun emit(ctx: Context, kind: String, detail: String, license: String = \"\")", self.source)
 
     def test_uses_authenticated_operational_notifier(self):
-        self.assertIn("TelegramNotifier.notify(ctx, event, safeDetail)", self.source)
+        self.assertIn("TelegramNotifier.notify(ctx, routedEvent, safeDetail)", self.source)
         self.assertNotIn("OkHttpClient", self.source)
         self.assertNotIn("Vault.pathSecurity()", self.source)
 
