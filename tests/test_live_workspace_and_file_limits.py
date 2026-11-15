@@ -60,6 +60,17 @@ class LiveWorkspaceTests(unittest.TestCase):
         self.assertNotIn('logs.any { it.startsWith("OK ") }', workspace)
         self.assertNotIn('"ALVSIA/OUT"', workspace)
 
+    def test_all_submenu_actions_are_visible_and_obb_routes_are_preserved(self):
+        workspace = WORKSPACE.read_text(encoding='utf-8')
+        submenus = (ROOT / 'app/src/main/java/com/alvsia/pro/tool/SubMenus.kt').read_text(encoding='utf-8')
+        bridge = (ROOT / 'app/src/main/python/alvsia_bridge_impl.py').read_text(encoding='utf-8')
+        self.assertIn('if (actions.size > 1)', workspace)
+        self.assertIn('actions.forEach { action ->', workspace)
+        self.assertIn('onSelectAction(action)', workspace)
+        for operation in ('obb_unzip', 'obb_rezip', 'obb_info', 'obb_integrity_audit'):
+            self.assertIn('"' + operation + '"', submenus)
+            self.assertIn('"' + operation + '"', bridge)
+
     def test_five_gb_limit_is_per_file_not_cumulative(self):
         engine = ENGINE.read_text(encoding='utf-8')
         workspace = WORKSPACE.read_text(encoding='utf-8')
