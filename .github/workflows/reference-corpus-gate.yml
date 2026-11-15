@@ -1,11 +1,12 @@
 name: ALVSIA Reference Corpus Runtime Gate
 
 env:
-  REFERENCE_CORPUS_REV: a5b889e3477b7e5b8fb22060cb24f248f3dfe757
+  REFERENCE_CORPUS_REV: 9709bca480f668970885190ff6ac04ff8947b31f
 
 on:
   push:
     branches:
+      - fix/engine-repair-20261114
       - feat/alvsia-capability-expansion-security-20261114-clean
     paths:
       - "app/src/main/python/**"
@@ -23,43 +24,115 @@ jobs:
     timeout-minutes: 120
     steps:
       - name: Checkout ALVSIA Smart Engine
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Check private corpus credential
+        id: corpus-auth
+        env:
+          CORPUS_TOKEN: ${{ secrets.REFERENCE_CORPUS_TOKEN }}
+        run: |
+          mkdir -p reference-corpus-gate-report
+          if [[ -n "$CORPUS_TOKEN" ]]; then
+            echo "available=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "available=false" >> "$GITHUB_OUTPUT"
+            printf '%s\n' \
+              '{"status":"BLOCKED_AUTHORIZATION","reason":"REFERENCE_CORPUS_TOKEN secret is not configured; private reference corpus was not checked."}' \
+              > reference-corpus-gate-report/gate-status.json
+            {
+              echo "## Reference corpus gate"
+              echo ""
+              echo "**BLOCKED_AUTHORIZATION** — configure the repository Actions secret `REFERENCE_CORPUS_TOKEN` with read access to `papaalvisia-creator/kumpulan-source-tool`."
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
 
       - name: Checkout reference corpus
-        uses: actions/checkout@v4
+        if: steps.corpus-auth.outputs.available == 'true'
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           repository: papaalvisia-creator/kumpulan-source-tool
           ref: ${{ env.REFERENCE_CORPUS_REV }}
+          token: ${{ secrets.REFERENCE_CORPUS_TOKEN }}
           path: reference-corpus
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        if: steps.corpus-auth.outputs.available == 'true'
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
           python-version: "3.12"
 
+      - name: Run private corpus source and harness checks
+        if: steps.corpus-auth.outputs.available == 'true'
+        env:
+          PYTHONPATH: reference-corpus/source-tools
+        run: |
+          set -euo pipefail
+          python -m py_compile \
+            reference-corpus/source-tools/incoming/GAME_PATCH_TOOL.py \
+            reference-corpus/tools/alvsia_engine_research.py \
+            reference-corpus/tools/run_strict_engine_research.py \
+            reference-corpus/tools/research_corpus.py
+          bash -n reference-corpus/tools/run_research_termux.sh
+          python -m unittest discover -s reference-corpus/source-tools/tests -v
+          python reference-corpus/source-tools/tools/audit_sources.py \
+            --root reference-corpus \
+            --output reference-corpus-gate-report/source-audit.json
+          ! grep -Eiq 'NADEEM|raw\\.githubusercontent\\.com|AUTH_URL|KEY_URL|EXPIRY_URL|120 FPS UNLOCK|AvatarBPTable' \
+            reference-corpus/source-tools/incoming/GAME_PATCH_TOOL.py
+
       - name: Install research dependencies
+        if: steps.corpus-auth.outputs.available == 'true'
         run: |
           sudo apt-get update
           sudo apt-get install -y lua5.3
           python -m pip install --disable-pip-version-check pycryptodome zstandard gmalg
 
-      - name: Verify reference corpus
+      - name: Set up Rust for native corpus validation
+        if: steps.corpus-auth.outputs.available == 'true'
+        uses: dtolnay/rust-toolchain@39008827e6b4319a349e9a42dfc90579dd25f1ca # stable
+
+      - name: Build pinned unluac-rs host CLI
+        if: steps.corpus-auth.outputs.available == 'true'
         run: |
           set -euo pipefail
+          WORK="$RUNNER_TEMP/unluac-rs"
+          git clone --depth 1 --branch v1.4.4 https://github.com/x3zvawq/unluac-rs.git "$WORK"
+          cargo build --locked --release -p unluac-cli --manifest-path "$WORK/Cargo.toml"
+          test -x "$WORK/target/release/unluac-cli"
+
+      - name: Prepare optional authorized PAK SM4 material
+        if: steps.corpus-auth.outputs.available == 'true'
+        env:
+          PAK_SM4_MATERIAL_JSON: ${{ secrets.REFERENCE_PAK_SM4_MATERIAL }}
+        run: |
+          set -euo pipefail
+          if [[ -n "${PAK_SM4_MATERIAL_JSON:-}" ]]; then
+            printf "%s" "$PAK_SM4_MATERIAL_JSON" > "$RUNNER_TEMP/alvsia_sm4_material.json"
+            echo "ALVSIA_SM4_MATERIAL_FILE=$RUNNER_TEMP/alvsia_sm4_material.json" >> "$GITHUB_ENV"
+            echo "authorized PAK SM4 material: configured"
+          else
+            echo "authorized PAK SM4 material: not configured; encrypted entries remain fail-closed"
+          fi
+      - name: Verify reference corpus
+        if: steps.corpus-auth.outputs.available == 'true'
+        run: |
+          set -euo pipefail
+          ulimit -v 3200000
           test -s "reference-corpus/samples/pak/game_patch_4.7.0.21752.pak"
           test -s "reference-corpus/samples/pak/game_patch_4.7.0.21756.pak"
           test -s "reference-corpus/samples/lua/PUBG_(4.7.0)_All-Orginal-Lua.zip"
           test -s "reference-corpus/ALVSIAPRO_SRC/LUA/BRPlayerCharacterBase.lua"
-          python reference-corpus/tools/run_strict_engine_research.py \
-            --app-python "$GITHUB_WORKSPACE/app/src/main/python" \
-            --pak-dir "$GITHUB_WORKSPACE/reference-corpus/samples/pak" \
-            --lua-zip "$GITHUB_WORKSPACE/reference-corpus/samples/lua/PUBG_(4.7.0)_All-Orginal-Lua.zip" \
-            --source-lua "$GITHUB_WORKSPACE/reference-corpus/ALVSIAPRO_SRC/LUA/BRPlayerCharacterBase.lua" \
-            --out "$GITHUB_WORKSPACE/reference-corpus-gate-report"
+          ALVSIA_UNLUAC_RS_BIN="$RUNNER_TEMP/unluac-rs/target/release/unluac-cli" \
+            python reference-corpus/tools/run_strict_engine_research.py \
+              --app-python "$GITHUB_WORKSPACE/app/src/main/python" \
+              --pak-dir "$GITHUB_WORKSPACE/reference-corpus/samples/pak" \
+              --lua-zip "$GITHUB_WORKSPACE/reference-corpus/samples/lua/PUBG_(4.7.0)_All-Orginal-Lua.zip" \
+              --source-lua "$GITHUB_WORKSPACE/reference-corpus/ALVSIAPRO_SRC/LUA/BRPlayerCharacterBase.lua" \
+              --out "$GITHUB_WORKSPACE/reference-corpus-gate-report"
 
       - name: Upload research evidence
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: ALVSIA-reference-corpus-gate
           path: reference-corpus-gate-report/**

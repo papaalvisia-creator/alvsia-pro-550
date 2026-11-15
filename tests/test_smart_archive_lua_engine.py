@@ -30,3 +30,107 @@ def test_smart_obb_does_not_promote_random_binary(tmp_path):
     assert result["ok"] is False
     assert result["scan"]["lua_candidates"] == 0
     assert result["recovery"]["attempted"] == 0
+
+
+def test_diverged_bytecode_is_not_counted_as_success(tmp_path):
+    """A created artifact is not proof of success: a decompiled chunk whose
+    roundtrip proof diverges must be STRUCTURALLY_VALID, never SUCCESS."""
+    import shutil
+    import subprocess
+    luac = shutil.which("luac5.3") or shutil.which("luac")
+    if not luac:
+        import pytest
+        pytest.skip("luac compiler not available")
+    src = tmp_path / "s.lua"
+    src.write_text(
+        "local function add(a,b) return a+b end\n"
+        "local t = {x=1,y=2,name='hi'}\n"
+        "local total = 0\n"
+        "for i=1,10 do total = total + add(i,t.x) end\n"
+        "print(total, t.name)\nreturn total\n",
+        encoding="utf-8",
+    )
+    chunk = tmp_path / "s.luac"
+    subprocess.run([luac, "-o", str(chunk), str(src)], check=True)
+
+    import zipfile
+    archive = tmp_path / "b.obb"
+    with zipfile.ZipFile(archive, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+        zf.writestr("assets/test.luac", chunk.read_bytes())
+
+    result = execute(archive, tmp_path / "OUT", archive_kind="obb", deep_lua=True)
+    statuses = {r["status"] for r in result["successes"]}
+    assert "SUCCESS" not in statuses
+    assert result["recovery"]["success"] == 0
+    assert result["recovery"]["partial"] >= 1
+    for r in result["partials"]:
+        assert r["status"] in {"STRUCTURALLY_VALID", "PARTIAL_RECOVERY"}
+
+
+def test_execute_batch_isolates_failures_and_aggregates(tmp_path):
+    import zipfile
+    from smart_archive_lua_engine import execute_batch
+
+    good = tmp_path / "good.obb"
+    with zipfile.ZipFile(good, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+        zf.writestr("assets/a.lua", "local x = 1\nreturn x\n")
+    missing = tmp_path / "does-not-exist.obb"
+
+    summary = execute_batch([good, missing], tmp_path / "OUT",
+                            archive_kind="obb", deep_lua=False)
+    assert summary["operation"] == "batch"
+    assert summary["archives"]["total"] == 2
+    assert summary["archives"]["failed"] == 1
+    assert summary["archives"]["processed"] == 1
+    assert (tmp_path / "OUT" / "smart_archive_lua_batch_report.json").is_file()
+    by_path = {r["path"]: r for r in summary["results"]}
+    assert by_path[str(missing)]["ok"] is False
+    assert by_path[str(good)]["ok"] is True
+
+
+def test_authorized_sm4_method_keys_are_loaded_from_task_local_config_and_wiped(tmp_path):
+    import json
+    import sm4_material
+    from smart_archive_engine import _load_authorized_sm4_material
+
+    work = tmp_path / "WORK"
+    work.mkdir()
+    keys = {str(method): f"authorized-{method}" for method in range(31, 56)}
+    (work / "sm4_material.json").write_text(
+        json.dumps({"method_keys": keys}), encoding="utf-8"
+    )
+
+    report = _load_authorized_sm4_material(work)
+    assert report["ok"] is True
+    assert report["candidate_count"] == 0
+    assert report["method_key_count"] == 25
+    assert report["source"] == "sm4_material.json"
+    assert sm4_material.get_method_key(53) == keys["53"]
+    assert sm4_material.get_method_key(31) == keys["31"]
+
+    sm4_material.clear_material()
+    assert not sm4_material.is_available()
+
+
+def test_sparse_sm4_method_key_is_enough_for_single_pak_method(tmp_path):
+    import hashlib
+    import sm4_material
+    import alvsia_core
+
+    sm4_material.clear_material()
+    secret = "authorized-method-53"
+    sm4_material.install_material(method_keys={"53": secret}, source="test")
+    alvsia_core.PakCrypto._derive_sm4_key.cache_clear()
+
+    key = alvsia_core.PakCrypto._derive_sm4_key(
+        Path("Config/DefaultEngineRedirects_BLUEHOLE.ini"), 53
+    )
+    assert len(key) == 16
+    assert key == hashlib.sha1(
+        f"defaultengineredirects_bluehole.ini{secret}53".encode()
+    ).digest()[:16]
+
+    sm4_material.clear_material()
+    assert sm4_material.get_method_key(53) is None
+    assert not sm4_material.is_available()
+    alvsia_core.PakCrypto._derive_sm4_key.cache_clear()

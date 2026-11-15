@@ -55,7 +55,11 @@ def test_python_auth_normalizes_java_string_and_lua_avoids_art_oom():
     legacy_end = features.find("\ndef ", legacy_start + 5)
     legacy = features[legacy_start:legacy_end if legacy_end >= 0 else None]
     streaming = (ROOT / "app/src/main/python/lua_engine/streaming_decompiler.py").read_text(encoding="utf-8")
-    assert "_run_lua_smart_legacy(" in smart and "analyze_file(" in smart
+    assert "_run_lua_smart_internal(" in smart and "publish_gate" in smart
+    internal_start = features.index("def _run_lua_smart_internal(")
+    internal_end = features.index("\ndef run_lua_smart(", internal_start)
+    internal = features[internal_start:internal_end]
+    assert "analyze_file(" in internal
     assert "decompile_large(" in legacy and "preflight_only=True" in legacy
     assert "build_engine_registry" in legacy and "run_decompiler_pipeline" in legacy
     assert "def decompile_large(" in streaming and "preflight_only" in streaming
@@ -87,8 +91,14 @@ def test_sm4_registry_contains_no_embedded_secret_material():
     assert "xG2qW5lP7lV2iN5fN5pG" not in source
     core = (ROOT / "app/src/main/python/alvsia_core.py").read_text(encoding="utf-8")
     assert "xG2qW5lP7lV2iN5fN5pG" not in core
-    assert "SM4 candidate material is not authorized/supplied" in core
+    # Core must delegate all SM4 material to the single authorized provider and
+    # fail closed when nothing was supplied.
+    assert "import sm4_material" in core
+    assert "require_secret_2" in core and "require_secret_4" in core
+    assert "require_candidates" in core
     assert "set_authorized_sm4_candidates" in core
+    provider = (ROOT / "app/src/main/python/sm4_material.py").read_text(encoding="utf-8")
+    assert "SM4 candidate material is not authorized/supplied" in provider
 
 def test_menu_ids_are_unique_and_reachable():
     menus = MENUS.read_text(encoding="utf-8")
@@ -381,7 +391,8 @@ def test_profile_catalog_matches_compact_smart_modules():
     assert '"SMART ANALYSIS"' in profile
     assert '"WORKSPACE & REPORT"' in profile
     assert '"ALVSIA PRIVATE"' in profile
-    assert '"7"' in profile and '"MODULES"' in profile
+    module_chips = re.findall(r'ModuleChip\(\s*"[^"]*"\s*,\s*"([^"]+)"\s*\)', profile)
+    assert "ALVSIA PRIVATE" in module_chips and len(module_chips) == 7, module_chips
     catalog = CATALOG.read_text(encoding="utf-8")
     names = re.findall(r'ToolItem\(\s*\d+\s*,\s*"([^"]+)"', catalog)
     assert names == ["SMART LUA", "SMART PAK", "SMART OBB", "SMART DATA",
@@ -552,3 +563,7 @@ if __name__ == "__main__":
         test()
         print("PASS", test.__name__)
     print(f"TOOL DISPATCH TEST: PASS ({len(tests)}/{len(tests)})")
+
+# Corpus-gate regression trigger: strict research classifications are validated in CI.
+
+# Reference corpus gate regression trigger: keep CI evidence synchronized with pinned corpus harness.

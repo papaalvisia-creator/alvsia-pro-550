@@ -229,7 +229,11 @@ def protect_source(source: str, profile: ProtectionProfile | str = "balanced") -
             out.append((kind, value))
             j = _next_significant(tokens, i)
             declaration_indices = []
+            is_local_function = False
+            func_kw_idx = None
             if j is not None and tokens[j] == ("ident", "function"):
+                is_local_function = True
+                func_kw_idx = j
                 j = _next_significant(tokens, j)
                 if j is not None and tokens[j][0] == "ident":
                     declaration_indices.append(j)
@@ -256,6 +260,21 @@ def protect_source(source: str, profile: ProtectionProfile | str = "balanced") -
                         tv = declared_by_index[k]
                     out.append((tk, tv))
                 i = last_decl + 1
+                if is_local_function:
+                    # `local function name(...)` consumed the `function` keyword
+                    # inside this branch, so the main loop never sees it. Enter
+                    # the function scope here: register parameters at depth+1 and
+                    # balance the matching `end`. Without this the outer name
+                    # mapping is popped by `end` and trailing uses of the
+                    # function name become dangling references (broken output).
+                    function_depth = depth + 1
+                    scope = active.setdefault(function_depth, {})
+                    for pi in _function_parameter_indices(tokens, func_kw_idx):
+                        name = tokens[pi][1]
+                        if name not in KEYWORDS and name not in scope:
+                            scope[name] = fresh()
+                            tokens[pi] = ("ident", scope[name])
+                    depth = function_depth
                 continue
 
         if kind == "ident" and value == "function" and profile.rename_locals:
@@ -274,7 +293,15 @@ def protect_source(source: str, profile: ProtectionProfile | str = "balanced") -
             replacement = resolve(value)
             if replacement:
                 prev = _significant(tokens, i)
-                if prev is None or tokens[prev][1] not in (".", ":"):
+                nxt = _next_significant(tokens, i)
+                # A bare identifier used as a table-constructor key
+                # (`{ key = value }`) is a field name, not a variable: renaming
+                # it changes the table's key and silently corrupts semantics.
+                is_field_key = (
+                    nxt is not None and tokens[nxt][1] == "="
+                    and prev is not None and tokens[prev][1] in ("{", ",", ";")
+                )
+                if not is_field_key and (prev is None or tokens[prev][1] not in (".", ":")):
                     value = replacement
 
         if kind == "string" and profile.encode_strings:

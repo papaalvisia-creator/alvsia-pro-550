@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 """ALVSIA PRO 5.5 — features: LUA (unluac jar), helpers."""
 from __future__ import annotations
+import mmap
 import os
 import hashlib
 import shutil
@@ -20,6 +21,53 @@ try:
 except Exception:
     validate_decompile_text = None
     classify_bytes = None
+
+# ── Large-input memory safety ────────────────────────────────────────────────
+# A Lua 5.3 bytecode chunk can expand enormously when parsed into Python
+# objects (a single real-world protected chunk of ~22.7 MB declared >900k
+# instructions and drove the pure-Python decompiler past several GB of RAM,
+# OOM-killing the host). To keep peak memory bounded we only attempt the
+# in-memory decompiler for chunks whose declared work fits a safe budget;
+# anything larger is routed to the bounded streaming recovery path, which
+# scans/recovers with O(chunk) memory and reports an honest PARTIAL status.
+_LUA_INMEM_SAFE_BYTES = 256 * 1024
+_LUA_MAX_INSTRUCTIONS = 400_000
+
+
+def _lua_work_exceeds_budget(input_path: Path, input_size: int) -> bool:
+    """Fail-closed preflight for potentially expensive Lua 5.3 chunks.
+
+    The estimator receives a read-only memoryview over an mmap, not a copied
+    bytes object. If the header is Lua 5.3 but estimation is incomplete,
+    malformed, or the configured budget is invalid, route to bounded recovery
+    rather than allowing the in-memory parser to run without a work estimate.
+    """
+    if input_size <= _LUA_INMEM_SAFE_BYTES:
+        return False
+    try:
+        with input_path.open("rb") as fh:
+            head = fh.read(5)
+            if len(head) < 5 or head[:4] != b"\x1bLua" or head[4] != 0x53:
+                return False
+            from lua_engine.decompiler53 import estimate_chunk_work
+            with mmap.mmap(fh.fileno(), 0, access=mmap.ACCESS_READ) as mapped:
+                view = memoryview(mapped)
+                try:
+                    est = estimate_chunk_work(view)
+                finally:
+                    view.release()
+        if not isinstance(est, dict) or est.get("completed") is not True:
+            return True
+        budget = int(os.environ.get(
+            "ALVSIA_LUA_MAX_INSTRUCTIONS", str(_LUA_MAX_INSTRUCTIONS)
+        ))
+        if budget < 1:
+            return True
+        return int(est.get("instructions", 0)) > budget
+    except Exception:
+        # Unknown work is not safe work. Never fall back to an unbounded
+        # in-memory decompile merely because the preflight could not finish.
+        return True
 
 
 def _find_java():
@@ -51,9 +99,11 @@ def _pick_jar(jars_dir, prefer=("unluac_2025_12_23.jar", "unluac_pro.jar", "unlu
 
 def _prepare_lua_input(input_path, out_dir):
     input_path = Path(input_path); out_dir = Path(out_dir)
-    raw = input_path.read_bytes()
-    if not raw.startswith(b"\x78\xda"):
+    with input_path.open("rb") as probe:
+        magic = probe.read(2)
+    if magic != b"\x78\xda":
         return input_path, None
+    raw = input_path.read_bytes()
     payload, ci = unwrap_lua_container(raw)
     if not payload.startswith((b"\x1bLua", b"\x1bLJ")):
         raise ValueError("compressed input did not contain Lua/LuaJIT bytecode")
@@ -507,16 +557,27 @@ def _run_lua_smart_legacy(input_path, out_dir, jars_dir=None):
         if pattern_candidate is not None:
             pattern_candidate.unlink(missing_ok=True)
         report["steps"].append({"step": "engine_orchestrator", **pipeline})
+        if pipeline.get("selected_engine") == "bgmi_structure_only":
+            # The opcode structure may be recoverable, but string constants
+            # remain encrypted without an authorized XOR key. Never promote it
+            # to a complete source recovery.
+            protected_partial_seen = True
+            vm_partial_seen = True
+            report["steps"].append({
+                "step": "bgmi_structure_only_classification",
+                "ok": True,
+                "final_status": "PARTIAL",
+                "note": "opcode structure normalized; encrypted string constants were not decrypted",
+            })
         if pipeline.get("ok"):
             report["ok"] = True
             report["vm_obfuscated"] = bool(vm_partial_seen)
-            report["source_recovered"] = not protected_partial_seen
-            report["artifact_kind"] = (
-                "vm_wrapper_source" if vm_partial_seen
-                else "protected_wrapper_source" if protected_partial_seen
-                else "lua_source"
-            )
-            report["final_status"] = "PARTIAL" if protected_partial_seen else "SUCCESS"
+            # A validated source candidate is a real source recovery even when
+            # earlier protection analysis was partial. Partial VM diagnostics
+            # must not downgrade an independently validated Lua source.
+            report["source_recovered"] = True
+            report["artifact_kind"] = "lua_source"
+            report["final_status"] = "SUCCESS"
             return {
                 "ok": True,
                 "mode": (
@@ -578,11 +639,39 @@ def _run_lua_smart_legacy(input_path, out_dir, jars_dir=None):
     report["stage_report"] = str(stage_path)
     report["final_status"] = final_status
 
+    string_artifact = None
+    string_count = 0
+    for cand in out_dir.glob("*_strings.txt"):
+        try:
+            if cand.is_file() and cand.stat().st_size > 0:
+                string_artifact = cand
+                string_count = sum(1 for _ in cand.open("r", encoding="utf-8", errors="replace"))
+                break
+        except OSError:
+            continue
+    if string_artifact is not None:
+        final_status = "PARTIAL_STRING_RECOVERY"
+        report["artifact_kind"] = "string_recovery"
+        report["source_recovered"] = False
+        report["strings_recovered"] = True
+        report["string_artifact"] = str(string_artifact)
+        report["string_count"] = string_count
+        report["selected_engine"] = "string_recovery"
+        report["out"] = str(string_artifact)
+        report["note"] = (
+            "String recovery produced usable artifacts, but no validated Lua source "
+            "was reconstructed. No synthetic source was generated."
+        )
     return {
-        "ok": final_status == "SUCCESS",
+        "ok": string_artifact is not None,
         "mode": "smart_fallback",
         "final_status": final_status,
-        "note": "PARTIAL: detect/unpack/strings may exist; decompile source NOT validated",
+        "artifact_kind": report.get("artifact_kind"),
+        "source_recovered": bool(report.get("source_recovered", False)),
+        "strings_recovered": bool(report.get("strings_recovered", False)),
+        "out": report.get("out"),
+        "selected_engine": report.get("selected_engine"),
+        "note": report.get("note", "PARTIAL: detect/unpack/strings may exist; decompile source NOT validated"),
         **report,
     }
 
@@ -590,7 +679,62 @@ def _run_lua_smart_legacy(input_path, out_dir, jars_dir=None):
 
 
 
-def run_lua_smart(input_path, out_dir, jars_dir=None):
+def _attach_verified_recovery_ir(result: dict, input_path: Path) -> dict:
+    """Attach bounded Lua 5.3 IR/SSA evidence without making recovery fatal.
+
+    The IR layer is analysis-only. It is deliberately gated by the same work
+    estimator used by the Smart Lua memory-safety path, so a huge protected
+    chunk cannot be parsed into an unbounded Python object graph merely because
+    the caller requested intelligence enrichment.
+    """
+    if not isinstance(result, dict):
+        return result
+    try:
+        status = str(result.get("final_status") or "").upper()
+        candidate = Path(str(result.get("out"))) if result.get("out") else input_path
+        target = candidate if candidate.is_file() and candidate.suffix.lower() in {".luac", ".luac53", ".lua"} else input_path
+        if not target.is_file():
+            return result
+        size = target.stat().st_size
+        if size > 32 * 1024 * 1024:
+            result["recovery_ir"] = {"ok": False, "status": "SKIPPED",
+                                     "reason": "IR input exceeds 32 MiB analysis cap"}
+            return result
+        if target.suffix.lower() == ".lua" and target.read_bytes()[:4] != b"\\x1bLua":
+            return result
+        if _lua_work_exceeds_budget(target, size):
+            result["recovery_ir"] = {"ok": False, "status": "SKIPPED",
+                                     "reason": "declared Lua work exceeds bounded IR budget"}
+            return result
+        from recovery_ir import analyze_lua_bytecode, build_ssa
+        analysis = analyze_lua_bytecode(str(target), deadline_seconds=8.0)
+        if analysis.get("ok"):
+            ir = analysis.get("ir") or {}
+            rows = [
+                {"pc": item.get("pc"), "opcode": item.get("opcode"),
+                 "operands": tuple(item.get("operands") or ())}
+                for item in ir.get("instructions", [])
+            ]
+            # Rebuild the typed instruction stream from verified IR data and
+            # attach SSA evidence; this does not execute or interpret code.
+            from recovery_ir import IRInstruction
+            typed = [IRInstruction(int(x["pc"]), str(x["opcode"]), tuple(x["operands"]))
+                     for x in rows if isinstance(x.get("pc"), int) and x.get("opcode")]
+            analysis["ssa"] = build_ssa(typed)
+            analysis["status"] = "VERIFIED_IR"
+            result["recovery_ir"] = analysis
+            result["recovery_ir_status"] = "VERIFIED_IR"
+        else:
+            result["recovery_ir"] = analysis
+            result["recovery_ir_status"] = "UNAVAILABLE"
+    except Exception as exc:
+        result["recovery_ir"] = {"ok": False, "status": "ERROR",
+                                 "error": f"{type(exc).__name__}: {exc}"}
+        result["recovery_ir_status"] = "ERROR"
+    return result
+
+
+def _run_lua_smart_internal(input_path, out_dir, jars_dir=None):
     """Program-intelligence front door with legacy engine orchestration as a validated adapter."""
     input_path = Path(input_path)
     out_dir = Path(out_dir)
@@ -604,7 +748,9 @@ def run_lua_smart(input_path, out_dir, jars_dir=None):
     ))
     max_in_memory = max(16 * 1024 * 1024, min(max_in_memory, 512 * 1024 * 1024))
     input_size = input_path.stat().st_size if input_path.is_file() else 0
-    if input_size > max_in_memory:
+    if input_size > max_in_memory or (
+        input_path.is_file() and _lua_work_exceeds_budget(input_path, input_size)
+    ):
         from lua_engine.streaming_decompiler import (
             preflight_magic, stream_inflate_zlib, stream_inflate_deflate_container,
         )
@@ -643,7 +789,74 @@ def run_lua_smart(input_path, out_dir, jars_dir=None):
             unwrap_report = {"ok": False, "format": fmt,
                              "error": f"{type(exc).__name__}: {exc}"}
 
-        if work_input != input_path and work_input.stat().st_size <= max_in_memory:
+        # A high-instruction Lua 5.3 chunk must not fall back to the pure-Python
+        # parser merely because a compressed wrapper was small. Try the pinned
+        # native Rust CLI first: it is isolated from Chaquopy's Python heap,
+        # strict-mode output is checked again by the common Lua validator, and
+        # unsupported/custom-VM inputs remain PARTIAL rather than being guessed.
+        native_report = None
+        try:
+            from lua_engine.streaming_decompiler import preflight_magic
+            native_format = preflight_magic(work_input)
+            native_limit = 32 * 1024 * 1024
+            if native_format == "luac_53" and work_input.stat().st_size <= native_limit:
+                from lua_engine.orchestrator import _find_unluac_rs, _run_unluac_rs
+                native_binary = _find_unluac_rs(jars_dir)
+                if native_binary is not None:
+                    native_out = out_dir / (input_path.stem + "_native_decompiled.lua")
+                    native_ok, native_note = _run_unluac_rs(
+                        native_binary, work_input, native_out
+                    )
+                    native_report = {
+                        "available": True, "ok": bool(native_ok),
+                        "engine": "unluac_rs_v1_4_4", "note": str(native_note)[:500],
+                    }
+                    if native_ok and native_out.is_file() and native_out.stat().st_size > 0:
+                        valid, validation_note = validate_lua_source(native_out)
+                        native_report["validation"] = validation_note
+                        if valid:
+                            return {
+                                "ok": True,
+                                "mode": "smart_native_large_input",
+                                # Syntax validation alone proves a structurally
+                                # valid source file, not semantic equivalence to
+                                # protected bytecode. The archive/Lua E2E layer
+                                # may promote it only after an explicit roundtrip proof.
+                                "final_status": "STRUCTURALLY_VALID",
+                                "validation_level": "syntax_only",
+                                "roundtrip_proof": "NOT_RUN",
+                                "selected_engine": "unluac_rs_v1_4_4",
+                                "out": str(native_out),
+                                "source_recovered": True,
+                                "input_bytes": input_size,
+                                "stream_unwrap": unwrap_report,
+                                "native_decompile": native_report,
+                                "validation": validation_note,
+                            }
+                        native_out.unlink(missing_ok=True)
+                        native_report["ok"] = False
+                        native_report["error"] = "native output failed Lua source validation"
+                else:
+                    native_report = {
+                        "available": False, "ok": False,
+                        "note": "native unluac-rs CLI is not registered in this runtime",
+                    }
+            elif native_format == "luac_53":
+                native_report = {
+                    "available": False, "ok": False,
+                    "note": "native Lua input exceeds the 32 MiB safety cap",
+                }
+        except Exception as exc:
+            native_report = {
+                "available": False, "ok": False,
+                "error": f"{type(exc).__name__}: {exc}",
+            }
+
+        if (
+            work_input != input_path
+            and work_input.stat().st_size <= max_in_memory
+            and not _lua_work_exceeds_budget(work_input, work_input.stat().st_size)
+        ):
             try:
                 legacy = _run_lua_smart_legacy(work_input, out_dir, jars_dir=jars_dir)
                 legacy["input_bytes"] = input_size
@@ -656,9 +869,10 @@ def run_lua_smart(input_path, out_dir, jars_dir=None):
             decompile_report = {
                 "ok": False,
                 "error": (
-                    f"input/payload exceeds in-memory Lua parser budget ({max_in_memory} bytes); "
-                    "large-file scanning and container inflation remain streaming, "
-                    "but full Lua 5.3 source reconstruction is not yet streaming"
+                    "input exceeds the safe in-memory Lua decompiler budget "
+                    "(byte size or declared instruction count); bounded streaming "
+                    "scanning/string recovery was used, but full Lua 5.3 source "
+                    "reconstruction is not performed for this input"
                 ),
             }
         try:
@@ -668,17 +882,75 @@ def run_lua_smart(input_path, out_dir, jars_dir=None):
             )
         except Exception as exc:
             recovery = {"ok": False, "error": f"{type(exc).__name__}: {exc}"}
+        # A bounded string recovery artifact is a real partial result. It must
+        # not be downgraded to a fatal failure merely because no reconstructed
+        # .lua source exists. The caller can then expose the artifact and the
+        # next recovery route instead of painting the operation red.
+        string_artifact = None
+        string_count = 0
+        for step in recovery.get("steps", []) if isinstance(recovery, dict) else []:
+            candidate = step.get("out")
+            if candidate:
+                p = Path(str(candidate))
+                if p.is_file() and p.stat().st_size > 0 and "_strings_" in p.name:
+                    string_artifact = p
+                    try:
+                        string_count = int(step.get("count") or 0)
+                    except (TypeError, ValueError):
+                        string_count = 0
+                    break
+        if string_artifact is not None:
+            partial_result = {
+                "ok": True,
+                "mode": "smart_streaming_large_input",
+                "final_status": "PARTIAL_STRING_RECOVERY",
+                "artifact_kind": "string_recovery",
+                "source_recovered": False,
+                "strings_recovered": True,
+                "string_artifact": str(string_artifact),
+                "out": str(string_artifact),
+                "selected_engine": "string_recovery",
+                "string_count": string_count,
+                "input_bytes": input_size,
+                "stream_unwrap": unwrap_report,
+                "decompile": decompile_report,
+                "native_decompile": native_report,
+                "streaming_recovery": recovery,
+                "next_actions": [
+                    "classify Lua dialect/header",
+                    "inspect prototype and instruction boundaries",
+                    "attempt bounded native decompiler candidates",
+                    "lift recoverable bytecode into IR/CFG",
+                    "reconstruct source candidate and validate it",
+                ],
+                "note": (
+                    "Large input was processed with bounded memory. String artifacts "
+                    "were recovered, but no validated Lua source was reconstructed."
+                ),
+            }
+            # Keep partial string recovery actionable: attach bounded IR evidence
+            # when the recovered payload is a verified, affordable Lua chunk.
+            return _attach_verified_recovery_ir(partial_result, work_input)
         return {
             "ok": False,
             "mode": "smart_streaming_large_input",
             "final_status": "PARTIAL",
+            "artifact_kind": "diagnostics_only",
+            "source_recovered": False,
+            "strings_recovered": False,
             "input_bytes": input_size,
             "stream_unwrap": unwrap_report,
             "decompile": decompile_report,
+            "native_decompile": native_report,
             "streaming_recovery": recovery,
+            "next_actions": [
+                "inspect Lua dialect/header",
+                "attempt protected-format adapters",
+                "attempt bounded bytecode reconstruction",
+            ],
             "note": (
-                "Large input was processed without whole-file RAM loading. "
-                "Recovery artifacts are diagnostic; no full decompile SUCCESS is claimed."
+                "Large input was processed without whole-file RAM loading, but no "
+                "recoverable source or string artifact was produced."
             ),
         }
 
@@ -691,7 +963,7 @@ def run_lua_smart(input_path, out_dir, jars_dir=None):
         legacy = {"ok": False, "final_status": "FAILED",
                   "error": f"{type(exc).__name__}: {exc}"}
     result = dict(legacy)
-
+    # Canonical app path: expose the same verified IR evidence as the compatibility wrapper.\n    result = _attach_verified_recovery_ir(result, input_path)\n
     # Run optional intelligence analysis only after the decompiler has had
     # its chance to publish a validated artifact. Treat analysis failure as a
     # diagnostic warning, not as a reason to discard the decompiler result.
@@ -742,6 +1014,97 @@ def run_lua_smart(input_path, out_dir, jars_dir=None):
         # Candidate scoring must never turn a valid legacy result into a crash.
         result["candidate_fusion_error"] = f"{type(exc).__name__}: {exc}"
     return result
+
+def run_lua_smart(input_path, out_dir, jars_dir=None):
+    """Public Smart Lua entry point with a strict pure-source publish gate.
+
+    All diagnostics, intermediate bytecode, strings, candidates and reports are
+    generated in a private temporary workspace. The caller-visible OUT folder
+    receives exactly one validated Lua source file, or remains empty.
+    """
+    input_path = Path(input_path)
+    public_out = Path(out_dir)
+    public_out.mkdir(parents=True, exist_ok=True)
+
+    # A task owns its OUT directory. Remove stale artifacts from previous
+    # attempts so a failed decompile can never leave misleading output behind.
+    input_resolved = input_path.resolve()
+    for child in public_out.iterdir():
+        try:
+            child_resolved = child.resolve()
+            # Callers may stage the input beside the requested OUT directory
+            # (and tests intentionally exercise that layout). Never delete the
+            # input itself or an ancestor directory containing it.
+            if child_resolved == input_resolved or input_resolved in child_resolved.parents:
+                continue
+            if child.is_dir() and not child.is_symlink():
+                shutil.rmtree(child)
+            else:
+                child.unlink(missing_ok=True)
+        except OSError:
+            pass
+
+    internal_dir = Path(tempfile.mkdtemp(prefix="alvsia-smart-lua-"))
+    try:
+        result = _run_lua_smart_internal(input_path, internal_dir, jars_dir=jars_dir)
+        result = dict(result or {})
+
+        candidate_value = result.get("out")
+        candidate = Path(str(candidate_value)) if candidate_value else None
+        source_status = str(result.get("final_status") or "").upper()
+        source_recovered = bool(result.get("source_recovered"))
+
+        # Only a concrete .lua artifact that passes the same source validator
+        # used by the decompiler is eligible for publication. Partial strings,
+        # constants, XOR material, reports, IR and intermediate bytecode never
+        # cross this boundary.
+        publishable = (
+            source_recovered
+            and candidate is not None
+            and candidate.is_file()
+            and candidate.suffix.lower() == ".lua"
+            and candidate.stat().st_size > 0
+        )
+        validation_note = None
+        if publishable:
+            valid, validation_note = validate_lua_source(candidate)
+            publishable = bool(valid)
+            result["publish_validation"] = validation_note
+
+        if publishable:
+            dest = public_out / f"{input_path.stem}_decompiled.lua"
+            shutil.copyfile(candidate, dest)
+            result["ok"] = True
+            result["out"] = str(dest)
+            result["source_recovered"] = True
+            result["artifact_kind"] = "lua_source"
+            # Preserve the evidence level established by the engine. A source
+            # that passed only syntax/structural validation is not equivalent
+            # to a source with semantic/round-trip proof.
+            result["final_status"] = source_status or "SUCCESS"
+            result["publish_gate"] = "PASSED"
+            result["published_files"] = [dest.name]
+            result["internal_workspace"] = "sealed"
+        else:
+            result["ok"] = False
+            result["out"] = None
+            result["source_recovered"] = False
+            result["publish_gate"] = "BLOCKED"
+            result["published_files"] = []
+            result["note"] = (
+                "No validated Lua source was published. Recovery diagnostics and "
+                "partial artifacts remain internal only."
+            )
+            # A source candidate that failed validation is not a user result.
+            if source_status in {"SUCCESS", "STRUCTURALLY_VALID"}:
+                result["final_status"] = "FAILED_SOURCE_VALIDATION"
+            else:
+                result["final_status"] = source_status or "FAILED"
+
+        return result
+    finally:
+        shutil.rmtree(internal_dir, ignore_errors=True)
+
 
 # ---------------------------------------------------------------------------
 # LUA ENGINE v5.5 — unified detection / analysis / fallback
@@ -829,6 +1192,8 @@ def run_pubg_lua_decrypt(input_path, out_dir, key_hex=None):
     except ValueError:
         return {"ok": False, "error": "Lua XOR key is not valid hexadecimal"}
     try:
+        if input_path.stat().st_size > 32 * 1024 * 1024:
+            return {"ok": False, "error": "BGMI transform input exceeds the 32 MiB safety cap"}
         raw = input_path.read_bytes()
         out = transform_bgmi_lua(raw, key, decrypt=True)
         dest = out_dir / (input_path.stem + "_decrypted.luac")
@@ -1162,7 +1527,11 @@ def run_rebrand_tree(src_dir, out_dir, out_root=None, brand=None, channel=None, 
             continue
         if f.suffix.lower() not in (".lua", ".txt", ".ini", ".json", ".xml", ".csv", ".uasset", ".uexp"):
             # still try lua-named without suffix
-            if b"\x1bLua" == f.read_bytes()[:4] if f.stat().st_size > 4 else False:
+            magic = b""
+            if f.stat().st_size > 4:
+                with f.open("rb") as probe:
+                    magic = probe.read(4)
+            if magic == b"\x1bLua":
                 pass
             elif f.suffix.lower() not in (".lua", ".txt", ".ini"):
                 continue
@@ -1710,10 +2079,14 @@ class BinaryURLScanner:
         rb'(?::(\d{1,5}))?',
     )
     _RE_IP      = _re.compile(rb'\b(?:\d{1,3}\.){3}\d{1,3}(?::\d{1,5})?\b')
-    _RE_B64     = _re.compile(rb'[A-Za-z0-9+/]{40,}={0,2}')
+    # Bound the captured base64 prefix to keep regex work and chunk overlap finite.
+    # scan_bytes() already returned at most 120 bytes, so this preserves its output.
+    _RE_B64     = _re.compile(rb'[A-Za-z0-9+/]{40,120}={0,2}')
     _CTX_KW     = [b'url', b'host', b'connect', b'endpoint', b'server',
                    b'proxy', b'gateway', b'base', b'api', b'link', b'path']
     _CHUNK      = 8 * 1024 * 1024
+    _CARRY      = 1024
+    _CONTEXT    = 60
 
     # Private IP ranges — excluded from host results to reduce noise
     _PRIVATE_IP = _re.compile(
@@ -1726,49 +2099,73 @@ class BinaryURLScanner:
         ctx = data[lo:hi].lower()
         return any(k in ctx for k in self._CTX_KW)
 
-    def scan_bytes(self, data: bytes) -> list:
-        """Return ``list[tuple[str, str]]`` — (kind, value)."""
-        results: list = []
-        seen: set = set()
+    def _scan_buffer(self, data: bytes, final: bool,
+                     results: list, seen: set) -> None:
+        """Scan a bounded window; defer tail matches until full context is present."""
+        safe_start = len(data) if final else max(
+            0, len(data) - self._CARRY + self._CONTEXT
+        )
 
         def add(kind: str, raw: bytes) -> None:
-            val = raw.decode('utf-8', errors='replace').strip()
-            if val and val not in seen:
-                seen.add(val)
-                results.append((kind, val))
+            value = raw.decode('utf-8', errors='replace').strip()
+            if value and value not in seen:
+                seen.add(value)
+                results.append((kind, value))
 
-        # 1. Full URLs
-        for m in self._RE_URL.finditer(data):
-            add('URL', m.group(0))
-
-        # 2. host:port near context keywords
-        for m in self._RE_HOST.finditer(data):
-            host = m.group(1)
-            port = m.group(2) or b''
-            if not self._ctx_ok(data, m.start(), m.end()):
+        for match in self._RE_URL.finditer(data):
+            if not final and match.start() >= safe_start:
                 continue
-            raw = host + (b':' + port if port else b'')
-            add('HOST', raw)
+            add('URL', match.group(0))
 
-        # 3. IP:port
-        for m in self._RE_IP.finditer(data):
-            ip_bytes = m.group(0)
-            if self._PRIVATE_IP.match(ip_bytes):
+        for match in self._RE_HOST.finditer(data):
+            if not final and match.start() >= safe_start:
                 continue
-            add('IP', ip_bytes)
-
-        # 4. Long base64 near context keywords (obfuscated URLs)
-        for m in self._RE_B64.finditer(data):
-            if not self._ctx_ok(data, m.start(), m.end()):
+            if not self._ctx_ok(data, match.start(), match.end()):
                 continue
-            add('B64', m.group(0)[:120])
+            host = match.group(1)
+            # Valid DNS names are limited to 253 bytes; reject pathological
+            # binary runs before they can create unbounded cross-chunk matches.
+            if len(host) > 253:
+                continue
+            port = match.group(2) or b''
+            add('HOST', host + (b':' + port if port else b''))
 
+        for match in self._RE_IP.finditer(data):
+            if not final and match.start() >= safe_start:
+                continue
+            ip_bytes = match.group(0)
+            if not self._PRIVATE_IP.match(ip_bytes):
+                add('IP', ip_bytes)
+
+        for match in self._RE_B64.finditer(data):
+            if not final and match.start() >= safe_start:
+                continue
+            if self._ctx_ok(data, match.start(), match.end()):
+                add('B64', match.group(0)[:120])
+
+    def scan_bytes(self, data: bytes) -> list:
+        """Scan an in-memory buffer; results match the streaming file scanner."""
+        results: list = []
+        seen: set = set()
+        self._scan_buffer(data, True, results, seen)
         return results
 
     def scan_file(self, filepath) -> list:
-        """Scan one binary file.  Returns list of (kind, value) tuples."""
-        data = Path(filepath).read_bytes()
-        return self.scan_bytes(data)
+        """Scan a large binary in bounded chunks instead of reading it all into RAM."""
+        results: list = []
+        seen: set = set()
+        carry = b''
+        chunk_size = max(1024, int(self._CHUNK))
+        with Path(filepath).open("rb") as handle:
+            while True:
+                block = handle.read(chunk_size)
+                final = not block
+                window = carry + block
+                self._scan_buffer(window, final, results, seen)
+                if final:
+                    break
+                carry = window[-self._CARRY:]
+        return results
 
     def scan_folder(self, folder_path: str, exts=('.so', '.obb', '.apk')) -> dict:
         """Scan all matching files under *folder_path*.
@@ -1806,113 +2203,45 @@ PUBG_XOR_KEY = bytes([
 ])
 
 # Verified opcode mapping: PUBG/BGMI opcode → Standard Lua 5.3 opcode
-PUBG_TO_STD_OPCODE = {
-    0: 0, 1: 1, 17: 0, 18: 1, 20: 3, 21: 4, 22: 5, 23: 6,
-    24: 7, 26: 9, 27: 10, 28: 11, 29: 12, 31: 31, 32: 32,
-    33: 33, 34: 34, 35: 35, 36: 36, 37: 37, 38: 38, 39: 39,
-    40: 40, 41: 41, 42: 42, 43: 43, 44: 44, 45: 45, 46: 46,
-    47: 47,
-}
-
-
 class PUBGLuaConverter:
-    """Convert PUBG Mobile / BGMI Lua bytecode to standard Lua 5.3 format.
+    """Structure-aware PUBG/BGMI Lua 5.3 normalizer.
 
-    The converter:
-
-    1. XOR-decrypts the string-constant pool (bytes after the 0x22-byte header)
-       using ``PUBG_XOR_KEY``.
-    2. Remaps scrambled opcodes to standard Lua 5.3 opcodes via
-       ``PUBG_TO_STD_OPCODE``.
-    3. Rewrites the Lua header to the standard Lua 5.3 signature so that
-       decompilers accept the output.
-
-    Usage::
-
-        converter = PUBGLuaConverter()
-        std_bytes = converter.convert_file('/path/to/scrambled.luac')
-        Path('/out/fixed.luac').write_bytes(std_bytes)
+    Only the verified BGMI 4-byte-size_t container is accepted here. Unknown
+    variants fail closed and should be handled by the Smart Lua auto-router;
+    the former bytewise XOR/opcode sweep could corrupt strings and metadata.
     """
-
-    _LUA53_HEADER = (
-        b'\x1bLua'       # magic
-        b'\x53'          # version 5.3
-        b'\x00'          # format 0
-        b'\x19\x93\r\n\x1a\n'  # LUAC_DATA
-        b'\x04'          # sizeof_int
-        b'\x08'          # sizeof_size_t
-        b'\x04'          # sizeof_Instruction
-        b'\x08'          # sizeof_lua_Integer
-        b'\x08'          # sizeof_lua_Number
-        b'\x78\x56\x00\x00\x00\x00\x00\x00'   # LUAC_INT
-        b'\x00\x00\x00\x00\x00\x28\x77\x40'   # LUAC_NUM
-    )
-    _HDR_LEN = 33
-    _HEADER_ENCRYPTED_START = 0x22  # bytes before this are NOT XOR-encrypted
-
-    @staticmethod
-    def _xor_decrypt(data: bytes) -> bytes:
-        key = PUBG_XOR_KEY
-        kl  = len(key)
-        return bytes(b ^ key[i % kl] for i, b in enumerate(data))
+    MAX_INPUT_BYTES = 32 * 1024 * 1024
 
     def convert_bytes(self, data: bytes) -> bytes:
-        """Convert *data* (raw PUBG .luac bytes) to standard Lua 5.3 bytes."""
-        if len(data) < self._HDR_LEN:
-            raise ValueError("data too short to be a Lua bytecode file")
-        # Decrypt the portion after the unencrypted header prefix
-        header   = data[:self._HEADER_ENCRYPTED_START]
-        body_enc = data[self._HEADER_ENCRYPTED_START:]
-        body     = self._xor_decrypt(body_enc)
-        decrypted = header + body
-
-        # Remap opcodes in all instruction words (every u32 that encodes an instruction)
-        result = self._remap_opcodes(decrypted)
-        # Rewrite the Lua header so luadec / unluac accept the file
-        return self._LUA53_HEADER + result[self._HDR_LEN:]
-
-    def _remap_opcodes(self, data: bytes) -> bytes:
-        """Walk the top-level proto and remap PUBG opcodes to standard ones."""
-        # Simple approach: scan all aligned u32 words and remap op field (bits 0-5)
-        # This is fast and works for most well-formed files.
-        ba = bytearray(data)
-        i  = self._HDR_LEN
-        while i + 4 <= len(ba):
-            raw = _struct.unpack_from('<I', ba, i)[0]
-            op  = raw & 0x3F
-            if op in PUBG_TO_STD_OPCODE:
-                std_op = PUBG_TO_STD_OPCODE[op]
-                new_raw = (raw & ~0x3F) | std_op
-                _struct.pack_into('<I', ba, i, new_raw)
-            i += 4
-        return bytes(ba)
+        if len(data) > self.MAX_INPUT_BYTES:
+            raise ValueError("PUBG/BGMI input exceeds the 32 MiB safety cap")
+        from alvsia_private import LuaOpcodeConverter
+        raw = bytes(data)
+        # Use the same strict producer parser as the large-file Smart Lua path.
+        # It validates the exact BGMI header, every Proto, opcode map, string
+        # payload, debug table, and trailing bytes before returning a chunk.
+        return LuaOpcodeConverter(variant="bgmi").convert_bytes(raw)
 
     def convert_file(self, input_path: str, output_path: str | None = None) -> bytes:
-        """Convert one ``.luac`` file.  If *output_path* is given, write the result there.
-
-        Returns the converted bytes regardless.
-        """
-        data   = Path(input_path).read_bytes()
-        result = self.convert_bytes(data)
+        source = Path(input_path)
+        if source.stat().st_size > self.MAX_INPUT_BYTES:
+            raise ValueError("PUBG/BGMI input exceeds the 32 MiB safety cap")
+        result = self.convert_bytes(source.read_bytes())
         if output_path:
             Path(output_path).write_bytes(result)
         return result
 
     def convert_folder(self, input_dir: str, output_dir: str,
                        glob_pat: str = '*.luac') -> dict:
-        """Convert all matching files in *input_dir*, writing to *output_dir*.
-
-        Returns ``{filename: 'OK' | 'FAIL: <reason>'}`` for each file processed.
-        """
         src_dir = Path(input_dir)
         dst_dir = Path(output_dir)
         dst_dir.mkdir(parents=True, exist_ok=True)
         report: dict = {}
-        for p in sorted(src_dir.glob(glob_pat)):
+        for source in sorted(src_dir.glob(glob_pat)):
             try:
-                out_path = dst_dir / p.name
-                self.convert_file(str(p), str(out_path))
-                report[p.name] = 'OK'
+                out_path = dst_dir / source.name
+                self.convert_file(str(source), str(out_path))
+                report[source.name] = 'OK'
             except Exception as exc:
-                report[p.name] = f'FAIL: {exc}'
+                report[source.name] = f'FAIL: {exc}'
         return report

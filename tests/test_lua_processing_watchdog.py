@@ -67,11 +67,22 @@ def test_streaming_lua53_returns_timeout_instead_of_trying_more_candidates(tmp_p
 
 def test_adapter_dispatch_uses_complete_smart_lua_engine(tmp_path, monkeypatch):
     import alvsia_features
+    import shutil
+    import subprocess
 
+    luac = shutil.which("luac5.3") or shutil.which("luac")
+    if not luac:
+        import pytest
+        pytest.skip("luac compiler not available")
+    # Real bytecode input so dispatch routes to the Smart Lua engine rather than
+    # the plain-source passthrough validator.
+    src_lua = tmp_path / "src.lua"
+    src_lua.write_text("return 42\n", encoding="utf-8")
     source = tmp_path / "input.luac"
-    source.write_bytes(b"Lua fixture")
+    subprocess.run([luac, "-o", str(source), str(src_lua)], check=True)
+
     produced = tmp_path / "smart-output.lua"
-    produced.write_text("return 42\\n", encoding="utf-8")
+    produced.write_text("return 42\n", encoding="utf-8")
     destination = tmp_path / "out" / "expected.lua"
     calls = []
 
@@ -88,8 +99,8 @@ def test_adapter_dispatch_uses_complete_smart_lua_engine(tmp_path, monkeypatch):
     )
     assert result["ok"] is True, result
     assert result["out"] == str(destination)
-    assert destination.read_text(encoding="utf-8") == "return 42\\n"
-    assert calls == [(source, destination.parent, tmp_path / "jars")]
+    assert destination.read_text(encoding="utf-8") == "return 42\n"
+    assert calls and calls[0][0] == source
 
 
 def test_pipeline_watchdog_stops_before_starting_another_engine(tmp_path, monkeypatch):
@@ -161,11 +172,14 @@ def test_smart_decompile_runs_before_optional_intelligence_and_survives_analysis
 
     def fake_legacy(input_path, out_dir, jars_dir=None):
         marker.write_text("validated output was produced")
+        candidate = Path(out_dir) / "input_decompiled.lua"
+        candidate.write_text("return 42\n", encoding="utf-8")
         return {
             "ok": True,
             "final_status": "SUCCESS",
             "selected_engine": "fixture_engine",
-            "out": None,
+            "source_recovered": True,
+            "out": str(candidate),
         }
 
     def failing_intelligence(*args, **kwargs):

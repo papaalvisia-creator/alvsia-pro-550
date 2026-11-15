@@ -6,6 +6,49 @@ import json
 from pathlib import Path
 
 
+def _load_authorized_sm4_material(work: Path) -> dict:
+    """Load caller-supplied PAK SM4 candidates without embedding or logging secrets.
+
+    Supported WORK files: sm4_material.json or pak_sm4_material.json. The JSON may
+    contain {"candidates":[...]} or {"method_keys":{"31":"...",...}}. Method
+    keys are normalized into the ordered SM4_NEW candidate list (31 -> index 0).
+    Only validated caller-provided material is installed; missing material remains
+    fail-closed in the PAK core.
+    """
+    import json
+    candidates = None
+    source = None
+    for name in ("sm4_material.json", "pak_sm4_material.json"):
+        path = work / name
+        if not path.is_file():
+            continue
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+            if not isinstance(payload, dict):
+                return {"ok": False, "error": "SM4 material config must be a JSON object"}
+            raw = payload.get("candidates")
+            method_keys = payload.get("method_keys")
+            if raw is None and not isinstance(method_keys, dict):
+                return {"ok": False, "error": "SM4 material config requires candidates or method_keys"}
+            from sm4_material import install_material
+            kwargs = {"source": "WORK/authorized-sm4-material"}
+            if raw is not None:
+                kwargs["candidates"] = raw
+            if isinstance(method_keys, dict):
+                kwargs["method_keys"] = method_keys
+            install_material(**kwargs)
+            source = name
+            return {
+                "ok": True,
+                "source": source,
+                "candidate_count": len(tuple(raw or ())),
+                "method_key_count": len(method_keys or {}),
+            }
+        except Exception as exc:
+            return {"ok": False, "error": f"SM4 material config rejected: {type(exc).__name__}: {exc}"}
+    return {"ok": True, "source": "none", "candidate_count": 0}
+
+
 def _sha256(path: Path) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as handle:
@@ -86,10 +129,25 @@ def execute(operation: str, input_path, output_dir, work_dir=None,
 
     if op == "extract":
         target = out / source.stem
-        result = dict(extract_archive(source, target) or {})
-        if result.get("ok"):
-            result.update({"engine": "SMART ARCHIVE", "format": fmt, "out": str(target)})
-        return result
+        material_report = _load_authorized_sm4_material(work)
+        if not material_report.get("ok"):
+            return {"ok": False, "engine": "SMART ARCHIVE", "error": material_report.get("error", "SM4 material rejected")}
+        try:
+            result = dict(extract_archive(source, target) or {})
+            result["sm4_material"] = {
+                "source": material_report.get("source"),
+                "candidate_count": material_report.get("candidate_count", 0),
+                "method_key_count": material_report.get("method_key_count", 0),
+            }
+            if result.get("ok"):
+                result.update({"engine": "SMART ARCHIVE", "format": fmt, "out": str(target)})
+            return result
+        finally:
+            # Task-local material is ephemeral and must be wiped. External
+            # caller-installed material is preserved across batch extracts.
+            if material_report.get("source") not in (None, "none"):
+                from sm4_material import clear_material
+                clear_material()
 
     report_path = out / (source.name + ".integrity.json")
     try:

@@ -20,6 +20,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import android.os.Build
 import com.alvsia.pro.BuildConfig
 import com.alvsia.pro.ui.theme.*
 
@@ -55,8 +56,21 @@ fun ProfileScreen(product: String, expiry: String, hwidShort: String, toolCount:
         Row(Modifier.fillMaxWidth(), horizontalArrangement=Arrangement.spacedBy(7.dp)) {
             _InfoTile("PLAN", product.ifBlank { "PREMIUM" }, Modifier.weight(1f))
             _InfoTile("EXPIRES", expiry.ifBlank { "—" }, Modifier.weight(1f))
-            _InfoTile("MODULES", "7", Modifier.weight(1f))
+            _InfoTile("MODULES", toolCount.toString(), Modifier.weight(1f))
         }
+        Spacer(Modifier.height(10.dp))
+        _SectionTitle("IDENTITY & RUNTIME")
+        Spacer(Modifier.height(7.dp))
+        _DetailGrid(listOf(
+            "CREATOR" to "@ALVSIA_PRO",
+            "OWNER" to "@OriginalOnwerALV",
+            "PACKAGE" to BuildConfig.APPLICATION_ID,
+            "VERSION" to (BuildConfig.VERSION_NAME + " (" + BuildConfig.VERSION_CODE + ")"),
+            "ANDROID" to ("Android " + Build.VERSION.RELEASE + " / API " + Build.VERSION.SDK_INT),
+            "ABI" to (Build.SUPPORTED_ABIS.firstOrNull().orEmpty().ifBlank { "ARM64" }),
+            "DEVICE" to (Build.MANUFACTURER + " " + Build.MODEL),
+            "SESSION" to "SECURE / ACTIVE"
+        ))
         Spacer(Modifier.height(10.dp))
         Row(Modifier.fillMaxWidth(), horizontalArrangement=Arrangement.spacedBy(8.dp)) {
             _ActionTile("♙", "OWNER", "@OriginalOnwerALV", Modifier.weight(1f), Color(0xFF263B4C)) {
@@ -65,8 +79,8 @@ fun ProfileScreen(product: String, expiry: String, hwidShort: String, toolCount:
             _ActionTile("✦", "CREATOR", "ALVSIA_PRO", Modifier.weight(1f), Color(0xFF263F35)) { }
         }
         Spacer(Modifier.height(8.dp))
-        _ActionTile("✈", "OFFICIAL CHANNEL", "@ALVSIA_PRO", Modifier.fillMaxWidth(), Color(0xFF263F35)) {
-            uri.openUri("https://t.me/ALVSIA_PRO")
+        _ActionTile("✈", "OFFICIAL CHANNEL", "@ALVISIACHANEL", Modifier.fillMaxWidth(), Color(0xFF263F35)) {
+            uri.openUri("https://t.me/ALVISIACHANEL")
         }
         Spacer(Modifier.height(8.dp))
         Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp))
@@ -78,6 +92,15 @@ fun ProfileScreen(product: String, expiry: String, hwidShort: String, toolCount:
             }
             Text("SESSION GATE  ·  INTEGRITY", color=accent.copy(alpha=.85f), fontSize=8.sp, textAlign=TextAlign.End)
         }
+        Spacer(Modifier.height(15.dp))
+        _SectionTitle("ALVSIA ENGINE STACK")
+        Spacer(Modifier.height(7.dp))
+        _DetailGrid(listOf(
+            "RECOVERY" to "IR · CFG · SSA · RECONSTRUCTION",
+            "VALIDATION" to "SYNTAX · STRUCTURAL · ROUND-TRIP",
+            "OUTPUT" to "PURE VALIDATED SOURCE ONLY",
+            "PAK FLOW" to "EXTRACT → DISCOVER → LUA HANDOFF"
+        ))
         Spacer(Modifier.height(15.dp))
         Row(Modifier.fillMaxWidth(), verticalAlignment=Alignment.CenterVertically) {
             Text("TOOL MODULES", color=muted, fontSize=10.sp, letterSpacing=1.5.sp)
@@ -104,6 +127,37 @@ fun ProfileScreen(product: String, expiry: String, hwidShort: String, toolCount:
         Text("← BACK TO TOOL PANEL", color=muted, fontSize=10.sp, letterSpacing=.7.sp,
             modifier=Modifier.clip(RoundedCornerShape(8.dp)).clickable { onBack() }.padding(12.dp))
         Text("ALVSIA PRO © 2026", color=AlvisiaSilver.copy(alpha=.25f), fontSize=9.sp)
+    }
+}
+
+
+@Composable
+private fun _SectionTitle(text: String) {
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        Text(text, color = AlvisiaCyan, fontSize = 10.sp, fontWeight = FontWeight.Black, letterSpacing = 1.4.sp)
+        Spacer(Modifier.weight(1f))
+        Text("● ONLINE", color = Color(0xFF63E6A6), fontSize = 8.sp, fontWeight = FontWeight.Bold)
+    }
+}
+
+@Composable
+private fun _DetailGrid(items: List<Pair<String, String>>) {
+    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        items.chunked(2).forEach { row ->
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                row.forEach { (label, value) ->
+                    Column(Modifier.weight(1f).clip(RoundedCornerShape(9.dp))
+                        .background(Color.White.copy(alpha=.035f))
+                        .border(.5.dp, Color.White.copy(alpha=.08f), RoundedCornerShape(9.dp))
+                        .padding(9.dp)) {
+                        Text(label, color = AlvisiaSilver.copy(alpha=.42f), fontSize=8.sp, letterSpacing=.7.sp)
+                        Spacer(Modifier.height(3.dp))
+                        Text(value, color = AlvisiaSilver, fontSize=9.sp, fontWeight=FontWeight.SemiBold, maxLines=2)
+                    }
+                }
+                if (row.size == 1) Spacer(Modifier.weight(1f))
+            }
+        }
     }
 }
 

@@ -1,0 +1,863 @@
+{
+  "corpus_root": "/workspace/corpus",
+  "total_files": 85,
+  "format_summary": {
+    "YAML": 2,
+    "UNKNOWN": 3,
+    "Lua bytecode": 2,
+    "ZIP archive": 2,
+    "Text/Markdown": 18,
+    "Python source": 51,
+    "Tencent PAK": 5,
+    "Lua source (text?)": 1,
+    "Shell script": 1
+  },
+  "files": [
+    {
+      "path": ".github/workflows/alvsia-source-checks.yml",
+      "size": 1041,
+      "sha256": "8f57983329bdbb28fdc3d33684f41797a5d93dbd24fcad21e9f6294d4e882417",
+      "magic_hex": "6e616d653a20414c5653494120736f75",
+      "format": "YAML",
+      "variant": ""
+    },
+    {
+      "path": ".github/workflows/corpus-research.yml",
+      "size": 3163,
+      "sha256": "5be7867ce8514c52747981a59766f14f52ab852feaaee5e4f7fc349c7f343e50",
+      "magic_hex": "6e616d653a20414c5653494120526566",
+      "format": "YAML",
+      "variant": ""
+    },
+    {
+      "path": ".gitignore",
+      "size": 114,
+      "sha256": "888f2fcd3e7232f5a33649397c86c6fd4ceb51786c60c4163a59dff0ec9adddf",
+      "magic_hex": "0a23204c6f63616c2063726564656e74",
+      "format": "UNKNOWN",
+      "variant": ""
+    },
+    {
+      "path": "ALVSIAPRO_SRC/LUA/BRPlayerCharacterBase.lua",
+      "size": 21985,
+      "sha256": "0d1d32954882cee8e95b7b39f69295352872642bbaf8a67e0b24ce3f39e66073",
+      "magic_hex": "1b4c7561530019930d0a1a0a04040408",
+      "format": "Lua bytecode",
+      "variant": "Lua 0x53"
+    },
+    {
+      "path": "ALVSIAPRO_SRC/ZIP/file .zip",
+      "size": 77739212,
+      "sha256": "44730a91b27b4301908340139a83034d18cbca9ee4d8ab6b3e2922fa461a9054",
+      "magic_hex": "504b03040a000008000049216e5d0000",
+      "format": "ZIP archive",
+      "variant": "",
+      "zip": {
+        "entries": 10,
+        "sample": [
+          "file /",
+          "file /@JINSHIFORYOU.lua",
+          "file /Bypass 4.7 Protection (decrypted).lua",
+          "file /PlayerControllerBase.lua",
+          "file /game_patch_4.6.0.21605.pak",
+          "file /game_patch_4.6.0.21605_.pak",
+          "file /game_patch_4.6.1.21584.pak",
+          "file /game_patch_4.7.0.21760.pak",
+          "file /res_pufferpatch_4.6.0.21541.pak",
+          "file /ui_util.lua"
+        ]
+      }
+    },
+    {
+      "path": "ALVSIA_PRO_REFERENCE_COMPARISON_20261102.md",
+      "size": 5786,
+      "sha256": "9e7d62fc07177ecac948edcb03f2577c9c87ff468e14407e7777db66edff4b61",
+      "magic_hex": "2320414c565349412050524f20e28094",
+      "format": "Text/Markdown",
+      "variant": ""
+    },
+    {
+      "path": "Attc10 (1).py",
+      "size": 699703,
+      "sha256": "aa54b3c5ede139ea78cc865f499401b78583857d825ae0d1929d20b368d0c0d0",
+      "magic_hex": "66726f6d205f5f6675747572655f5f20",
+      "format": "Python source",
+      "variant": ""
+    },
+    {
+      "path": "AttcToolFor4.6.py",
+      "size": 751797,
+      "sha256": "f05cfa07e8a502373b07e52abb0aee1434376873bf1f02346b08800624cbb691",
+      "magic_hex": "66726f6d205f5f6675747572655f5f20",
+      "format": "Python source",
+      "variant": ""
+    },
+    {
+      "path": "ChatGPR_PRO.py",
+      "size": 13139,
+      "sha256": "d2ec1758114b93c50f2be2453ad2efb89208b27758ee85ea09081508e356bb3b",
+      "magic_hex": "5b7b226e616d65223a2242793a4b696c",
+      "format": "Python source",
+      "variant": ""
+    },
+    {
+      "path": "FREE PAK 4.6 V1/ANDROID/AKMOD_VIP_KEY.txt",
+      "size": 14,
+      "sha256": "3da105926fb1db9681a77a8b43df9aa45e3f41a7ea59b9d37de7f717315e3bbe",
+      "magic_hex": "414b4d4f442d465245452d342e36",
+      "format": "Text/Markdown",
+      "variant": ""
+    },
+    {
+      "path": "FREE PAK 4.6 V1/ANDROID/ShadowTrackerExtra/Saved/Paks/core_patch_4.6.0.21546.pak",
+      "size": 2901321,
+      "sha256": "be6ea17aa44b5c67abf218228ab3e15e69faae35d1d76b3dd102a4bf5dbc85d6",
+      "magic_hex": "9d81da6c3fb6f0e69c833162602cbba5",
+      "format": "Tencent PAK",
+      "variant": "v14, index_encrypted=True",
+      "pak": {
+        "version": 14,
+        "entries": 1,
+        "index_encrypted": true,
+        "paths": [
+          "Content/Lua/GameLua/GameCore/Framework/CharacterBase.lua"
+        ]
+      }
+    },
+    {
+      "path": "FREE PAK 4.6 V1/ANDROID/core_patch_4.6.0.21546.pak",
+      "size": 2856729,
+      "sha256": "864299aaec4689b4d5325f1db56121335dae257aaf8f16d9d405daee81b07a33",
+      "magic_hex": "2f3e9c49d5c6a9cbc2f27899945a1578",
+      "format": "Tencent PAK",
+      "variant": "v14, index_encrypted=True",
+      "pak": {
+        "version": 14,
+        "entries": 239,
+        "index_encrypted": true,
+        "paths": [
+          "1.txt",
+          "Config/DefaultEngineRedirects_BLUEHOLE.ini",
+          "Config/DefaultEngineRedirects_JAPANKOREA.ini",
+          "Content/Arts/UI/TableIcons/ItemIcon/TPlan/Item/TPlan_Icon_Activefile_128.uasset",
+          "Content/Arts/UI/TableIcons/ItemIcon/TPlan/Item/TPlan_Icon_Activefile_128.uexp",
+          "Content/Arts/UI/TableIcons/ItemIcon/TPlan/Item/TPlan_Icon_Activefile_256.uasset",
+          "Content/Arts/UI/TableIcons/ItemIcon/TPlan/Item/TPlan_Icon_Activefile_256.uexp",
+          "Content/Arts_Scenes/Lobby/Lobby_GoldenSuitShopping_330/M_Stage_Inst.uasset",
+          "Content/Arts_Scenes/Lobby/Lobby_GoldenSuitShopping_330/M_Stage_Inst.uexp",
+          "Content/Arts_Scenes/Lobby/Lobby_GoldenSuitShopping_330/M_Stage_Inst_01.uasset",
+          "Content/Arts_Scenes/Lobby/Lobby_GoldenSuitShopping_330/M_Stage_Inst_01.uexp",
+          "Content/Arts_Scenes/Textures/Water/T_Foam_D.uasset",
+          "Content/Arts_Scenes/Textures/Water/T_Foam_D.ubulk",
+          "Content/Arts_Scenes/Textures/Water/T_Foam_D.uexp",
+          "Content/Arts_Scenes/Textures/Water/T_Water_01_N.uasset",
+          "Content/Arts_Scenes/Textures/Water/T_Water_01_N.ubulk",
+          "Content/Arts_Scenes/Textures/Water/T_Water_01_N.uexp",
+          "Content/Arts_UI/VersionUpdateSlap/Pages/4_6_0/Lobby_VersionUpdateSlap_Page_002_UIBP.uasset",
+          "Content/Arts_UI/VersionUpdateSlap/Pages/4_6_0/Lobby_VersionUpdateSlap_Page_002_UIBP.uexp",
+          "Content/Arts_UI/VersionUpdateSlap/Pages/4_6_0/Lobby_VersionUpdateSlap_Page_002_UIBP_LOD1.uasset",
+          "Content/Arts_UI/VersionUpdateSlap/Pages/4_6_0/Lobby_VersionUpdateSlap_Page_002_UIBP_LOD1.uexp",
+          "Content/CSV/CardCollectionCardConfig.uasset",
+          "Content/CSV/CardCollectionCardConfig.uexp",
+          "Content/CSV/InFillingBPTable.uasset",
+          "Content/CSV/InFillingBPTable.uexp",
+          "Content/CSV/Item_Fixed.uasset",
+          "Content/CSV/Item_Fixed.uexp",
+          "Content/CSV/ItemDecomposeID.uasset",
+          "Content/CSV/ItemDecomposeID.uexp",
+          "Content/CSV/LocalizationTextFixed.uasset",
+          "Content/CSV/LocalizationTextFixed.uexp",
+          "Content/CSV/LocalizationTextFixed_BLUEHOLE.uasset",
+          "Content/CSV/LocalizationTextFixed_BLUEHOLE.uexp",
+          "Content/CSV/MainCityUISystem.uasset",
+          "Content/CSV/MainCityUISystem.uexp",
+          "Content/CSV/MainUISystem.uasset",
+          "Content/CSV/MainUISystem.uexp",
+          "Content/CSV/ReddotCategoryConfig.uasset",
+          "Content/CSV/ReddotCategoryConfig.uexp",
+          "Content/CSV/TxMissionItem.uasset",
+          "Content/CSV/TxMissionItem.uexp",
+          "Content/CSV/UGCAssetParamPublishCfg.uasset",
+          "Content/CSV/UGCAssetParamPublishCfg.uexp",
+          "Content/CSV/XMJumpUrl.uasset",
+          "Content/CSV/XMJumpUrl.uexp",
+          "Content/CSV/InGame/EvoBase/CSV/GameGuideUIConfigBluehole.uasset",
+          "Content/CSV/InGame/EvoBase/CSV/GameGuideUIConfigBluehole.uexp",
+          "Content/CSV/InGame/EvoBase/CSV/Item_Fixed.uasset",
+          "Content/CSV/InGame/EvoBase/CSV/Item_Fixed.uexp",
+          "Content/CSV/InGame/EvoBase/CSV/TabContentConfig.uasset",
+          "Content/CSV/InGame/EvoBase/CSV/TabContentConfig.uexp",
+          "Content/CSV/InGame/PlanBT/CSV/llustratedGuideLevelCofig.uasset",
+          "Content/CSV/InGame/PlanBT/CSV/llustratedGuideLevelCofig.uexp",
+          "Content/CSV/InGame/TPlan/CSV/Item.uasset",
+          "Content/CSV/InGame/TPlan/CSV/Item.uexp",
+          "Content/CSV/JAPANKOREA/CardCollectionCardConfig.uasset",
+          "Content/CSV/JAPANKOREA/CardCollectionCardConfig.uexp",
+          "Content/CSV/JAPANKOREA/MainCityUISystem.uasset",
+          "Content/CSV/JAPANKOREA/MainCityUISystem.uexp",
+          "Content/CSV/JAPANKOREA/MainUISystem.uasset",
+          "Content/CSV/JAPANKOREA/MainUISystem.uexp",
+          "Content/Library/CreativeDL/IG3400/Arts_Player/Scene/mesh/Arts_Scenes/POIbig/Materials/MI_Atlantis_POIsamll_002_Water_4.uasset",
+          "Content/Library/CreativeDL/IG3400/Arts_Player/Scene/mesh/Arts_Scenes/POIbig/Materials/MI_Atlantis_POIsamll_002_Water_4.uexp",
+          "Content/Library/Res/Hero/ElementWater/Arts_Effect/Material/M_WaterWall_Ball_Inst1.uasset",
+          "Content/Library/Res/Hero/ElementWater/Arts_Effect/Material/M_WaterWall_Ball_Inst1.uexp",
+          "Content/Library/Res/Weapons/BubbleLauncher/Arts_Effect/Mat/M_P_Atlantis_NegWater_Ball_01_ZZQ_03.uasset",
+          "Content/Library/Res/Weapons/BubbleLauncher/Arts_Effect/Mat/M_P_Atlantis_NegWater_Ball_01_ZZQ_03.uexp",
+          "Content/Library/Res/Weapons/BubbleLauncher/Arts_Effect/Mat/M_P_Atlantis_PosWater_Ball_01_RF_06.uasset",
+          "Content/Library/Res/Weapons/BubbleLauncher/Arts_Effect/Mat/M_P_Atlantis_PosWater_Ball_01_RF_06.uexp",
+          "Content/Library/Res/Weapons/BubbleLauncher/Arts_Effect/Mat/M_P_Atlantis_PosWater_Wall_01_RF_06.uasset",
+          "Content/Library/Res/Weapons/BubbleLauncher/Arts_Effect/Mat/M_P_Atlantis_PosWater_Wall_01_RF_06.uexp",
+          "Content/Library/Res/Weapons/BubbleLauncher/Arts_Effect/Mat/M_WaterWall_Inst3.uasset",
+          "Content/Library/Res/Weapons/BubbleLauncher/Arts_Effect/Mat/M_WaterWall_Inst3.uexp",
+          "Content/Library/Res/Weapons/BubbleLauncher/Arts_Effect/Mat/M_WaterWall_Inst4.uasset",
+          "Content/Library/Res/Weapons/BubbleLauncher/Arts_Effect/Mat/M_WaterWall_Inst4.uexp",
+          "Content/Library/Res/Weapons/BubbleLauncher/Arts_Effect/Mat/M_WaterWall_Low2.uasset",
+          "Content/Library/Res/Weapons/BubbleLauncher/Arts_Effect/Mat/M_WaterWall_Low2.uexp",
+          "Content/Library/Res/Weapons/BubbleLauncher/Arts_Effect/Material/M_WaterWall_Ball_01.uasset",
+          "Content/Library/Res/Weapons/BubbleLauncher/Arts_Effect/Material/M_WaterWall_Ball_01.uexp",
+          "Content/Library/Res/Weapons/BubbleLauncher/Arts_Effect/Material/M_WaterWall_Ball_Translucent.uasset"
+        ]
+      }
+    },
+    {
+      "path": "FREE PAK 4.6 V1/IOS/Paks/AKMOD_VIP_KEY.txt",
+      "size": 14,
+      "sha256": "3da105926fb1db9681a77a8b43df9aa45e3f41a7ea59b9d37de7f717315e3bbe",
+      "magic_hex": "414b4d4f442d465245452d342e36",
+      "format": "Text/Markdown",
+      "variant": ""
+    },
+    {
+      "path": "FREE PAK 4.6 V1/IOS/Paks/core_patch_4.6.0.21546.pak",
+      "size": 2901321,
+      "sha256": "be6ea17aa44b5c67abf218228ab3e15e69faae35d1d76b3dd102a4bf5dbc85d6",
+      "magic_hex": "9d81da6c3fb6f0e69c833162602cbba5",
+      "format": "Tencent PAK",
+      "variant": "v14, index_encrypted=True",
+      "pak": {
+        "version": 14,
+        "entries": 1,
+        "index_encrypted": true,
+        "paths": [
+          "Content/Lua/GameLua/GameCore/Framework/CharacterBase.lua"
+        ]
+      }
+    },
+    {
+      "path": "JINSHIPAPA (1).py",
+      "size": 129502,
+      "sha256": "310731f8556a0ab148d1fd5c5b1bcfb28e5a46d4abded0ab2ad54c0a8d686b35",
+      "magic_hex": "0a23212f7573722f62696e2f656e7620",
+      "format": "Python source",
+      "variant": ""
+    },
+    {
+      "path": "MK PANEL CHANGER.py",
+      "size": 11724,
+      "sha256": "6b141f1d49468c076b568f4e062045e12be6e068ed415bb4d1c39042effcfc08",
+      "magic_hex": "23202d2a2d20636f64696e673a207574",
+      "format": "Python source",
+      "variant": ""
+    },
+    {
+      "path": "MODER.py",
+      "size": 138323,
+      "sha256": "86d761644b3b67b39b597ea52b9acea55585d284857af4b599e92a6e3e77e3ba",
+      "magic_hex": "232f7573722f62696e2f656e76207079",
+      "format": "Python source",
+      "variant": ""
+    },
+    {
+      "path": "Modders_Core_Decompiled.py",
+      "size": 179394,
+      "sha256": "1d8313e732b6a1c7749218c1193eab20635ae521ea556cc38eeac785a0893a97",
+      "magic_hex": "696d706f72742069746572746f6f6c73",
+      "format": "Python source",
+      "variant": ""
+    },
+    {
+      "path": "PREMIUM.py",
+      "size": 839773,
+      "sha256": "c357cfad30a14e7f1a803044dca464471838e556ffe3c4f7e6c049b78d69683d",
+      "magic_hex": "23212f7573722f62696e2f656e762070",
+      "format": "Python source",
+      "variant": ""
+    },
+    {
+      "path": "PUBGM.py",
+      "size": 9467,
+      "sha256": "daffb41732b500bb7c053b3a8f533a9643565362b2977a8f389c009c95e8e388",
+      "magic_hex": "23212f7573722f62696e2f656e762070",
+      "format": "Python source",
+      "variant": ""
+    },
+    {
+      "path": "REDMAGIX_TOOL_reconstructed.py",
+      "size": 157267,
+      "sha256": "5d9de12d0a4b43290bf2367c305a462ea4246efc953e5151a09e24edf5ab9740",
+      "magic_hex": "23212f7573722f62696e2f656e762070",
+      "format": "Python source",
+      "variant": ""
+    },
+    {
+      "path": "SM4.py",
+      "size": 2231,
+      "sha256": "35ee2e59c5fc68b9f1d38ed6e3dd9ecee1d3469a25f7f2d6de2c8853380990a7",
+      "magic_hex": "696d706f7274206f730a696d706f7274",
+      "format": "Python source",
+      "variant": ""
+    },
+    {
+      "path": "SM4_Termux_Guide.md",
+      "size": 804,
+      "sha256": "47bdaa3b99a65b209335ec712a5f43c3642fe75c21a5080518f6081d2b640fc6",
+      "magic_hex": "2320534d34204b6579205363616e6e65",
+      "format": "Text/Markdown",
+      "variant": ""
+    },
+    {
+      "path": "T24XOR_tool_source (1).py",
+      "size": 1315246,
+      "sha256": "a6888eef424a2ebf50b5b35e74792d08130cbb183ff4f97d93d65e8289b00e6e",
+      "magic_hex": "23212f7573722f62696e2f656e762070",
+      "format": "Python source",
+      "variant": ""
+    },
+    {
+      "path": "UltimateEngineTool.py",
+      "size": 315861,
+      "sha256": "e1bd44b4238a5c262d4e0d613773907c76b00fe0be26bb0c1b84274470b29061",
+      "magic_hex": "0a23212f7573722f62696e2f656e7620",
+      "format": "Python source",
+      "variant": ""
+    },
+    {
+      "path": "alv_main.py",
+      "size": 37050,
+      "sha256": "c8ca61ab15e1e7e19926c562fb6ad5fb23bc4a8e8a311d71c74d71d1477665e1",
+      "magic_hex": "23203d3d3d3d3d3d3d3d3d3d3d3d3d3d",
+      "format": "Python source",
+      "variant": ""
+    },
+    {
+      "path": "dravix.py",
+      "size": 81530,
+      "sha256": "750a90682ace4e010451a078107e700c7f9032d0f9ee35376163ecc08af1ef01",
+      "magic_hex": "235448495320544f4f4c204d4f442042",
+      "format": "Python source",
+      "variant": ""
+    },
+    {
+      "path": "dump.py",
+      "size": 3374,
+      "sha256": "149e54cfad441478ab4f9b73ae808a8c280766e1df7df1b04a81a6a884c16b3f",
+      "magic_hex": "23212f7573722f62696e2f656e762070",
+      "format": "Python source",
+      "variant": ""
+    },
+    {
+      "path": "fix.py",
+      "size": 72680,
+      "sha256": "fd824870854208bf0cbc46bf433a65dc2ec5139bb93f0c1cb8487af576f90cf4",
+      "magic_hex": "696d706f72742069746572746f6f6c73",
+      "format": "Python source",
+      "variant": ""
+    },
+    {
+      "path": "gen_enc (1).py",
+      "size": 259257,
+      "sha256": "06184364c487f3030db0481c09975f1582154dcdb91c3f9fa75a81d8f22c1ba2",
+      "magic_hex": "6f0d0d0a000000005243936886320400",
+      "format": "Python source",
+      "variant": ""
+    },
+    {
+      "path": "main.py",
+      "size": 210607,
+      "sha256": "81ac5e927b48cfa6b0c4535d2e3caca379af0ab590e142bf9eac2f0476c6279a",
+      "magic_hex": "23212f7573722f62696e2f656e762070",
+      "format": "Python source",
+      "variant": ""
+    },
+    {
+      "path": "ng1aaLib.py",
+      "size": 3868,
+      "sha256": "f5489eeb6e5eac0eabc3e025cb08cc6d4f3fc5e8641475bf6ca1f517e9a7add5",
+      "magic_hex": "696d706f7274206f730d0a0d0a544152",
+      "format": "Python source",
+      "variant": ""
+    },
+    {
+      "path": "pubg_gfp_Icon (1).py",
+      "size": 16556,
+      "sha256": "faf58bb472cf21943da802ae975054b130fa516a9cbd10cc7842f7be6d665572",
+      "magic_hex": "2320e4bb81e6b58e20524a544f4f4c0a",
+      "format": "Python source",
+      "variant": ""
+    },
+    {
+      "path": "pubg_gfp_Icon.py",
+      "size": 16556,
+      "sha256": "faf58bb472cf21943da802ae975054b130fa516a9cbd10cc7842f7be6d665572",
+      "magic_hex": "2320e4bb81e6b58e20524a544f4f4c0a",
+      "format": "Python source",
+      "variant": ""
+    },
+    {
+      "path": "pubg_ultimate_decompiler.py",
+      "size": 10232,
+      "sha256": "106701a7133ec195f2aa366b19ac7032d9f558de946cde87007dd1d4ef137bd9",
+      "magic_hex": "23212f7573722f62696e2f656e762070",
+      "format": "Python source",
+      "variant": ""
+    },
+    {
+      "path": "references/unluac/KUMPULAN_UNLUAC_MANIFEST.md",
+      "size": 2805,
+      "sha256": "6980480a4b5619d500b51d89ad6d2e2a414d2d13c9903c6cace40c1714c42adf",
+      "magic_hex": "23204b554d50554c414e20554e4c5541",
+      "format": "Text/Markdown",
+      "variant": ""
+    },
+    {
+      "path": "references/unluac/lua_decompiler_final.py",
+      "size": 12265,
+      "sha256": "cc23b2ea567f32a9bdb9d82d9fe159463103a4fd903b892cd93d18adbe94470d",
+      "magic_hex": "23212f7573722f62696e2f656e762070",
+      "format": "Python source",
+      "variant": ""
+    },
+    {
+      "path": "references/unluac/luajit_decompiler.py",
+      "size": 5739,
+      "sha256": "3613112e39d220a06bb04c44370c54a93c0da296afde4db3ceaf2630422cf1b2",
+      "magic_hex": "2222220a6c75615f656e67696e652f6c",
+      "format": "Python source",
+      "variant": ""
+    },
+    {
+      "path": "referensi.py",
+      "size": 70703,
+      "sha256": "f3c608c7062bf25645e099fa23775ba53389092e6348f30eef3bfaecaeb49525",
+      "magic_hex": "23212f7573722f62696e2f656e762070",
+      "format": "Python source",
+      "variant": ""
+    },
+    {
+      "path": "rjtool_core.py",
+      "size": 675717,
+      "sha256": "51d930c180b9b08cc6e994b6608c2e80d08e202eecb566d6bc3890aae2e34eef",
+      "magic_hex": "234352414b454420425920534842494c",
+      "format": "Python source",
+      "variant": ""
+    },
+    {
+      "path": "samples/README.md",
+      "size": 1624,
+      "sha256": "2d0e92fc829825552b1be6d1307b7feecf97bf884feaeb651646bd5a2712b5bb",
+      "magic_hex": "2320414c565349412050524f20726566",
+      "format": "Text/Markdown",
+      "variant": ""
+    },
+    {
+      "path": "samples/lua/PUBG_(4.7.0)_All-Orginal-Lua.zip",
+      "size": 55990448,
+      "sha256": "8589c269ca57d6246de92fbb38b28b67870a74e4b64eb2f02ecbc50ca4b40ed0",
+      "magic_hex": "504b03040a0000080000fb746b5d0000",
+      "format": "ZIP archive",
+      "variant": "",
+      "zip": {
+        "entries": 33931,
+        "sample": [
+          "PUBG MOBILE/",
+          "PUBG MOBILE/ShadowTrackerExtra/",
+          "PUBG MOBILE/ShadowTrackerExtra/Content/",
+          "PUBG MOBILE/ShadowTrackerExtra/Content/Lua/",
+          "PUBG MOBILE/ShadowTrackerExtra/Content/Lua/GameLua/",
+          "PUBG MOBILE/ShadowTrackerExtra/Content/Lua/GameLua/Activity/",
+          "PUBG MOBILE/ShadowTrackerExtra/Content/Lua/GameLua/Activity/Commercialize/",
+          "PUBG MOBILE/ShadowTrackerExtra/Content/Lua/GameLua/Activity/Commercialize/Actor/",
+          "PUBG MOBILE/ShadowTrackerExtra/Content/Lua/GameLua/Activity/Commercialize/Actor/ActorComponent/",
+          "PUBG MOBILE/ShadowTrackerExtra/Content/Lua/GameLua/Activity/Commercialize/Actor/ActorComponent/BP_Battle_VehicleLicenseComponent.lua",
+          "PUBG MOBILE/ShadowTrackerExtra/Content/Lua/GameLua/Activity/Commercialize/Actor/ActorComponent/BP_Lobby_VehicleLicenseComponent.lua",
+          "PUBG MOBILE/ShadowTrackerExtra/Content/Lua/GameLua/Activity/Commercialize/Actor/ActorComponent/BP_Parachute_VehicleLicensePlateComponent.lua",
+          "PUBG MOBILE/ShadowTrackerExtra/Content/Lua/GameLua/Activity/Commercialize/Actor/ActorComponent/BP_VehicleLicenseComponentBase.lua",
+          "PUBG MOBILE/ShadowTrackerExtra/Content/Lua/GameLua/Activity/Commercialize/Actor/ActorComponent/DeadBoxAvatarComponent_BP.lua",
+          "PUBG MOBILE/ShadowTrackerExtra/Content/Lua/GameLua/Activity/Commercialize/Actor/ActorComponent/VehicleContainerAvatarComponent.lua",
+          "PUBG MOBILE/ShadowTrackerExtra/Content/Lua/GameLua/Activity/Commercialize/Actor/ActorComponent/VehicleContainerInterativeComponent.lua",
+          "PUBG MOBILE/ShadowTrackerExtra/Content/Lua/GameLua/Activity/Commercialize/Actor/DeadBoxSmokeSeqActor.lua",
+          "PUBG MOBILE/ShadowTrackerExtra/Content/Lua/GameLua/Activity/Commercialize/Actor/InteractActor/",
+          "PUBG MOBILE/ShadowTrackerExtra/Content/Lua/GameLua/Activity/Commercialize/Actor/InteractActor/PetExhibitInteractive.lua",
+          "PUBG MOBILE/ShadowTrackerExtra/Content/Lua/GameLua/Activity/Commercialize/Actor/InteractActor/XSuitPlatform.lua"
+        ]
+      }
+    },
+    {
+      "path": "samples/lua/PUBG_(4.7.0)_All-Orginal-Lua.zip.sha256",
+      "size": 99,
+      "sha256": "f03ed22ccd807a2d6e1654089513e5038de46627289c1b871716befcc4459684",
+      "magic_hex": "38353839633236396361353764363234",
+      "format": "UNKNOWN",
+      "variant": ""
+    },
+    {
+      "path": "samples/pak/game_patch_4.7.0.21752.pak",
+      "size": 2704793,
+      "sha256": "e47e93bd934ec830b2b908c5806ce1779354237e1825c7b73a8c2b37d8880968",
+      "magic_hex": "9d81226c0fa208662696d90e6821714b",
+      "format": "Tencent PAK",
+      "variant": "v14, index_encrypted=True",
+      "pak": {
+        "version": 14,
+        "entries": 2,
+        "index_encrypted": true,
+        "paths": [
+          "1.txt",
+          "Content/Lua/GameLua/GameCore/Framework/CharacterBase.lua"
+        ]
+      }
+    },
+    {
+      "path": "samples/pak/game_patch_4.7.0.21756.pak",
+      "size": 713299,
+      "sha256": "dc6a229d388889b599e154a1354eb48a0ecd0c2e762f68a4837be598f70bd578",
+      "magic_hex": "2f8dc0803687d51634c162e5f2eb90bf",
+      "format": "Tencent PAK",
+      "variant": "v14, index_encrypted=True",
+      "pak": {
+        "version": 14,
+        "entries": 7,
+        "index_encrypted": true,
+        "paths": [
+          "1.txt",
+          "Config/DefaultEngineRedirects_BLUEHOLE.ini",
+          "Config/DefaultEngineRedirects_JAPANKOREA.ini",
+          "Content/Lua/client/config/pubgm_patch.lua",
+          "Content/Lua/GameLua/Mod/PlanBT/Gameplay/Config/BlueberryOctopusGrenadeConfig.lua",
+          "Content/BluePrints/Core/BP_PlayerPawn.uexp",
+          "Content/BluePrints/Core/BP_PlayerPawn.uasset"
+        ]
+      }
+    },
+    {
+      "path": "samples/smart_lua/BRPlayerCharacterBase.lua",
+      "size": 21985,
+      "sha256": "0d1d32954882cee8e95b7b39f69295352872642bbaf8a67e0b24ce3f39e66073",
+      "magic_hex": "1b4c7561530019930d0a1a0a04040408",
+      "format": "Lua bytecode",
+      "variant": "Lua 0x53"
+    },
+    {
+      "path": "source-tools/ALVSIA_MODULE_STATUS.md",
+      "size": 850,
+      "sha256": "bd0adeb4f37de1efe683f03aa0f5e66e329dea1fed8b3c9509a5d3b96264c440",
+      "magic_hex": "2320414c565349412050524f20e28094",
+      "format": "Text/Markdown",
+      "variant": ""
+    },
+    {
+      "path": "source-tools/ALVSIA_SOURCE_ADOPTION.md",
+      "size": 4162,
+      "sha256": "38497aaa3ca0704b83a5aa6f0040db2903a12d4a24e7fb86b278f4f4308c03c8",
+      "magic_hex": "2320414c565349412050524f20736f75",
+      "format": "Text/Markdown",
+      "variant": ""
+    },
+    {
+      "path": "source-tools/ANDROID_ENGINE_INTEGRATION_20261106.md",
+      "size": 4715,
+      "sha256": "a0bc6c9855ad2a23b80a290bf35b725bacac463f288f65fe830e958639584bb6",
+      "magic_hex": "2320414c565349412050524f20416e64",
+      "format": "Text/Markdown",
+      "variant": ""
+    },
+    {
+      "path": "source-tools/ANDROID_NOTIFICATIONS_AUDIT_20261106.md",
+      "size": 7117,
+      "sha256": "d496e7b3ec2b31248f5a909fc5a2a78b31a517c4274a8e4082a006eaae40b346",
+      "magic_hex": "2320414c565349412050524f20e28094",
+      "format": "Text/Markdown",
+      "variant": ""
+    },
+    {
+      "path": "source-tools/GRW/GRW TOOL.py",
+      "size": 327991,
+      "sha256": "0b8a655b988c183e6519b95e3ccf479a954bf32c9b3ea4c79e7f8e8d09cc44bc",
+      "magic_hex": "23212f7573722f62696e2f656e762070",
+      "format": "Python source",
+      "variant": ""
+    },
+    {
+      "path": "source-tools/GRW/GRWTOOL_no_login.py",
+      "size": 310703,
+      "sha256": "fe9b9f6ef35b5a2e0d1a108bc1097a819e480ee73882c92322ed6f19df951a21",
+      "magic_hex": "23212f7573722f62696e2f656e762070",
+      "format": "Python source",
+      "variant": ""
+    },
+    {
+      "path": "source-tools/GRW/SECURITY_AND_INTEGRATION_AUDIT.md",
+      "size": 3211,
+      "sha256": "cc31b1b494712a970257313b953a90867cced79aff760ed2f91679324c750134",
+      "magic_hex": "232047525720544f4f4c20736f757263",
+      "format": "Text/Markdown",
+      "variant": ""
+    },
+    {
+      "path": "source-tools/REFERENCE_BUNDLE_20261102/IMPORT_MATRIX.md",
+      "size": 5082,
+      "sha256": "7f06c742abddcc1a47b795ee6744fca1971523f4f638b9c94c5fd5711aba4219",
+      "magic_hex": "23205265666572656e63652d746f2d41",
+      "format": "Text/Markdown",
+      "variant": ""
+    },
+    {
+      "path": "source-tools/REFERENCE_BUNDLE_20261102/README.md",
+      "size": 2101,
+      "sha256": "7c05bb08b88f887f9e17567931aa1194df93451d8a8a52c016b1731d43d870f4",
+      "magic_hex": "2320414c565349412050524f20e28094",
+      "format": "Text/Markdown",
+      "variant": ""
+    },
+    {
+      "path": "source-tools/REFERENCE_BUNDLE_20261102/SOURCE_INVENTORY.sha256.md",
+      "size": 3684,
+      "sha256": "eab13fd9fbec84e9c0f2b566050f690944723a88319ae6012e6fe99e0551d143",
+      "magic_hex": "232055706c6f61646564205a49502069",
+      "format": "Text/Markdown",
+      "variant": ""
+    },
+    {
+      "path": "source-tools/REFERENCE_BUNDLE_20261102/archive_integrity_audit.py",
+      "size": 2408,
+      "sha256": "36bedf8ab7218441dfd232dbcb535790dab29b15612c783cfff581469eaa1188",
+      "magic_hex": "23212f7573722f62696e2f656e762070",
+      "format": "Python source",
+      "variant": ""
+    },
+    {
+      "path": "source-tools/REFERENCE_BUNDLE_20261102/lua_format_probe.py",
+      "size": 2854,
+      "sha256": "e7f837fea3ec400b642d1f032887f245bc306dfde281e8b8f0843a7ca6801bf4",
+      "magic_hex": "23212f7573722f62696e2f656e762070",
+      "format": "Python source",
+      "variant": ""
+    },
+    {
+      "path": "source-tools/REFERENCE_BUNDLE_20261102/source_safety_scan.py",
+      "size": 2435,
+      "sha256": "6bd1315703240aeabfad671112489846891393c3e6d614655e1b247ee8d1968c",
+      "magic_hex": "23212f7573722f62696e2f656e762070",
+      "format": "Python source",
+      "variant": ""
+    },
+    {
+      "path": "source-tools/REFERENCE_BUNDLE_20261103/IMPORT_REVIEW.md",
+      "size": 3478,
+      "sha256": "c23276b7a2e225730db75434191029e44e5670ac1786a480df64b8be6c809157",
+      "magic_hex": "2320496e636f6d696e6720736f757263",
+      "format": "Text/Markdown",
+      "variant": ""
+    },
+    {
+      "path": "source-tools/REFERENCE_BUNDLE_20261103/INCOMING_MANIFEST.sha256",
+      "size": 3243,
+      "sha256": "152d0fb60f87c84e388a4350423a8f1cbbe36e622b559515e80e668af1663d8a",
+      "magic_hex": "2320496e636f6d696e67207265666572",
+      "format": "UNKNOWN",
+      "variant": ""
+    },
+    {
+      "path": "source-tools/SECURITY_REVIEW_GAME_PATCH_TOOL_20261106.md",
+      "size": 2571,
+      "sha256": "9cadce1c571e6d7148a70f1404382d32878a92a3457d34a97ea097d47763172f",
+      "magic_hex": "23205365637572697479207265766965",
+      "format": "Text/Markdown",
+      "variant": ""
+    },
+    {
+      "path": "source-tools/SOURCE_STATIC_AUDIT_20261106.md",
+      "size": 5789,
+      "sha256": "bec5e17db9af9720cb3d52ae742263a67da1aa2c3846c04cef611407a355b363",
+      "magic_hex": "2320536f7572636520636f6c6c656374",
+      "format": "Text/Markdown",
+      "variant": ""
+    },
+    {
+      "path": "source-tools/alvsia_core/__init__.py",
+      "size": 188,
+      "sha256": "a6e9f1b37d7c98a24db8dc6256fa38cf8fe7e79b89819341fd2ba5d8fdf2ecfb",
+      "magic_hex": "222222414c565349412050524f2d6f77",
+      "format": "Python source",
+      "variant": ""
+    },
+    {
+      "path": "source-tools/alvsia_core/api_client.py",
+      "size": 713,
+      "sha256": "380b0bc7f0073fc5c6e881f8af5ee885371ea8dfc7801f32bdbdb50485a8e048",
+      "magic_hex": "2222224661696c2d636c6f7365642063",
+      "format": "Python source",
+      "variant": ""
+    },
+    {
+      "path": "source-tools/alvsia_core/identity.py",
+      "size": 690,
+      "sha256": "f3363fa1262ab8277d26ecaebc89fd9af93a25a45505acbd0461df0cfaab5c8b",
+      "magic_hex": "22222243616e6f6e6963616c20414c56",
+      "format": "Python source",
+      "variant": ""
+    },
+    {
+      "path": "source-tools/alvsia_core/module_registry.py",
+      "size": 2690,
+      "sha256": "ed769bdd4e67b41493be454e1a6ba245d4cab666179db4dd9f44b2294587dba1",
+      "magic_hex": "2222224d657461646174612d6f6e6c79",
+      "format": "Python source",
+      "variant": ""
+    },
+    {
+      "path": "source-tools/incoming/GAME_PATCH_TOOL.py",
+      "size": 71986,
+      "sha256": "814437f96b9d1b39e66d1306d5ce11922e115dace7cfa4d4c68dea5908c2af1b",
+      "magic_hex": "696d706f72742069746572746f6f6c73",
+      "format": "Python source",
+      "variant": ""
+    },
+    {
+      "path": "source-tools/quarantine/Any fuction Log Dumper.lua",
+      "size": 4610,
+      "sha256": "40a088b77f8943db9cd0c5bad2c89d426d3d58fbf6c7bfef1b280a1b5f4eaa67",
+      "magic_hex": "2d2d20f09f938d2042616e2f4b69636b",
+      "format": "Lua source (text?)",
+      "variant": ""
+    },
+    {
+      "path": "source-tools/quarantine/README.md",
+      "size": 3474,
+      "sha256": "f9e0d54a33ebb6ac0d846b733e0c7a73bad895cb113aebb566c253b6d367adc9",
+      "magic_hex": "232051756172616e74696e6564207265",
+      "format": "Text/Markdown",
+      "variant": ""
+    },
+    {
+      "path": "source-tools/quarantine/ZmaDumpernub4.py",
+      "size": 8053,
+      "sha256": "8718b4ea5211e2b94edbb95f968ee4391e671a29d829106f9505cb4a91cfee3d",
+      "magic_hex": "23203d3d3d3d3d3d3d3d3d3d3d3d3d3d",
+      "format": "Python source",
+      "variant": ""
+    },
+    {
+      "path": "source-tools/quarantine/ue4_master_tool.py",
+      "size": 33676,
+      "sha256": "2ec0e71950712db1bf90976e240910c9761c10f885ddc9abedab34a87d0be8ae",
+      "magic_hex": "23212f7573722f62696e2f656e762070",
+      "format": "Python source",
+      "variant": ""
+    },
+    {
+      "path": "source-tools/quarantine/ultra_notifications.py",
+      "size": 13007,
+      "sha256": "8dc4226cf3e80da449244520fa86517bb3bee529fa47a83767e55811f08fed5f",
+      "magic_hex": "696d706f72742072652c206f732c206a",
+      "format": "Python source",
+      "variant": ""
+    },
+    {
+      "path": "source-tools/tests/test_alvsia_core.py",
+      "size": 1695,
+      "sha256": "dc537ef883df8eb0ec41ab150fff22316f31c6d19b2c2875c64d9eed8f9f7c10",
+      "magic_hex": "696d706f7274206f730a696d706f7274",
+      "format": "Python source",
+      "variant": ""
+    },
+    {
+      "path": "source-tools/tests/test_audit_sources.py",
+      "size": 5015,
+      "sha256": "48559fd48216ec45cc9e036a83d6497d5965d46754fb23b3bd78c74ab7e43fe2",
+      "magic_hex": "696d706f72742074656d7066696c650a",
+      "format": "Python source",
+      "variant": ""
+    },
+    {
+      "path": "source-tools/tools/__init__.py",
+      "size": 37,
+      "sha256": "39583c7d45fa6f1bc08f1b4d83888add5293f3a53d48bbefa296d04611b6f511",
+      "magic_hex": "222222414c5653494120736f75726365",
+      "format": "Python source",
+      "variant": ""
+    },
+    {
+      "path": "source-tools/tools/audit_sources.py",
+      "size": 3650,
+      "sha256": "30236897e976829712d9dfe2f89ade320ace31992483e7d0311ad42d6938af20",
+      "magic_hex": "23212f7573722f62696e2f656e762070",
+      "format": "Python source",
+      "variant": ""
+    },
+    {
+      "path": "tool.py",
+      "size": 40323,
+      "sha256": "8c0e0a00801912d6628824c840d230b73b2a77fee089981995abdef613308947",
+      "magic_hex": "23212f7573722f62696e2f656e762070",
+      "format": "Python source",
+      "variant": ""
+    },
+    {
+      "path": "tool_me.py",
+      "size": 51162,
+      "sha256": "5cf88fd85ee3ce7ba8f746a37bb8994cb5e8b7ca5f751c03f0edbc5a18ab07a9",
+      "magic_hex": "23212f7573722f62696e2f656e762070",
+      "format": "Python source",
+      "variant": ""
+    },
+    {
+      "path": "tools/alvsia_engine_research.py",
+      "size": 8520,
+      "sha256": "deb32099bb619bbfed9c030bbc57e64e387e966e60a336d9e66d4a1c7219fdb1",
+      "magic_hex": "23212f7573722f62696e2f656e762070",
+      "format": "Python source",
+      "variant": ""
+    },
+    {
+      "path": "tools/research_corpus.py",
+      "size": 11187,
+      "sha256": "b63f78782b885ca8835d8c560ae683bf3954ec769ddd28763dc2af291b421136",
+      "magic_hex": "23212f7573722f62696e2f656e762070",
+      "format": "Python source",
+      "variant": ""
+    },
+    {
+      "path": "tools/run_research_termux.sh",
+      "size": 1943,
+      "sha256": "eae671e1995baed49cb68e7422064608f70b51a8b8d3b5ff99951e1f6e2e826f",
+      "magic_hex": "23212f646174612f646174612f636f6d",
+      "format": "Shell script",
+      "variant": ""
+    },
+    {
+      "path": "tools/run_strict_engine_research.py",
+      "size": 12170,
+      "sha256": "c69c29b143705220ac594eb7da9d9ca074236fc4e9fc65ac6a13a68912212803",
+      "magic_hex": "23212f7573722f62696e2f656e762070",
+      "format": "Python source",
+      "variant": ""
+    },
+    {
+      "path": "url_scanner.py",
+      "size": 6683,
+      "sha256": "9d6f1a3719d791e842ffe15dab065a410e28a7557bb3e8c6708a49ba6d9031c1",
+      "magic_hex": "23212f7573722f62696e2f656e762070",
+      "format": "Python source",
+      "variant": ""
+    },
+    {
+      "path": "valerrine.py",
+      "size": 981554,
+      "sha256": "cd24bb33e3ebc2d96f550e6671d74fcd80c41ffa83897500dd99b0b4aef43796",
+      "magic_hex": "696d706f7274206f730a696d706f7274",
+      "format": "Python source",
+      "variant": ""
+    }
+  ]
+}

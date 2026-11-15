@@ -18,7 +18,7 @@ def _enc_string(value, key):
     return bytes([size]) + raw
 
 
-def _t24_fixture(key):
+def _t24_fixture(key, line_deltas=(1, 0x80), checkpoints=((1, 255),)):
     header = (
         b"\x1bLua\x53\x00\x19\x93\x0d\x0a\x1a\x0a"
         + bytes([4, 8, 4, 8, 8])
@@ -39,8 +39,10 @@ def _t24_fixture(key):
     out.extend(struct.pack("<i", 0))
     out.extend(struct.pack("<i", 0))
     out.extend(struct.pack("<i", 2))
-    out.extend(bytes([1, 255]))
-    out.extend(struct.pack("<i", 0))
+    out.extend(bytes(line_deltas))
+    out.extend(struct.pack("<i", len(checkpoints)))
+    for pc, absolute_line in checkpoints:
+        out.extend(struct.pack("<ii", pc, absolute_line))
     out.extend(struct.pack("<i", 0))
     out.extend(struct.pack("<i", 0))
     return bytes(out)
@@ -56,11 +58,28 @@ class T24LuaTests(unittest.TestCase):
         self.assertEqual(output[13], 8)
         self.assertIn(b"ALVSIA_T24_FIXTURE_2026", output)
         self.assertIn(b"@sample.lua", output)
-        self.assertIn(struct.pack("<ii", 1, 255), output)
+        from lua_engine.decompiler53 import load_chunk
+        proto = load_chunk(output)
+        self.assertEqual(proto.lineinfo, [1, 255])
+        self.assertEqual(report["lineinfo_checkpoints"], 1)
         code_offset = 34 + (1 + len(b"@sample.lua")) + 8 + 3 + 4
         self.assertEqual(struct.unpack_from("<I", output, code_offset)[0] & 0x3F, 1)
         self.assertTrue(report["ok"] and report["strings_decoded"])
         self.assertEqual(report["format"], "T24 Lua 5.3")
+
+    def test_signed_line_deltas_reconstruct_negative_line_steps(self):
+        key = b"ALVSIA-t24-test-key"
+        source = _t24_fixture(key, line_deltas=(1, 255), checkpoints=())
+        output, report = convert_t24_to_standard(source, key)
+        from lua_engine.decompiler53 import load_chunk
+        self.assertEqual(load_chunk(output).lineinfo, [1, 0])
+        self.assertEqual(report["lineinfo_checkpoints"], 0)
+
+    def test_missing_absolute_line_checkpoint_is_rejected(self):
+        key = b"ALVSIA-t24-test-key"
+        source = _t24_fixture(key, line_deltas=(1, 0x80), checkpoints=())
+        with self.assertRaisesRegex(ValueError, "missing T24 absolute-line checkpoint"):
+            convert_t24_to_standard(source, key)
 
     def test_structure_only_mode_keeps_encrypted_strings(self):
         key = b"ALVSIA-t24-test-key"

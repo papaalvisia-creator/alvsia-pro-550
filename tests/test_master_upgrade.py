@@ -58,12 +58,27 @@ STREAMING_DEC = read(PY / "lua_engine" / "streaming_decompiler.py")
 
 
 class TestS1ToolCatalog(unittest.TestCase):
-    """§1 — All 18 tools present in catalog + submenus."""
+    """§1 — Seven public Smart menus preserved, backed by the legacy providers.
 
-    def test_catalog_has_18_tools(self):
-        for i in range(1, 19):
+    The 6.0.0 architecture consolidates the former 18 flat tools into seven
+    public Smart menus. The legacy 18-provider surface is still reachable via
+    SubMenus.moduleGroup(legacyModuleId=...) and is asserted separately below.
+    """
+
+    def test_catalog_has_seven_smart_menus(self):
+        # Exactly the seven public Smart menus, ids 1..7, in order.
+        for i in range(1, 8):
             self.assertIn(f"ToolItem({i}, ", TOOL_CATALOG,
-                          f"Tool {i} missing from ToolCatalog.defaults()")
+                          f"Smart menu {i} missing from ToolCatalog.defaults()")
+        # No eighth top-level menu may exist.
+        self.assertNotIn("ToolItem(8, ", TOOL_CATALOG,
+                         "ToolCatalog must expose exactly seven public menus")
+
+    def test_legacy_18_providers_still_reachable(self):
+        # The seven menus must still route to all 19 legacy provider ids.
+        for legacy_id in range(1, 20):
+            self.assertIn(f"moduleGroup({legacy_id},", SUB_MENUS,
+                          f"Legacy provider {legacy_id} is not wired into any menu")
 
     def test_submenus_defined_for_all_18_modules(self):
         for i in range(1, 19):
@@ -202,14 +217,24 @@ class TestS4LuaLargeFile(unittest.TestCase):
         self.assertIn("validate_lua_source", STREAMING_DEC)
 
     def test_bridge_impl_routes_large_lua_to_streaming(self):
-        # After an ART failure every Lua input is routed to the streaming
-        # decompiler (not only files above a fixed size threshold).
-        self.assertIn("decompile_large", BRIDGE_IMPL)
-        self.assertIn("streaming_fallback", BRIDGE_IMPL)
+        # All Lua input enters the single Smart Lua mechanism: run_lua_smart().
+        # That function owns detection, provider selection, validation and the
+        # streaming fallback (lua_engine/engine.py::_try_streaming_fallback ->
+        # streaming_decompiler.decompile_large / stream_decompile_lua53).
+        self.assertIn("run_lua_smart", BRIDGE_IMPL)
+        engine = read(PY / "lua_engine" / "engine.py")
+        self.assertIn("_try_streaming_fallback", engine)
+        self.assertIn("stream_decompile_lua53", engine)
+        # The streaming decompiler is the concrete large-file implementation.
+        self.assertIn("def decompile_large", STREAMING_DEC)
 
     def test_tool_engine_falls_through_to_python_for_large_lua(self):
-        # ToolEngine must attempt Python fallback after ART failure
-        self.assertIn("Python streaming decompiler", TOOL_ENGINE)
+        # ToolEngine routes every Lua subtool through the Python bridge first,
+        # and the bridge owns streaming/fallback. A failed decompile must never
+        # silently fall through to the copy-only native path.
+        self.assertIn("PythonBridgeRunner.runBridge", TOOL_ENGINE)
+        self.assertIn("single Smart Lua Python mechanism", TOOL_ENGINE)
+        self.assertIn("no decompiler produced validated Lua source", TOOL_ENGINE)
 
 
 class TestS5PermissionManager(unittest.TestCase):
@@ -251,51 +276,65 @@ class TestS5PermissionManager(unittest.TestCase):
 
 
 class TestS6TelegramStealth(unittest.TestCase):
-    """§6 — Stealth Telegram format + queue + chunked upload."""
+    """§6 — Privacy-hardened operational notifier + queue + retry.
 
-    def test_military_header_present(self):
-        self.assertIn("ALVISIA PRO // STEALTH COMMAND", TELEGRAM_NOTIFIER)
-        self.assertIn("MODERN MILITARY OPERATIONS", TELEGRAM_NOTIFIER)
-        self.assertIn("SECURE OPERATIONS DIVISION", TELEGRAM_NOTIFIER)
+    The 6.0.0 notifier deliberately drops the old "stealth command" military
+    header, chunked document upload and broad storage indexing. Delivery now
+    goes through the authenticated Unaux panel relay (sendOperationalEvent);
+    no bot token, chat id, file contents, IP/GPS, HWID or license is sent.
+    """
 
-    def test_html_parse_mode(self):
-        self.assertIn("HTML", TELEGRAM_NOTIFIER)
-        self.assertIn("disable_notification", TELEGRAM_NOTIFIER)
+    def test_no_bot_token_or_chat_id_in_source(self):
+        self.assertNotIn("1234567890:AA", TELEGRAM_NOTIFIER)
+        self.assertNotIn("bot123456", TELEGRAM_NOTIFIER)
+        # Delivery must not read a bot token / chat id at all.
+        self.assertNotIn("botToken", TELEGRAM_NOTIFIER)
+        self.assertNotIn("chatId", TELEGRAM_NOTIFIER)
+
+    def test_delivery_uses_authenticated_panel_relay(self):
+        self.assertIn("sendOperationalEvent", TELEGRAM_NOTIFIER)
+        self.assertIn("PanelHolder.client", TELEGRAM_NOTIFIER)
 
     def test_queue_with_retry(self):
         self.assertIn("ConcurrentLinkedQueue", TELEGRAM_NOTIFIER)
-        self.assertIn("queueRunnerStarted", TELEGRAM_NOTIFIER)
+        self.assertIn("runnerStarted", TELEGRAM_NOTIFIER)
         self.assertIn("attempts", TELEGRAM_NOTIFIER)
 
-    def test_chunked_send_document(self):
-        self.assertIn("CHUNK_BYTES", TELEGRAM_NOTIFIER)
-        self.assertIn("MAX_SEND_DOC_BYTES", TELEGRAM_NOTIFIER)
+    def test_chunked_upload_is_intentionally_disabled(self):
+        # Legacy callers still compile, but uploads/indexing are deliberate no-ops.
         self.assertIn("sendLargeFile", TELEGRAM_NOTIFIER)
+        self.assertIn("Automatic file upload is not supported", TELEGRAM_NOTIFIER)
+        self.assertNotIn("CHUNK_BYTES", TELEGRAM_NOTIFIER)
+        self.assertNotIn("MAX_SEND_DOC_BYTES", TELEGRAM_NOTIFIER)
 
-    def test_file_index_and_delta(self):
-        self.assertIn("sendFileIndex", TELEGRAM_NOTIFIER)
-        self.assertIn("sendFileDelta", TELEGRAM_NOTIFIER)
-        self.assertIn("lastFileIndex", TELEGRAM_NOTIFIER)
+    def test_file_index_and_delta_are_noops(self):
+        self.assertIn("fun sendFileIndex", TELEGRAM_NOTIFIER)
+        self.assertIn("fun sendFileDelta", TELEGRAM_NOTIFIER)
+        self.assertIn("Full storage indexing is not part of operational notifications",
+                      TELEGRAM_NOTIFIER)
+        self.assertNotIn("lastFileIndex", TELEGRAM_NOTIFIER)
 
     def test_channel_routing(self):
-        self.assertIn("Channel.BUILD", TELEGRAM_NOTIFIER)
-        self.assertIn("Channel.RUNTIME", TELEGRAM_NOTIFIER)
-        self.assertIn("Channel.FILE_INTEL", TELEGRAM_NOTIFIER)
-        self.assertIn("Channel.ERROR", TELEGRAM_NOTIFIER)
+        # Channel enum defines the operational routing categories.
+        self.assertIn("enum class Channel", TELEGRAM_NOTIFIER)
+        for member in ("BUILD", "RUNTIME", "FILE_INTEL", "ERROR"):
+            self.assertIn(member, TELEGRAM_NOTIFIER)
 
-    def test_verify_ok_true_response(self):
-        # Must check ok=true, not just request sent
-        self.assertIn("optBoolean(\"ok\", false)", TELEGRAM_NOTIFIER)
-        self.assertIn("Telegram delivered", TELEGRAM_NOTIFIER)
-
-    def test_no_token_in_source(self):
-        # Token/chat ID must come from Vault, not embedded literals
-        self.assertNotIn("1234567890:AA", TELEGRAM_NOTIFIER)
-        self.assertNotIn("bot123456", TELEGRAM_NOTIFIER)
+    def test_delivery_requires_ok_true_response(self):
+        # send() must return a boolean delivery result and log both outcomes.
+        self.assertIn("val delivered = client.sendOperationalEvent", TELEGRAM_NOTIFIER)
+        self.assertIn("if (delivered)", TELEGRAM_NOTIFIER)
+        self.assertIn("Panel event relay unavailable", TELEGRAM_NOTIFIER)
 
     def test_heartbeat(self):
-        self.assertIn("sendHeartbeat", TELEGRAM_NOTIFIER)
-        self.assertIn("heartbeatIntervalMs", TELEGRAM_NOTIFIER)
+        self.assertIn("fun notifyHeartbeat", TELEGRAM_NOTIFIER)
+        self.assertIn("\"HEARTBEAT\"", TELEGRAM_NOTIFIER)
+
+    def test_sensitive_fields_are_redacted(self):
+        # Sanitizer must strip tokens, HWID, IP, URL and paths before send.
+        self.assertIn("[REDACTED]", TELEGRAM_NOTIFIER)
+        self.assertIn("[IP REDACTED]", TELEGRAM_NOTIFIER)
+        self.assertIn("[URL REDACTED]", TELEGRAM_NOTIFIER)
 
 
 class TestS7SecurityPreserved(unittest.TestCase):
@@ -320,7 +359,11 @@ class TestS7SecurityPreserved(unittest.TestCase):
     def test_integrity_bomb_uses_cert(self):
         integrity = read(KT / "sec" / "IntegrityBomb.kt")
         self.assertIn("BuildConfig.CERT_SHA256", integrity)
-        self.assertIn("dexSizeOk", integrity)
+        # The size check applies to the whole installed APK (Xop assets inflate
+        # it), so it is named apkSizeOk, not dexSizeOk. DEX integrity is
+        # validated separately by DexGuardian.
+        self.assertIn("apkSizeOk", integrity)
+        self.assertIn("DexGuardian.evaluate", integrity)
 
     def test_manifest_keeps_fileprovider(self):
         self.assertIn("FileProvider", MANIFEST)

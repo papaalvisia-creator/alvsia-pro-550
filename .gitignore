@@ -11,3 +11,4 @@ local.properties
 .env
 __pycache__/
 *.pyc
+luac.out

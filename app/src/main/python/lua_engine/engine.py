@@ -218,6 +218,24 @@ def validate_lua_source(path_or_text, expected_version=None) -> tuple[bool, str]
     if not _looks_like_lua_source(text):
         return False, "output does not look like Lua source"
 
+    # Large source files must not be sent through a compiler process merely to
+    # prove syntax. A multi-megabyte script can legitimately be the recovered
+    # source artifact, while a parser subprocess may time out or impose a second
+    # full-file memory copy. For large files, use the bounded structural lexer and
+    # report that level explicitly; this keeps source passthrough truthful without
+    # turning a validation timeout into a false PARTIAL result.
+    _LARGE_SOURCE_VALIDATION_BYTES = 4 * 1024 * 1024
+    if source_path is not None:
+        try:
+            source_size = source_path.stat().st_size
+        except OSError:
+            source_size = 0
+        if source_size > _LARGE_SOURCE_VALIDATION_BYTES:
+            valid, note = _validate_lua_structure(text)
+            if valid:
+                return True, "structural heuristic accepted; large-source external parser intentionally skipped"
+            return False, note
+
     # Prefer a real parser whenever the matching compiler is installed.
     # Never claim parser validation when only the structural fallback ran.
     parser = _find_lua_parser(expected_version)
@@ -530,3 +548,43 @@ def clean_lua_source(path, out_path):
     Path(out_path).write_text(cleaned,encoding="utf-8")
     ok,msg=validate_lua_source(out_path)
     return {"ok":ok,"out":str(out_path),"validation":msg}
+
+
+def compile_lua(source_path, out_dir, expected_version=None, timeout=120):
+    """Compile Lua source to bytecode with a version-aware PUC ``luac``.
+
+    Closes the "compile/recompile" capability gap so a decompiled chunk can be
+    round-tripped and validated. Never silently downgrades the Lua version: if
+    a specific ``expected_version`` is requested and no matching compiler is
+    present, the call fails closed instead of producing a mismatched chunk.
+    """
+    import subprocess
+    p = Path(source_path)
+    if not p.is_file():
+        return {"ok": False, "error": "input source not found", "file": str(p)}
+    out = Path(out_dir); out.mkdir(parents=True, exist_ok=True)
+    luac = _find_lua_parser(expected_version)
+    if luac is None:
+        return {"ok": False,
+                "error": f"no luac compiler available for {expected_version or 'any version'}"}
+    # Validate syntax first so a broken source never yields a partial chunk.
+    ok, msg = validate_lua_source(p, expected_version=expected_version)
+    if not ok:
+        return {"ok": False, "error": "source failed syntax validation: " + msg,
+                "compiler": luac}
+    dest = out / (p.stem + ".luac")
+    try:
+        proc = subprocess.run(
+            [luac, "-o", str(dest), str(p)],
+            capture_output=True, text=True, timeout=timeout,
+        )
+    except subprocess.TimeoutExpired:
+        return {"ok": False, "error": "luac compile timed out", "compiler": luac}
+    if proc.returncode != 0 or not dest.exists():
+        return {"ok": False, "error": (proc.stderr or "luac failed").strip()[:700],
+                "compiler": luac}
+    head = dest.read_bytes()[:5]
+    if head[:4] != b"\x1bLua":
+        return {"ok": False, "error": "compiler did not emit Lua bytecode", "compiler": luac}
+    return {"ok": True, "out": str(dest), "size": dest.stat().st_size,
+            "compiler": luac, "version_byte": head[4] if len(head) > 4 else None}

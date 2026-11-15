@@ -426,34 +426,14 @@ SIMPLE2_DECRYPT_KEY = bytes.fromhex("E55B4ED1")
 SIMPLE1_DECRYPT_KEY = 0x79
 RSA_MOD_2 = bytes.fromhex('7F58E8A39A4DA4E87357DDD650EAA16D3B5CE95B213D1030A662566444796A78A84AE9AC3DBFFDE7F41094896696835DAF13B89E6EC2B84963B1B1BAF7151DA245C3FBFAE2A6AE18B2684D03F9229DE2C91440F2A3A3BCDE1E5680C16722A88039C73560D5D43F4B6562C2EEA5B1D926D86B51108A2643C70FB74D6442CE3A08339B8FD8F660AE88129B7AB8C46F2FA58124485CCCB1E987B05A6DA65A01858ED3F89905449AE42BB07290FCB9994BF22E26610BCABB9804783A3B9587917F3D97316EDDA15C5E13F79066407B55A93B291B68A4AC42A98D6E35FED84B14A792D154E62028DDAD20FC301951E5924BE9AD62FB719DD94CC30CAB871BEC4377A8')
 
-SM4_SECRET_4 = '09ea7a1d9e6528b72b48'
-SM4_SECRET_2 = '>gahRZFL4r2*TByfx6#X'
+# SM4 material is never embedded in the public source tree. All key material
+# (SM4-2, SM4-4, and new/variant candidates) is supplied through the single
+# authorized provider in ``sm4_material`` and fails closed when absent.
+import sm4_material as _sm4_material
 
-# Server-only SM4/Lua material is not present in the source, so do not pretend it is recoverable.
-# Keep the local tool runnable for the embedded crypto modes (SM4-2 / SM4-4).
-SM4_SECRET_NEW = [
-    'aJ4pV7iZ7pU4wP2aC2cZ',
-    'aT0cL1yN4pT3sZ7eM2vY',
-    'dB6lB3vE0eZ8wM8rI0aC',
-    'fO3kW1fE6eD0pU1kY7xK',
-    'gD4jQ2aL3bS3lC3xT0iW',
-    'gW1fR0jK6wQ4oN0oK1kZ',
-    'hM1pH9iY8wM9hT4lN5uJ',
-    'iQ0eM0mJ7uT0kV6kL5zY',
-    'iT2vS0cS6yT6cZ1sE1lO',
-    'jU5bH7lQ0fM9hK2kI0oF',
-    'kG6bC8jK0fL0dE4sH4mL',
-    'qC4jS5bZ6fL5xE6nD4zA',
-    'rG0lR2rZ5vM6mW5lM1rR',
-    'rT6aQ6oZ1yM0gO5tO1aN',
-    'tP7sP7nI9rA2vQ4cV5yQ',
-    'uQ3cO2dX7xY4xU7gH7iS',
-    'uV6fU8fC9zN3mP5dH8mN',
-    'wD2rP3lP9xF4mE1eC5jS',
-    'xG2qW5lP7lV2iN5fN5pG',
-    'xT1cJ6dL5wC0kK1rB4dK',
-    'xU1yQ8wE9zY3gZ3bT5aE',
-]
+SM4_SECRET_4 = None
+SM4_SECRET_2 = None
+SM4_SECRET_NEW = ()
 SERVER_LUA_XOR_KEY_HEX = "112136474657a78d9d8490d8ab008c35261af7e45805b8b31507d02c1e8ff6c8"
 LUA_XOR_KEY = globals().get("_K", b"")
 ENGINE_LOCKED = False
@@ -1372,9 +1352,9 @@ RSA_MOD_2 = bytes.fromhex('7F58E8A39A4DA4E87357DDD650EAA16D3B5CE95B213D1030A6625
 SIMPLE1_DECRYPT_KEY = 121
 SIMPLE2_DECRYPT_KEY = bytes.fromhex('E55B4ED1')
 SIMPLE2_BLOCK_SIZE = 4
-SM4_SECRET_4 = 'eb691efea914241317a8'
-SM4_SECRET_2 = 'Q0hVTKey$as*1ZFlQCiA'
-SM4_SECRET_NEW = ['xG2qW5lP7lV2iN5fN5pG', 'xT1cJ6dL5wC0kK1rB4dK', 'qC4jS5bZ6fL5xE6nD4zA', 'gD4jQ2aL3bS3lC3xT0iW', 'xU1yQ8wE9zY3gZ3bT5aE', 'uQ3cO2dX7xY4xU7gH7iS', 'gW1fR0jK6wQ4oN0oK1kZ', 'aJ4pV7iZ7pU4wP2aC2cZ', 'cX6jT3cM2oT3vK0kJ1qN', 'iT2vS0cS6yT6cZ1sE1lO', 'hM1pH9iY8wM9hT4lN5uJ', 'kG6bC8jK0fL0dE4sH4mL', 'dB6lB3vE0eZ8wM8rI0aC', 'tP7sP7nI9rA2vQ4cV5yQ', 'aT0cL1yN4pT3sZ7eM2vY', 'uV6fU8fC9zN3mP5dH8mN', 'rT6aQ6oZ1yM0gO5tO1aN', 'jU5bH7lQ0fM9hK2kI0oF', 'iQ0eM0mJ7uT0kV6kL5zY']
+SM4_SECRET_4 = None
+SM4_SECRET_2 = None
+SM4_SECRET_NEW = ()
 EM_SIMPLE1 = 1
 EM_SIMPLE2 = 16
 EM_SM4_2 = 2
@@ -1734,15 +1714,17 @@ class PakCrypto:
     def _derive_sm4_key(file_path: PurePath, encryption_method: int) -> bytes:
         _s5faefbac755f = file_path.stem.lower()
         if encryption_method == EM_SM4_2:
-            _sbd281f3d3181 = SM4_SECRET_2
+            _sbd281f3d3181 = _sm4_material.require_secret_2()
         elif encryption_method == EM_SM4_4:
-            _sbd281f3d3181 = SM4_SECRET_4
+            _sbd281f3d3181 = _sm4_material.require_secret_4()
         elif encryption_method == EM_UNKNOWN_17:
-            _s2b8e7b87d9f2 = (encryption_method - EM_SM4_NEW_BASE) % len(SM4_SECRET_NEW)
-            _sbd281f3d3181 = SM4_SECRET_NEW[_s2b8e7b87d9f2]
+            _cands = _sm4_material.require_candidates()
+            _s2b8e7b87d9f2 = (encryption_method - EM_SM4_NEW_BASE) % len(_cands)
+            _sbd281f3d3181 = _cands[_s2b8e7b87d9f2]
         else:
-            _s2b8e7b87d9f2 = (encryption_method - EM_SM4_NEW_BASE) % len(SM4_SECRET_NEW)
-            _sbd281f3d3181 = f'{SM4_SECRET_NEW[_s2b8e7b87d9f2]}{encryption_method}'
+            _cands = _sm4_material.require_candidates()
+            _s2b8e7b87d9f2 = (encryption_method - EM_SM4_NEW_BASE) % len(_cands)
+            _sbd281f3d3181 = f'{_cands[_s2b8e7b87d9f2]}{encryption_method}'
         return SHA1.new(str(_s5faefbac755f + _sbd281f3d3181).encode()).digest()[:SM4.key_length()]
 
     @staticmethod
@@ -4622,7 +4604,7 @@ def run_obbzip_tool():
         return bytes(b ^ _K[i % len(_K)] for i, b in enumerate(data))
     
     def ensure_sm4_secrets() -> bool:
-        return SM4_SECRET_NEW is not None and len(SM4_SECRET_NEW) > 0
+        return _sm4_material.is_available()
 
     # ============================================================
     # CRYPTO CONSTANTS
@@ -5073,12 +5055,13 @@ def run_obbzip_tool():
         def _derive_sm4_key(file_path: PurePath, encryption_method: int) -> bytes:
             part1 = file_path.stem.lower()
             if encryption_method == EM_SM4_2:
-                secret = SM4_SECRET_2
+                secret = _sm4_material.require_secret_2()
             elif encryption_method == EM_SM4_4:
-                secret = SM4_SECRET_4
+                secret = _sm4_material.require_secret_4()
             else:
-                index = (encryption_method - EM_SM4_NEW_BASE) % len(SM4_SECRET_NEW)
-                secret = f'{SM4_SECRET_NEW[index]}{encryption_method}'
+                _cands = _sm4_material.require_candidates()
+                index = (encryption_method - EM_SM4_NEW_BASE) % len(_cands)
+                secret = f'{_cands[index]}{encryption_method}'
             return SHA1.new(str(part1 + secret).encode()).digest()[:16]
         
         @staticmethod
@@ -5263,8 +5246,8 @@ def run_obbzip_tool():
                 return PakCompression._zstd_compressor(dict_data, use_level).compress(block)
             raise AssertionError(f'Unknown compression method: {compression_method}')
 
-    SM4_SECRET_2 = '>gahRZFL4r2*TByfx6#X'
-    SM4_SECRET_4 = '09ea7a1d9e6528b72b48'
+    SM4_SECRET_2 = None
+    SM4_SECRET_4 = None
 
     class TencentPakFile:
         _file_path: PurePath
@@ -12127,7 +12110,7 @@ def main():
     global SESSION_KEY, SM4_SECRET_NEW, ENGINE_LOCKED, SERVER_LUA_XOR_KEY_HEX
     
     # Offline startup: no server token / heartbeat / deliberate crash dependency.
-    if not SM4_SECRET_NEW:
+    if not _sm4_material.is_available():
         console.print("[yellow]ℹ Offline mode: server-only SM4_NEW keys are not embedded in the source.[/yellow]")
     
     obb_unpacker = BASE / "OBB_UNPACKER"

@@ -1,0 +1,61 @@
+{
+  "21752": {
+    "pak": "21752",
+    "size": 2704793,
+    "expected_entries": 2,
+    "written": 2,
+    "blocked": 0,
+    "failed": 0,
+    "skipped": 0,
+    "accounted": 2,
+    "accounting_ok": true,
+    "ok": true,
+    "written_bytes": 22755773,
+    "extracted_files_on_disk": 2,
+    "blocked_entries": 0,
+    "blocked_reasons": [],
+    "failure_types": []
+  },
+  "21756": {
+    "pak": "21756",
+    "size": 713299,
+    "expected_entries": 7,
+    "written": 5,
+    "blocked": 2,
+    "failed": 0,
+    "skipped": 0,
+    "accounted": 7,
+    "accounting_ok": true,
+    "ok": true,
+    "written_bytes": 518893,
+    "extracted_files_on_disk": 5,
+    "blocked_entries": 2,
+    "blocked_reasons": [
+      "sm4_material_unavailable"
+    ],
+    "failure_types": [
+      "Sm4MaterialUnavailable"
+    ]
+  },
+  "core_patch": {
+    "pak": "core_patch",
+    "size": 2856729,
+    "expected_entries": 239,
+    "written": 163,
+    "blocked": 76,
+    "failed": 0,
+    "skipped": 0,
+    "accounted": 239,
+    "accounting_ok": true,
+    "ok": true,
+    "written_bytes": 11504094,
+    "extracted_files_on_disk": 163,
+    "blocked_entries": 76,
+    "blocked_reasons": [
+      "sm4_material_unavailable"
+    ],
+    "failure_types": [
+      "Sm4MaterialUnavailable"
+    ]
+  }
+}

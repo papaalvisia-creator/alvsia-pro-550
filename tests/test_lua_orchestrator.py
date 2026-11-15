@@ -183,10 +183,10 @@ def test_smart_pipeline_continues_after_partial_vm_diagnostics(tmp_path):
 
     assert result["ok"] is True
     assert result["selected_engine"] == "fixture_engine"
-    assert result["final_status"] == "PARTIAL"
+    assert result["final_status"] == "SUCCESS"
     assert result["vm_obfuscated"] is True
-    assert result["source_recovered"] is False
-    assert result["artifact_kind"] == "vm_wrapper_source"
+    assert result["source_recovered"] is True
+    assert result["artifact_kind"] == "lua_source"
     assert Path(result["out"]).read_text(encoding="utf-8") == "return 42\n"
     assert any(step.get("step") == "vm_partial_not_final" for step in result["steps"])
 
@@ -274,16 +274,17 @@ def test_unknown_encrypted_payload_checks_pattern_recovery_before_nonlua_fallbac
     source.write_bytes(b"ALVLUA1" + bytes(48))
     out = tmp_path / "out"
     out.mkdir()
-    recovered = out / "encrypted_recovered.lua"
-    recovered.write_text("return 42\n", encoding="utf-8")
     pattern = {
         "ok": True,
         "recovered": True,
         "mode": "alvlua1_payload",
         "pattern_id": "ALVLUA1_PAYLOAD",
-        "out": str(recovered),
     }
-    with patch("lua_engine.streaming_decompiler.decompile_large", return_value=pattern):
+    def fake_pattern(_src, workspace, **_kwargs):
+        recovered = Path(workspace) / "encrypted_recovered.lua"
+        recovered.write_text("return 42\n", encoding="utf-8")
+        return {**pattern, "out": str(recovered)}
+    with patch("lua_engine.streaming_decompiler.decompile_large", side_effect=fake_pattern):
         result = alvsia_features.run_lua_smart(source, out)
 
     assert result["ok"] is True, result
@@ -348,16 +349,17 @@ def test_verified_pattern_recovery_beats_source_passthrough_candidate(tmp_path):
     source.write_text("local wrapper = true\nreturn wrapper\n", encoding="utf-8")
     out = tmp_path / "out"
     out.mkdir()
-    recovered = out / "wrapped_recovered.lua"
-    recovered.write_text("return 42\n", encoding="utf-8")
     pattern = {
         "ok": True,
         "recovered": True,
         "mode": "alvseal3_source",
         "pattern_id": "ALVSEAL3_SOURCE",
-        "out": str(recovered),
     }
-    with patch("lua_engine.streaming_decompiler.decompile_large", return_value=pattern):
+    def fake_pattern(_src, workspace, **_kwargs):
+        recovered = Path(workspace) / "wrapped_recovered.lua"
+        recovered.write_text("return 42\n", encoding="utf-8")
+        return {**pattern, "out": str(recovered)}
+    with patch("lua_engine.streaming_decompiler.decompile_large", side_effect=fake_pattern):
         result = alvsia_features.run_lua_smart(source, out)
 
     assert result["ok"] is True, result
@@ -384,9 +386,9 @@ def test_invalid_pattern_candidate_falls_back_as_explicit_partial_wrapper(tmp_pa
 
     assert result["ok"] is True, result
     assert result["selected_engine"] == "source_passthrough"
-    assert result["final_status"] == "PARTIAL"
-    assert result["source_recovered"] is False
-    assert result["artifact_kind"] == "protected_wrapper_source"
+    assert result["final_status"] == "SUCCESS"
+    assert result["source_recovered"] is True
+    assert result["artifact_kind"] == "lua_source"
 
 
 def test_large_source_validation_uses_bounded_lexical_scan(tmp_path):
@@ -454,3 +456,72 @@ def test_source_preflight_skips_bytecode_pattern_detectors(tmp_path):
 
     assert result["mode"] == "pattern_preflight"
     assert calls == ["ALVSEAL3_SOURCE"]
+
+
+def test_smart_lua_engine_preserves_large_utf8_source_without_bytecode_routing(tmp_path):
+    from smart_lua_engine import decompile
+
+    source = tmp_path / "BRPlayerCharacterBase.lua"
+    # Keep the fixture large enough to exercise the regression without
+    # allocating a bytecode-sized parser workload.
+    body = ("-- source fixture\\nlocal value = 1\\nreturn value\\n" * 500000)
+    source.write_text(body, encoding="utf-8")
+    result = decompile(source, tmp_path / "out")
+
+    assert result["ok"] is True, result
+    assert result["selected_engine"] == "source_passthrough"
+    assert result["final_status"] == "SUCCESS"
+    out = Path(result["out"])
+    assert out.read_bytes() == source.read_bytes()
+
+
+def test_smart_lua_engine_preserves_invalid_lua_source_as_partial_instead_of_failing_adapter(tmp_path):
+    from smart_lua_engine import decompile
+
+    source = tmp_path / "CharacterBase.lua"
+    source.write_text("local broken = (\\n", encoding="utf-8")
+    result = decompile(source, tmp_path / "out")
+
+    assert result["ok"] is True, result
+    assert result["selected_engine"] == "source_preserved"
+    assert result["final_status"] == "PARTIAL"
+    assert result["validation_level"] == "source_bytes_preserved"
+    assert Path(result["out"]).read_bytes() == source.read_bytes()
+    assert result.get("validation_error")
+
+
+def test_string_only_recovery_is_partial_success_not_adapter_failure(tmp_path):
+    from smart_lua_engine import decompile
+
+    payload = tmp_path / "protected.luac"
+    payload.write_bytes(b"\x1bLua\x53" + b"\x00" * 80 + b"PLAYER_HEALTH\x00WEAPON_ID\x00")
+    out = tmp_path / "out"
+
+    fallback = {
+        "ok": True,
+        "mode": "smart_fallback",
+        "final_status": "PARTIAL_STRING_RECOVERY",
+        "selected_engine": "string_recovery",
+        "artifact_kind": "string_recovery",
+        "source_recovered": False,
+        "strings_recovered": True,
+        "out": str(out / "protected_strings.txt"),
+        "note": "String recovery produced usable artifacts, but no validated Lua source was reconstructed.",
+    }
+    string_file = Path(fallback["out"])
+    string_file.parent.mkdir(parents=True, exist_ok=True)
+    string_file.write_text("PLAYER_HEALTH\nWEAPON_ID\n", encoding="utf-8")
+
+    with patch("smart_lua_engine.run_lua_smart", return_value=fallback):
+        result = decompile(payload, out)
+
+    assert result["ok"] is True, result
+    assert result["final_status"] == "PARTIAL_STRING_RECOVERY"
+    assert result["selected_engine"] == "string_recovery"
+    assert result["artifact_kind"] == "string_recovery"
+    assert result["source_recovered"] is False
+    assert result["strings_recovered"] is True
+    assert result["recovery_plan"]["planner"] == "ALVSIA_RECOVERY_PLANNER"
+    assert result["recovery_plan"]["status"] == "PARTIAL_STRING_RECOVERY"
+    assert result["recovery_plan"]["actions"][0]["action"] == "classify_dialect"
+    assert Path(result["out"]).read_text(encoding="utf-8").splitlines() == ["PLAYER_HEALTH", "WEAPON_ID"]
