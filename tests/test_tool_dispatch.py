@@ -565,3 +565,5 @@ if __name__ == "__main__":
     print(f"TOOL DISPATCH TEST: PASS ({len(tests)}/{len(tests)})")
 
 # Corpus-gate regression trigger: strict research classifications are validated in CI.
+
+# Reference corpus gate regression trigger: keep CI evidence synchronized with pinned corpus harness.
