@@ -41,9 +41,11 @@ __all__ = [
     "get_secret_2",
     "get_secret_4",
     "get_candidates",
+    "get_method_key",
     "require_secret_2",
     "require_secret_4",
     "require_candidates",
+    "require_method_key",
     "describe",
     "SM4_SECRET_2",
     "SM4_SECRET_4",
@@ -61,6 +63,7 @@ _LOCK = threading.RLock()
 _SECRET_2: Optional[str] = None
 _SECRET_4: Optional[str] = None
 _CANDIDATES: Tuple[str, ...] = ()
+_METHOD_KEYS: dict[int, str] = {}
 _SOURCE: str = "unset"
 
 # Backwards-compatible module attributes. These are *never* populated with
@@ -70,6 +73,7 @@ SM4_SECRET_4: Optional[str] = None
 SM4_SECRET_NEW: Tuple[str, ...] = ()
 SM4_SECRET_NEW_SET: frozenset = frozenset()
 SM4_SECRET_NEW_EXPECTED_COUNT = 0
+SM4_METHOD_KEY_COUNT = 0
 
 
 class Sm4MaterialUnavailable(RuntimeError):
@@ -101,12 +105,13 @@ def _normalize_candidates(candidates: Optional[Iterable[str]]) -> Tuple[str, ...
 def _publish() -> None:
     """Refresh the backwards-compatible module attributes."""
     global SM4_SECRET_2, SM4_SECRET_4, SM4_SECRET_NEW
-    global SM4_SECRET_NEW_SET, SM4_SECRET_NEW_EXPECTED_COUNT
+    global SM4_SECRET_NEW_SET, SM4_SECRET_NEW_EXPECTED_COUNT, SM4_METHOD_KEY_COUNT
     SM4_SECRET_2 = _SECRET_2
     SM4_SECRET_4 = _SECRET_4
     SM4_SECRET_NEW = _CANDIDATES
     SM4_SECRET_NEW_SET = frozenset(_CANDIDATES)
     SM4_SECRET_NEW_EXPECTED_COUNT = len(_CANDIDATES)
+    SM4_METHOD_KEY_COUNT = len(_METHOD_KEYS)
 
 
 def install_material(
@@ -114,6 +119,7 @@ def install_material(
     secret_2: Optional[str] = None,
     secret_4: Optional[str] = None,
     candidates: Optional[Iterable[str]] = None,
+    method_keys: Optional[dict] = None,
     source: str = "caller_supplied",
 ) -> bool:
     """Install authorized SM4 material. Returns True on success.
@@ -121,7 +127,7 @@ def install_material(
     Passing ``None`` for a field leaves the current value untouched. Use
     :func:`clear_material` to wipe everything.
     """
-    global _SECRET_2, _SECRET_4, _CANDIDATES, _SOURCE
+    global _SECRET_2, _SECRET_4, _CANDIDATES, _METHOD_KEYS, _SOURCE
     with _LOCK:
         if secret_2 is not None:
             _SECRET_2 = _validate_value("secret_2", secret_2)
@@ -129,6 +135,17 @@ def install_material(
             _SECRET_4 = _validate_value("secret_4", secret_4)
         if candidates is not None:
             _CANDIDATES = _normalize_candidates(candidates)
+        if method_keys is not None:
+            normalized = {}
+            for method, value in dict(method_keys).items():
+                try:
+                    method_int = int(method)
+                except (TypeError, ValueError):
+                    raise ValueError(f"invalid SM4 method key: {method!r}")
+                if not (0 <= method_int <= 0xFFFFFFFF):
+                    raise ValueError(f"SM4 method out of range: {method_int}")
+                normalized[method_int] = _validate_value(f"method_keys[{method_int}]", value)
+            _METHOD_KEYS = {k: v for k, v in normalized.items() if v is not None}
         _SOURCE = source or "caller_supplied"
         _publish()
         return True
@@ -140,6 +157,7 @@ def clear_material() -> None:
         _SECRET_2 = None
         _SECRET_4 = None
         _CANDIDATES = ()
+        _METHOD_KEYS = {}
         _SOURCE = "unset"
         _publish()
 
@@ -172,6 +190,7 @@ def _load_from_environment() -> None:
                 secret_2=data.get("secret_2"),
                 secret_4=data.get("secret_4"),
                 candidates=data.get("candidates"),
+                method_keys=data.get("method_keys"),
                 source="environment",
             )
         except (ValueError, TypeError):
@@ -224,6 +243,25 @@ def require_secret_4() -> str:
     return value
 
 
+def get_method_key(method: int) -> Optional[str]:
+    _ensure_loaded()
+    try:
+        method_int = int(method)
+    except (TypeError, ValueError):
+        return None
+    return _METHOD_KEYS.get(method_int)
+
+
+def require_method_key(method: int) -> str:
+    value = get_method_key(method)
+    if not value:
+        raise Sm4MaterialUnavailable(
+            f"SM4 method {method} material is not authorized/supplied; install via "
+            "sm4_material.install_material(method_keys={...}) or ALVSIA_SM4_MATERIAL"
+        )
+    return value
+
+
 def require_candidates() -> Sequence[str]:
     values = get_candidates()
     if not values:
@@ -242,5 +280,6 @@ def describe() -> dict:
         "has_secret_2": _SECRET_2 is not None,
         "has_secret_4": _SECRET_4 is not None,
         "candidate_count": len(_CANDIDATES),
+        "method_key_count": len(_METHOD_KEYS),
         "version": SM4_SECRET_NEW_VERSION,
     }
