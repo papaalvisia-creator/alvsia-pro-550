@@ -268,7 +268,11 @@ def test_dump_accounting_invariant_holds_on_mixed_outcomes(tmp_path, monkeypatch
     assert stats["ok"] is False
     # Blocked entries are recorded individually with an honest reason.
     assert stats["blocked_entries"] == [
-        {"path": "Game/blocked.bin", "reason": "sm4_material_unavailable"}
+        {
+            "path": "Game/blocked.bin",
+            "reason": "sm4_material_unavailable",
+            "encryption_method": 0,
+        }
     ]
 
 
