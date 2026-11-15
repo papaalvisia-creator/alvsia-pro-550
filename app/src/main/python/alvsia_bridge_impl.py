@@ -65,6 +65,27 @@ def run_tool(module_id, sub_id, input_path, out_root, engine_dir, jars_dir):
             return "X AUTH: module/subtool has no Unaux grant mapping"
         core._alvsia_require_operation((grant_operation,))
 
+        # MainActivity sends the planner's ordered stages as a comma-separated
+        # operation chain. Execute each stage through the same authenticated,
+        # grant-checked single-operation dispatcher; stop immediately on error.
+        # Without this bridge, valid plans such as OBB info -> integrity -> unzip
+        # were treated as one unknown subtool ID and never actually dispatched.
+        pipeline_stages = [part.strip() for part in sid.split(",") if part.strip()]
+        if len(pipeline_stages) > 1:
+            if any(not re.fullmatch(r"[a-z0-9_]+", stage) for stage in pipeline_stages):
+                return "\\n".join(lines + ["X PIPELINE: invalid stage identifier"])
+            lines.append("SMART PIPELINE stages=%s" % len(pipeline_stages))
+            for index, stage in enumerate(pipeline_stages, 1):
+                lines.append("PIPELINE STAGE %s/%s -> %s" % (index, len(pipeline_stages), stage))
+                stage_result = run_tool(mid, stage, ip, out_root, engine_dir, jars_dir)
+                stage_lines = str(stage_result or "").splitlines()
+                lines.extend(stage_lines)
+                if any(line.startswith("X ") for line in stage_lines):
+                    lines.append("X PIPELINE HALTED at stage %s" % stage)
+                    return "\\n".join(lines)
+            lines.append("OK PIPELINE completed stages=%s" % len(pipeline_stages))
+            return "\\n".join(lines)
+
         # Unified adapter facade: Smart Lua, Smart PAK/OBB, and Smart Data providers
         # share one fail-closed dispatcher after existing authentication/grant gates.
         if sid in (
