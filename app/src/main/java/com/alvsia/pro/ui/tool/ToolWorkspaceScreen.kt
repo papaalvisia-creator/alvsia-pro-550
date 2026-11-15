@@ -224,6 +224,31 @@ fun ToolWorkspaceScreen(
         Text(moduleTitle, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 15.sp)
         Text(sub.title, color = AlvisiaCyan, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
         Text(sub.desc, color = AlvisiaSilver.copy(alpha = 0.65f), fontSize = 10.sp)
+        if (actions.size > 1) {
+            Spacer(Modifier.height(6.dp))
+            Text("AVAILABLE TOOLS", color = AlvisiaSilver.copy(alpha = 0.5f),
+                fontSize = 9.sp, fontWeight = FontWeight.Bold)
+            Row(
+                Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(5.dp)
+            ) {
+                actions.forEach { action ->
+                    val selected = action.id == operation.id
+                    TextButton(
+                        onClick = { if (!running) onSelectAction(action) },
+                        enabled = !running,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(if (selected) AlvisiaBlue.copy(alpha = 0.55f) else Color(0x33101824))
+                            .border(1.dp, if (selected) AlvisiaCyan else AlvisiaBlue.copy(alpha = 0.3f),
+                                RoundedCornerShape(8.dp))
+                    ) {
+                        Text(action.title, color = if (selected) AlvisiaCyan else AlvisiaSilver,
+                            fontSize = 10.sp, fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium)
+                    }
+                }
+            }
+        }
         Spacer(Modifier.height(8.dp))
 
         // ── Recent Files carousel ───────────────────────────────────────
