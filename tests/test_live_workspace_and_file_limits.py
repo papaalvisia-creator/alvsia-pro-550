@@ -50,6 +50,16 @@ class LiveWorkspaceTests(unittest.TestCase):
         self.assertIn('File(WorkPaths.taskRoot(taskId), "WORK")', engine)
         self.assertIn('CONFIG integrity check failed', engine)
 
+    def test_output_action_requires_a_real_task_artifact_and_uses_task_path(self):
+        workspace = WORKSPACE.read_text(encoding='utf-8')
+        self.assertIn('logs.asReversed().firstNotNullOfOrNull', workspace)
+        self.assertIn('"OK OUT -> ", "OK OUTPUT -> "', workspace)
+        self.assertIn('if (!running && errorLine == null && verifiedOutputDir != null)', workspace)
+        self.assertIn('folder.walkTopDown().take(10001).any { it.isFile && it.length() > 0L }', workspace)
+        self.assertIn('Pilih File Manager', workspace)
+        self.assertNotIn('logs.any { it.startsWith("OK ") }', workspace)
+        self.assertNotIn('"ALVSIA/OUT"', workspace)
+
     def test_five_gb_limit_is_per_file_not_cumulative(self):
         engine = ENGINE.read_text(encoding='utf-8')
         workspace = WORKSPACE.read_text(encoding='utf-8')
