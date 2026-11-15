@@ -38,6 +38,16 @@ class ThreatReportContractTests(unittest.TestCase):
         self.assertEqual(main.count("ThreatReport.emit("), 1)
         self.assertIn('"SIG_BLOCK"', main)
 
+    def test_isolated_hook_and_proxy_heuristics_are_downgraded(self):
+        self.assertIn('executable_hook_library:shadowhook', self.source)
+        self.assertIn('^proxy_port:[0-9]{1,5}        self.assertIn('?: "THREAT"', self.source)
+
+
+if __name__ == "__main__":
+    unittest.main(verbosity=2)
+, self.source)
+        self.assertIn('if (event == "THREAT" && lowConfidenceOnly) "SOFT_THREAT" else event', self.source)
+
     def test_unknown_event_kind_falls_back_to_threat(self):
         self.assertIn('?: "THREAT"', self.source)
 
