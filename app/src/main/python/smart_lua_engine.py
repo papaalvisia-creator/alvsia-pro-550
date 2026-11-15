@@ -174,23 +174,48 @@ def decompile(input_path, output_dir, jars_dir=None) -> dict:
     if result.get("final_status") == "PARTIAL_STRING_RECOVERY":
         artifact_value = result.get("out") or result.get("string_artifact")
         artifact = Path(str(artifact_value)) if artifact_value else None
+
+        # The public Lua adapter deliberately removes its private recovery
+        # workspace after applying the source-only publish gate. A string dump
+        # may therefore have existed during recovery but no longer be available
+        # at this layer. That is a valid PARTIAL result, not an adapter crash.
+        # Never expose a stale temporary path as a user-facing Output artifact.
         if artifact is None or not artifact.is_file() or artifact.stat().st_size <= 0:
-            return _result(False, "decompile",
-                           error="string recovery reported an artifact but the artifact is missing or empty",
-                           diagnostics=result)
-        partial_result = _result(True, "decompile",
-                              out=str(artifact),
-                              selected_engine="string_recovery",
-                              final_status="PARTIAL_STRING_RECOVERY",
-                              artifact_kind="string_recovery",
-                              source_recovered=False,
-                              strings_recovered=True,
-                              output_bytes=artifact.stat().st_size,
-                              note=result.get("note"),
-                              diagnostics=result)
+            partial_result = _result(
+                True, "decompile",
+                out=None,
+                selected_engine="string_recovery",
+                final_status="PARTIAL_STRING_RECOVERY",
+                artifact_kind="string_recovery",
+                source_recovered=False,
+                strings_recovered=bool(result.get("strings_recovered") or
+                                        result.get("string_count") or
+                                        result.get("recovered_strings")),
+                partial_recovery=True,
+                artifact_available=False,
+                publish_gate=result.get("publish_gate", "BLOCKED"),
+                note=("String/constant recovery ran, but its private intermediate "
+                      "artifact is not publishable and has been cleaned up. "
+                      "No Lua source file was produced; Output remains unavailable."),
+                diagnostics=result,
+            )
+        else:
+            partial_result = _result(
+                True, "decompile",
+                out=str(artifact),
+                selected_engine="string_recovery",
+                final_status="PARTIAL_STRING_RECOVERY",
+                artifact_kind="string_recovery",
+                source_recovered=False,
+                strings_recovered=True,
+                partial_recovery=True,
+                artifact_available=True,
+                output_bytes=artifact.stat().st_size,
+                note=result.get("note"),
+                diagnostics=result,
+            )
+
         # Keep the intelligence plan attached to the public partial result.
-        # String-only recovery is useful evidence and must remain actionable,
-        # not degrade into an adapter error or lose the next-step plan.
         try:
             from recovery_planner import build_recovery_plan
             partial_result["recovery_plan"] = build_recovery_plan(partial_result, domain="lua")

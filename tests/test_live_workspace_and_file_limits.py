@@ -50,6 +50,39 @@ class LiveWorkspaceTests(unittest.TestCase):
         self.assertIn('File(WorkPaths.taskRoot(taskId), "WORK")', engine)
         self.assertIn('CONFIG integrity check failed', engine)
 
+    def test_output_action_requires_a_real_task_artifact_and_uses_task_path(self):
+        workspace = WORKSPACE.read_text(encoding='utf-8')
+        self.assertIn('logs.asReversed().firstNotNullOfOrNull', workspace)
+        self.assertIn('"OK OUT -> ", "OK OUTPUT -> "', workspace)
+        self.assertIn('if (!running && errorLine == null && verifiedOutputDir != null)', workspace)
+        self.assertIn('folder.walkTopDown().take(10001).any { it.isFile && it.length() > 0L }', workspace)
+        self.assertIn('Pilih File Manager', workspace)
+        self.assertNotIn('logs.any { it.startsWith("OK ") }', workspace)
+        self.assertNotIn('"ALVSIA/OUT"', workspace)
+
+    def test_all_submenu_actions_are_visible_and_obb_routes_are_preserved(self):
+        workspace = WORKSPACE.read_text(encoding='utf-8')
+        submenus = (ROOT / 'app/src/main/java/com/alvsia/pro/tool/SubMenus.kt').read_text(encoding='utf-8')
+        bridge = (ROOT / 'app/src/main/python/alvsia_bridge_impl.py').read_text(encoding='utf-8')
+        self.assertIn('if (actions.size > 1)', workspace)
+        self.assertIn('actions.forEach { action ->', workspace)
+        self.assertIn('onSelectAction(action)', workspace)
+        for operation in ('obb_unzip', 'obb_rezip', 'obb_info', 'obb_integrity_audit'):
+            self.assertIn('"' + operation + '"', submenus)
+            self.assertIn('"' + operation + '"', bridge)
+
+    def test_obb_rebuild_accepts_saf_folder_and_safe_tree_copy(self):
+        engine = ENGINE.read_text(encoding='utf-8')
+        workspace = WORKSPACE.read_text(encoding='utf-8')
+        self.assertIn('DocumentsContract.isTreeUri(uri)', engine)
+        self.assertIn('copyDocumentTree(uri, treeRoot)', engine)
+        self.assertIn('DocumentsContract.buildChildDocumentsUriUsingTree', engine)
+        self.assertIn('selected folder exceeds import size limits', engine)
+        self.assertIn('ActivityResultContracts.OpenDocumentTree()', workspace)
+        self.assertIn('operation.id == "obb_rezip"', workspace)
+        self.assertIn('folderPicker.launch(null)', workspace)
+        self.assertIn('manuallySelectedAction', workspace)
+
     def test_five_gb_limit_is_per_file_not_cumulative(self):
         engine = ENGINE.read_text(encoding='utf-8')
         workspace = WORKSPACE.read_text(encoding='utf-8')

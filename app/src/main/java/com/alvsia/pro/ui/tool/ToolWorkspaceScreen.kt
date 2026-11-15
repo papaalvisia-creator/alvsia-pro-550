@@ -108,21 +108,48 @@ fun ToolWorkspaceScreen(
     var detectionResult by remember { mutableStateOf<FileMagic.DetectionResult?>(null) }
     var selectedSize by remember { mutableStateOf<Long?>(null) }
     var sizeRejected by remember { mutableStateOf(false) }
+    var selectedFolder by remember(sub.id) { mutableStateOf(false) }
+    var manuallySelectedAction by remember(sub.id) { mutableStateOf(false) }
     var logMode by remember(operation.id) { mutableStateOf("simple") }
     var confirmClearWorkspace by remember(operation.id) { mutableStateOf(false) }
     val errorLine = logs.firstOrNull { it.startsWith("X ") }
-    val successLine = logs.firstOrNull { it.startsWith("OK ") }
+
+    // Resolve the output folder from this task's explicit success path, never
+    // from the generic IN staging log. Require a real non-empty artifact before
+    // showing the Output action.
+    val verifiedOutputDir = remember(logs) {
+        val rawPath = logs.asReversed().firstNotNullOfOrNull { line ->
+            listOf("OK OUT -> ", "OK OUTPUT -> ").firstNotNullOfOrNull { prefix ->
+                if (line.startsWith(prefix)) line.removePrefix(prefix).trim().takeIf { it.isNotBlank() }
+                else null
+            }
+        }
+        runCatching {
+            if (rawPath.isNullOrBlank()) return@runCatching null
+            WorkPaths.bindApp(ctx)
+            val root = WorkPaths.alvsiaRoot().canonicalFile
+            val candidate = File(rawPath).canonicalFile
+            val rootPrefix = root.path.trimEnd(File.separatorChar) + File.separator
+            if (!candidate.path.startsWith(rootPrefix)) return@runCatching null
+            val folder = if (candidate.isDirectory) candidate else candidate.parentFile
+                ?: return@runCatching null
+            if (!folder.isDirectory) return@runCatching null
+            val hasArtifact = folder.walkTopDown().take(10001).any { it.isFile && it.length() > 0L }
+            if (hasArtifact) folder else null
+        }.getOrNull()
+    }
+
     val simpleSummary = when {
         running -> "ALVSIA sedang memproses pekerjaan ini. Tunggu sampai status selesai."
         errorLine != null -> errorLine.removePrefix("X ").trim()
-        successLine != null -> "Proses selesai. ${successLine.removePrefix("OK ").trim()}"
-        logs.isNotEmpty() -> "Pekerjaan belum memiliki hasil final. Periksa log lanjutan jika diperlukan."
+        verifiedOutputDir != null -> "Proses selesai. Hasil tervalidasi tersedia di ${verifiedOutputDir.name}."
+        logs.isNotEmpty() -> "Proses belum menghasilkan file output yang tervalidasi. Periksa diagnosis atau status pemulihan parsial."
         else -> "Pilih input dan tekan RUN untuk memulai pekerjaan."
     }
     val summaryColor = when {
         running -> AlvisiaCyan
         errorLine != null -> AlvisiaRed
-        successLine != null -> Color(0xFF00E676)
+        verifiedOutputDir != null -> Color(0xFF00E676)
         else -> AlvisiaSilver
     }
 
@@ -134,7 +161,7 @@ fun ToolWorkspaceScreen(
     var recentFiles by remember { mutableStateOf(UXStore.getRecentDisplayNames(ctx)) }
 
     fun autoResolve(selectedUri: Uri?, detection: FileMagic.DetectionResult?) {
-        if (selectedUri == null) return
+        if (selectedUri == null || manuallySelectedAction) return
         WorkPaths.bindApp(ctx)
         val selectedName = selectedDisplayName(ctx, selectedUri)
             ?: selectedUri.lastPathSegment?.substringAfterLast('/') ?: ""
@@ -158,6 +185,7 @@ fun ToolWorkspaceScreen(
         ActivityResultContracts.GetContent()
     ) { u ->
         uri = u
+        selectedFolder = false
         selectedSize = u?.let { selectedSizeBytes(ctx, it) }
         sizeRejected = selectedSize?.let { it > MAX_DIRECT_FILE_BYTES } == true
         if (u != null) {
@@ -165,6 +193,24 @@ fun ToolWorkspaceScreen(
             recentFiles = UXStore.getRecentDisplayNames(ctx)
             detectionResult = FileMagic.detect(ctx, u)
             autoResolve(u, detectionResult)
+        }
+    }
+
+    val folderPicker = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocumentTree()
+    ) { folderUri ->
+        uri = folderUri
+        selectedFolder = folderUri != null
+        selectedSize = null
+        sizeRejected = false
+        detectionResult = null
+        if (folderUri != null) {
+            manuallySelectedAction = true
+            runCatching {
+                ctx.contentResolver.takePersistableUriPermission(
+                    folderUri, Intent.FLAG_GRANT_READ_URI_PERMISSION
+                )
+            }
         }
     }
 
@@ -199,6 +245,43 @@ fun ToolWorkspaceScreen(
         Text(moduleTitle, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 15.sp)
         Text(sub.title, color = AlvisiaCyan, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
         Text(sub.desc, color = AlvisiaSilver.copy(alpha = 0.65f), fontSize = 10.sp)
+        if (actions.size > 1) {
+            Spacer(Modifier.height(6.dp))
+            Text("AVAILABLE TOOLS", color = AlvisiaSilver.copy(alpha = 0.5f),
+                fontSize = 9.sp, fontWeight = FontWeight.Bold)
+            Row(
+                Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(5.dp)
+            ) {
+                actions.forEach { action ->
+                    val selected = action.id == operation.id
+                    TextButton(
+                        onClick = {
+                            if (!running) {
+                                manuallySelectedAction = true
+                                if (action.id != operation.id) {
+                                    uri = null
+                                    selectedFolder = false
+                                    selectedSize = null
+                                    sizeRejected = false
+                                    detectionResult = null
+                                }
+                                onSelectAction(action)
+                            }
+                        },
+                        enabled = !running,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(if (selected) AlvisiaBlue.copy(alpha = 0.55f) else Color(0x33101824))
+                            .border(1.dp, if (selected) AlvisiaCyan else AlvisiaBlue.copy(alpha = 0.3f),
+                                RoundedCornerShape(8.dp))
+                    ) {
+                        Text(action.title, color = if (selected) AlvisiaCyan else AlvisiaSilver,
+                            fontSize = 10.sp, fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium)
+                    }
+                }
+            }
+        }
         Spacer(Modifier.height(8.dp))
 
         // ── Recent Files carousel ───────────────────────────────────────
@@ -238,12 +321,12 @@ fun ToolWorkspaceScreen(
         // ── File picker ────────────────────────────────────────────────
         if (operation.needsFile || actions.any { it.needsFile }) {
             Button(
-                onClick = { picker.launch("*/*") },
+                onClick = { if (operation.id == "obb_rezip") folderPicker.launch(null) else picker.launch("*/*") },
                 colors = ButtonDefaults.buttonColors(containerColor = AlvisiaBlue),
                 shape = RoundedCornerShape(10.dp),
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Text(if (uri != null) "FILE SELECTED" else "+ SELECT FILE",
+                Text(if (uri != null) { if (selectedFolder) "FOLDER SELECTED" else "FILE SELECTED" } else if (operation.id == "obb_rezip") "+ SELECT OBB FOLDER" else "+ SELECT FILE",
                     fontWeight = FontWeight.Bold, fontSize = 12.sp)
             }
             Spacer(Modifier.height(6.dp))
@@ -445,7 +528,7 @@ fun ToolWorkspaceScreen(
                     when {
                         running -> "PROCESSING"
                         errorLine != null -> "NEEDS ATTENTION"
-                        successLine != null -> "COMPLETED"
+                        verifiedOutputDir != null -> "COMPLETED"
                         else -> "READY"
                     },
                     color = summaryColor,
@@ -465,15 +548,15 @@ fun ToolWorkspaceScreen(
                     }
                 }
                 Text(simpleSummary, color = Color.White, fontSize = 12.sp)
-                if (successLine != null && errorLine == null) {
+                if (verifiedOutputDir != null && errorLine == null) {
                     Text("Lihat folder OUT untuk membuka hasil pekerjaan.",
                         color = AlvisiaSilver.copy(alpha = 0.65f), fontSize = 10.sp)
                 }
             }
         }
 
-        // ── UX Sprint 2: Output preview inline + OPEN FOLDER ────────────
-        if (!running && logs.any { it.startsWith("OK ") }) {
+        // ── Per-task Output: visible only after a real artifact exists ──
+        if (!running && errorLine == null && verifiedOutputDir != null) {
             Spacer(Modifier.height(4.dp))
             Text("OUTPUT", color = AlvisiaSilver.copy(alpha = 0.4f), fontSize = 9.sp)
             Spacer(Modifier.height(2.dp))
@@ -482,34 +565,37 @@ fun ToolWorkspaceScreen(
                 horizontalArrangement = Arrangement.spacedBy(4.dp)
             ) {
                 TextButton(onClick = {
-                    // Open OUT/ folder via Intent
+                    val folder = verifiedOutputDir
                     try {
-                        val outDir = java.io.File(
-                            android.os.Environment.getExternalStoragePublicDirectory(
-                                android.os.Environment.DIRECTORY_DOWNLOADS),
-                            "ALVSIA/OUT"
-                        )
                         val uri = androidx.core.content.FileProvider.getUriForFile(
-                            ctx, "${ctx.packageName}.provider", outDir
+                            ctx, "${ctx.packageName}.provider", folder
                         )
-                        val intent = android.content.Intent(android.content.Intent.ACTION_VIEW).apply {
+                        val intent = Intent(Intent.ACTION_VIEW).apply {
                             setDataAndType(uri, "resource/folder")
-                            addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                         }
-                        ctx.startActivity(android.content.Intent.createChooser(intent, "Open folder"))
+                        ctx.startActivity(Intent.createChooser(intent, "Pilih File Manager"))
                     } catch (_: Exception) {
-                        // Fallback: open file manager at Downloads
+                        // Android has no universal direct-open-folder intent. If no
+                        // file manager accepts resource/folder, expose the exact
+                        // output directory through the system document picker.
                         try {
-                            val intent = android.content.Intent(android.content.Intent.ACTION_GET_CONTENT).apply {
-                                type = "*/*"
+                            val intent = Intent(android.content.Intent.ACTION_OPEN_DOCUMENT_TREE).apply {
+                                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or
+                                    Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION)
                             }
-                            ctx.startActivity(intent)
-                        } catch (_: Exception) {}
+                            ctx.startActivity(Intent.createChooser(intent, "Buka lokasi output"))
+                        } catch (_: Exception) { }
                     }
                 }) {
-                    Text("📂 OPEN FOLDER", color = AlvisiaCyan, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                    Text("📂 OPEN OUTPUT FOLDER", color = AlvisiaCyan, fontSize = 10.sp, fontWeight = FontWeight.Bold)
                 }
             }
+            Text(
+                verifiedOutputDir.absolutePath,
+                color = AlvisiaSilver.copy(alpha = 0.55f),
+                fontSize = 9.sp
+            )
         }
 
         if (confirmClearWorkspace) {

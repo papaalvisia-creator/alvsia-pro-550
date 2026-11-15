@@ -1,7 +1,7 @@
 name: Smart Lua Python Validation
 on:
   push:
-    branches: [ feat/alvsia-program-intelligence-core-20261109, feat/smart-lua-recovery-fusion-20261109, fix/engine-repair-20261114 ]
+    branches: [ feat/alvsia-program-intelligence-core-20261109, feat/smart-lua-recovery-fusion-20261109, fix/engine-repair-20261114, fix/lua-partial-artifact-contract-20261115 ]
   pull_request:
     branches: [main, feat/full-reference-source-registry-20261106, feat/alvsia-smart-premium-v1-20261112, fix/engine-repair-20261114, feat/alvsia-capability-expansion-security-20261114-clean]
 permissions:
@@ -47,6 +47,8 @@ jobs:
         run: timeout 120s python tests/test_lua_engine.py
       - name: Run Smart Lua orchestrator regression tests
         run: timeout 120s python -m pytest -vv -ra tests/test_lua_orchestrator.py
+      - name: Run partial artifact lifecycle contract regression
+        run: timeout 120s python -m pytest -vv -ra tests/test_lua_partial_artifact_contract.py
       - name: Run adapter routing and processing watchdog regressions
         run: timeout 120s python -m pytest -vv -ra tests/test_module_adapters.py tests/test_lua_processing_watchdog.py
       - name: Run Lua module unittest suite

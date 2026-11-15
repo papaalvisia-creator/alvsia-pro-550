@@ -39,6 +39,12 @@ object TelegramNotifier {
     )
 
     private val queue = ConcurrentLinkedQueue<Event>()
+    // Routine lifecycle chatter is retained locally but never relayed to Telegram.
+    // Security events are deduplicated by exact kind/detail to avoid alert storms.
+    private val suppressedEvents = setOf("SESSION_START", "STARTUP_OK", "MODULE_STATUS", "HEARTBEAT", "SOFT_THREAT")
+    private val securityEventKinds = setOf("TAMPER", "FRIDA", "ROOT", "DEBUG", "SIG_BLOCK", "THREAT", "TOOL_ERROR", "ERROR", "BUILD_FAIL", "STARTUP_FAIL")
+    private const val SECURITY_DEDUPE_WINDOW_MS = 10 * 60 * 1000L
+    private val recentSecurityEvents = LinkedHashMap<String, Long>()
     private val runnerStarted = AtomicBoolean(false)
     @Volatile private var appContext: Context? = null
 
@@ -61,10 +67,31 @@ object TelegramNotifier {
             Log.w(TAG, "Ignored unsupported event: ${kind.take(48)}")
             return
         }
+        if (kind in suppressedEvents) {
+            Log.d(TAG, "Routine event suppressed from Telegram: $kind")
+            return
+        }
         val safeDetail = sanitize(detail).take(1400)
         if (queue.size >= MAX_QUEUE) {
             Log.w(TAG, "Notification queue full; event dropped: $kind")
             return
+        }
+        if (kind in securityEventKinds) {
+            val now = System.currentTimeMillis()
+            val key = "$kind:${safeDetail.hashCode()}"
+            val duplicate = synchronized(recentSecurityEvents) {
+                val previous = recentSecurityEvents[key]
+                recentSecurityEvents[key] = now
+                val iterator = recentSecurityEvents.entries.iterator()
+                while (iterator.hasNext()) {
+                    if (now - iterator.next().value > SECURITY_DEDUPE_WINDOW_MS * 3) iterator.remove()
+                }
+                previous != null && now - previous < SECURITY_DEDUPE_WINDOW_MS
+            }
+            if (duplicate) {
+                Log.d(TAG, "Duplicate security alert suppressed: $kind")
+                return
+            }
         }
         val id = "alv-" + System.currentTimeMillis().toString(16) + "-" +
             Integer.toHexString(kind.hashCode())

@@ -15,7 +15,7 @@ class ThreatReportContractTests(unittest.TestCase):
         self.assertIn("fun emit(ctx: Context, kind: String, detail: String, license: String = \"\")", self.source)
 
     def test_uses_authenticated_operational_notifier(self):
-        self.assertIn("TelegramNotifier.notify(ctx, event, safeDetail)", self.source)
+        self.assertIn("TelegramNotifier.notify(ctx, routedEvent, safeDetail)", self.source)
         self.assertNotIn("OkHttpClient", self.source)
         self.assertNotIn("Vault.pathSecurity()", self.source)
 
@@ -38,6 +38,11 @@ class ThreatReportContractTests(unittest.TestCase):
         self.assertEqual(main.count("ThreatReport.emit("), 1)
         self.assertIn('"SIG_BLOCK"', main)
 
+    def test_isolated_hook_and_proxy_heuristics_are_downgraded(self):
+        self.assertIn("executable_hook_library:shadowhook", self.source)
+        self.assertIn("proxy_port", self.source)
+        self.assertIn("lowConfidenceOnly", self.source)
+        self.assertIn("SOFT_THREAT", self.source)
     def test_unknown_event_kind_falls_back_to_threat(self):
         self.assertIn('?: "THREAT"', self.source)
 

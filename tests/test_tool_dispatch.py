@@ -533,6 +533,15 @@ def test_private_module_uses_dedicated_workspace_paths():
     assert 'return File(dirOut(), name).also { it.mkdirs() }' in paths
 
 
+def test_smart_engine_operation_chains_are_dispatched_in_order():
+    bridge = BRIDGE_IMPL.read_text(encoding="utf-8")
+    assert 'pipeline_stages = [part.strip() for part in sid.split(",") if part.strip()]' in bridge
+    assert 'for index, stage in enumerate(pipeline_stages, 1)' in bridge
+    assert 'stage_result = run_tool(mid, stage, ip, out_root, engine_dir, jars_dir)' in bridge
+    assert 'X PIPELINE HALTED at stage' in bridge
+    assert 'OK PIPELINE completed stages=' in bridge
+
+
 if __name__ == "__main__":
     tests = (
         test_python_auth_normalizes_java_string_and_lua_avoids_art_oom,
@@ -558,6 +567,7 @@ if __name__ == "__main__":
         test_xor_known_vector_selftest_is_registered,
         test_decrypt_known_answer_selftest_is_registered,
         test_private_module_uses_dedicated_workspace_paths,
+        test_smart_engine_operation_chains_are_dispatched_in_order,
     )
     for test in tests:
         test()

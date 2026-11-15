@@ -61,6 +61,11 @@ class TelegramNotifierContractTests(unittest.TestCase):
         self.assertIn("TelegramNotifier.notifySessionStart(", activity)
         self.assertIn("5 * 60_000L", activity)
 
+    def test_routine_lifecycle_and_low_confidence_alerts_are_not_relayed(self):
+        self.assertIn('suppressedEvents = setOf("SESSION_START", "STARTUP_OK", "MODULE_STATUS", "HEARTBEAT", "SOFT_THREAT")', self.source)
+        self.assertIn("Duplicate security alert suppressed", self.source)
+        self.assertIn("SECURITY_DEDUPE_WINDOW_MS = 10 * 60 * 1000L", self.source)
+
     def test_telegram_payload_excludes_device_identifiers(self):
         self.assertNotIn("Build.MANUFACTURER", self.source)
         self.assertNotIn("Build.MODEL", self.source)
