@@ -1,6 +1,7 @@
 from __future__ import annotations
 from pathlib import Path
 import ast
+import os
 import re
 import shutil
 import subprocess
@@ -13,6 +14,53 @@ def _find_java():
         if shutil.which(name) or Path(name).is_file():
             return name
     return None
+
+def _find_native_unluac_rs():
+    """Find the optional strict native unluac-rs backend."""
+    candidates = []
+    env_bin = os.environ.get("ALVSIA_UNLUAC_RS_BIN")
+    if env_bin:
+        candidates.append(Path(env_bin))
+    candidates.extend([
+        Path("/data/data/com.alvsia.pro/files/bin/unluac-rs"),
+        Path("/data/data/com.alvsia.pro/files/unluac-rs"),
+    ])
+    found = shutil.which("unluac-rs")
+    if found:
+        candidates.append(Path(found))
+    for candidate in candidates:
+        if candidate.is_file() and os.access(candidate, os.X_OK):
+            return candidate
+    return None
+
+
+def _run_native_unluac_rs(input_path, out_path, timeout=120):
+    binary = _find_native_unluac_rs()
+    if binary is None:
+        return {"ok": False, "error": "native unluac-rs not configured"}
+    try:
+        proc = subprocess.run(
+            [str(binary), "-i", str(input_path), "-o", str(out_path), "--generate-mode", "strict"],
+            capture_output=True,
+            timeout=timeout,
+            check=False,
+        )
+    except subprocess.TimeoutExpired:
+        out_path.unlink(missing_ok=True)
+        return {"ok": False, "error": "native unluac-rs timeout"}
+    except OSError as exc:
+        out_path.unlink(missing_ok=True)
+        return {"ok": False, "error": f"native unluac-rs execution failed: {exc}"}
+    if proc.returncode != 0 or not out_path.is_file() or out_path.stat().st_size == 0:
+        out_path.unlink(missing_ok=True)
+        stderr = (proc.stderr or b"").decode("utf-8", "replace").strip()
+        return {"ok": False, "error": stderr[-1200:] or "native unluac-rs returned no source", "code": proc.returncode}
+    valid, validation = validate_lua_source(out_path)
+    if not valid:
+        out_path.unlink(missing_ok=True)
+        return {"ok": False, "error": "native output failed validation: " + validation, "code": proc.returncode}
+    return {"ok": True, "out": str(out_path), "engine": "unluac-rs", "validation": validation, "code": proc.returncode}
+
 
 def _lua_code_without_literals(text: str) -> str:
     """Blank Lua strings/comments before structural keyword checks."""
@@ -404,8 +452,6 @@ def decompile_lua(path, out_dir, jars_dir=None, timeout=120):
     p=Path(path); out=Path(out_dir); out.mkdir(parents=True,exist_ok=True)
     if not p.is_file():
         return {"ok": False, "error": "input file not found", "file": str(p)}
-    # Always initialize the destination: the bytecode fallback path must not
-    # depend on the input being detected as source first.
     dest=out/(p.stem+"_decompiled.lua")
     info=detect_lua(p)
     normalized=p; container=None
@@ -422,17 +468,22 @@ def decompile_lua(path, out_dir, jars_dir=None, timeout=120):
     except Exception as exc:
         return {"ok":False,"error":str(exc),"format":"container-unknown"}
     if info.kind == "source":
-        # Preserve source inputs byte-for-byte at the text layer; this path is
-        # not a bytecode decompilation and must not reject short valid scripts.
-        # Byte-exact copy: a text round-trip here would rewrite line endings
-        # and destroy any non-UTF-8 byte in the payload.
         dest.write_bytes(normalized.read_bytes())
-        return {"ok": True, "mode": "source_passthrough", "out": str(dest),
-                "format": info.format}
+        return {"ok": True, "mode": "source_passthrough", "out": str(dest), "format": info.format}
 
     if info.kind != "bytecode":
         return {"ok": False, "error": "input is not recognized Lua bytecode",
                 "format": info.format, "version": info.version}
+
+    def _try_native(reason):
+        native = _run_native_unluac_rs(normalized, dest, timeout=timeout)
+        if native.get("ok"):
+            native["unluac_fallback_reason"] = reason
+            native.update({"format": info.format,
+                           **({"unwrapped": str(normalized), "container": container.format,
+                               "container_chunks": container.chunks} if container else {})})
+            return native
+        return native
 
     def _try_streaming_fallback(reason):
         if info.format != "luac" or info.version != "Lua 5.3":
@@ -455,15 +506,24 @@ def decompile_lua(path, out_dir, jars_dir=None, timeout=120):
             dest.unlink(missing_ok=True)
             return {"ok": False, "error": "streaming fallback exception: " + str(exc)[:500]}
 
+    def _fallback_chain(reason):
+        native = _try_native(reason)
+        if native.get("ok"):
+            return native
+        streaming = _try_streaming_fallback(reason)
+        if streaming and streaming.get("ok"):
+            return streaming
+        errors = [x.get("error") for x in (native, streaming or {}) if x and x.get("error")]
+        return {"ok": False, "error": "; ".join(errors)[:1800] or reason}
+
     if jar is None or not java:
-        fallback = _try_streaming_fallback(jar_error or "Unluac unavailable")
-        if fallback and fallback.get("ok"):
+        fallback = _fallback_chain(jar_error or "Unluac unavailable")
+        if fallback.get("ok"):
             return fallback
-        if fallback:
-            jar_error = (jar_error or "") + "; " + fallback.get("error", "")
-        return {"ok": False, "error": jar_error or "no compatible decompiler backend",
+        return {"ok": False, "error": fallback.get("error", jar_error or "no compatible decompiler backend"),
                 "format": info.format, "unluac_jar_error": jar_error,
                 **({"unwrapped": str(normalized)} if container else {})}
+
     with tempfile.TemporaryDirectory(prefix="alv_lua_") as td:
         safe_in=Path(td)/"input.luac"; safe_jar=Path(td)/"unluac.jar"
         shutil.copy2(normalized,safe_in); shutil.copy2(jar,safe_jar)
@@ -471,19 +531,20 @@ def decompile_lua(path, out_dir, jars_dir=None, timeout=120):
             proc=subprocess.run([java,"-jar",str(safe_jar),str(safe_in)],
                                 capture_output=True,text=True,errors="replace",timeout=timeout)
         except subprocess.TimeoutExpired:
-            fallback = _try_streaming_fallback("Unluac timed out")
-            if fallback and fallback.get("ok"):
+            fallback = _fallback_chain("Unluac timed out")
+            if fallback.get("ok"):
                 return fallback
-            return {"ok":False,"error":"decompiler timeout" + ("; " + fallback.get("error", "") if fallback else ""),
+            return {"ok":False,"error":"decompiler timeout; " + fallback.get("error",""),
                     "format":info.format, **({"unwrapped":str(normalized)} if container else {})}
+
     text=proc.stdout or ""
     stderr=(proc.stderr or "").strip()
     if proc.returncode != 0 or not text.strip():
         reason = stderr[:700] or "decompiler returned no source"
-        fallback = _try_streaming_fallback("Unluac failed: " + reason)
-        if fallback and fallback.get("ok"):
+        fallback = _fallback_chain("Unluac failed: " + reason)
+        if fallback.get("ok"):
             return fallback
-        return {"ok":False,"error":reason + ("; " + fallback.get("error", "") if fallback else ""),
+        return {"ok":False,"error":reason + "; " + fallback.get("error",""),
                 "returncode":proc.returncode,"format":info.format,
                 **({"unwrapped":str(normalized),"container":container.format,
                     "container_chunks":container.chunks} if container else {})}
@@ -491,15 +552,14 @@ def decompile_lua(path, out_dir, jars_dir=None, timeout=120):
     valid,msg=validate_lua_source(dest)
     if not valid:
         dest.unlink(missing_ok=True)
-        fallback = _try_streaming_fallback("Unluac output failed validation: " + msg)
-        if fallback and fallback.get("ok"):
+        fallback = _fallback_chain("Unluac output failed validation: " + msg)
+        if fallback.get("ok"):
             return fallback
-        return {"ok":False,"error":"decompiler output failed Lua structural validation: "+msg +
-                ("; " + fallback.get("error", "") if fallback else ""),
+        return {"ok":False,"error":"decompiler output failed Lua validation: "+msg + "; " + fallback.get("error",""),
                 "returncode":proc.returncode,"format":info.format,
                 **({"unwrapped":str(normalized)} if container else {})}
     return {"ok":True,"out":str(dest),"returncode":proc.returncode,
-            "format":info.format,"validation":msg,
+            "format":info.format,"validation":msg,"engine":"unluac-java",
             **({"unwrapped":str(normalized),"container":container.format,
                 "container_chunks":container.chunks} if container else {})}
 
