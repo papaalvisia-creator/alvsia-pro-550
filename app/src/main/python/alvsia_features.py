@@ -61,47 +61,115 @@ def _prepare_lua_input(input_path, out_dir):
     normalized.write_bytes(payload)
     return normalized, ci
 
+def _find_native_unluac_rs(jars_dir=None):
+    """Find the optional native unluac-rs fallback without guessing unknown binaries."""
+    candidates = []
+    env_bin = os.environ.get("ALVSIA_UNLUAC_RS_BIN")
+    if env_bin:
+        candidates.append(Path(env_bin))
+    if jars_dir:
+        root = Path(jars_dir)
+        candidates.extend([root / "unluac-rs", root / "unluac_rs", root / "bin" / "unluac-rs"])
+    candidates.extend([
+        Path("/data/data/com.alvsia.pro/files/bin/unluac-rs"),
+        Path("/data/data/com.alvsia.pro/files/unluac-rs"),
+    ])
+    found = shutil.which("unluac-rs")
+    if found:
+        candidates.append(Path(found))
+    for candidate in candidates:
+        if candidate.is_file() and os.access(candidate, os.X_OK):
+            return candidate
+    return None
+
+
+def _run_native_unluac_rs(input_path, out_lua, timeout=120):
+    """Strict native fallback; success requires a non-empty validated Lua source file."""
+    binary = _find_native_unluac_rs()
+    if binary is None:
+        return {"ok": False, "error": "native unluac-rs fallback not configured"}
+    try:
+        proc = subprocess.run(
+            [str(binary), "-i", str(input_path), "-o", str(out_lua), "--generate-mode", "strict"],
+            capture_output=True,
+            timeout=timeout,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        return {"ok": False, "error": f"native unluac-rs execution failed: {exc}"}
+    if proc.returncode != 0 or not out_lua.is_file() or out_lua.stat().st_size == 0:
+        out_lua.unlink(missing_ok=True)
+        stderr = (proc.stderr or b"").decode("utf-8", "replace").strip()
+        return {"ok": False, "error": stderr[-1600:] or "native unluac-rs returned no source", "code": proc.returncode}
+    valid, msg = validate_lua_source(out_lua)
+    if not valid:
+        out_lua.unlink(missing_ok=True)
+        return {"ok": False, "error": "native Lua validation failed: " + msg, "code": proc.returncode}
+    return {"ok": True, "out": str(out_lua), "code": proc.returncode, "binary": str(binary), "validation": msg}
+
+
 def run_unluac(input_path, out_dir, jars_dir=None, mode="decompile"):
-    """Decompile Lua bytecode with strict exit/output validation and container unwrapping."""
+    """Decompile Lua bytecode using Java unluac first, then strict native unluac-rs fallback."""
     input_path = Path(input_path); out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     try:
         normalized, ci = _prepare_lua_input(input_path, out_dir)
     except Exception as exc:
         return {"ok": False, "error": str(exc)}
+
+    out_lua = out_dir / (input_path.stem + "_decompiled.lua")
+
+    def native_fallback(reason):
+        result = _run_native_unluac_rs(normalized, out_lua)
+        result["fallback_reason"] = reason
+        if ci:
+            result.update({"unwrapped": str(normalized), "container": ci.format, "container_chunks": ci.chunks})
+        return result
+
     jar = _pick_jar(jars_dir)
     if jar is None:
-        return {"ok": False, "error": "unluac jar missing — place unluac.jar in jars dir",
-                **({"unwrapped": str(normalized)} if ci else {})}
+        return native_fallback("unluac jar missing")
+
     java = _find_java()
     if not java:
-        dest = out_dir / (input_path.stem + "_NEED_JAVA.txt")
-        dest.write_text("Java runtime unavailable.\nJar: %s\nInput: %s\n" % (jar, normalized), encoding="utf-8")
-        return {"ok": False, "error": "Java runtime not found on device", "jar": str(jar),
-                "hint": str(dest), **({"unwrapped": str(normalized)} if ci else {})}
-    out_lua = out_dir / (input_path.stem + "_decompiled.lua")
+        return native_fallback("Java runtime not found")
+
     try:
-        proc = subprocess.run([java, "-jar", str(jar), str(normalized)],
-                              capture_output=True, timeout=120)
+        proc = subprocess.run(
+            [java, "-jar", str(jar), str(normalized)],
+            capture_output=True,
+            timeout=120,
+        )
         stdout = (proc.stdout or b"").decode("utf-8", "replace")
         stderr = (proc.stderr or b"").decode("utf-8", "replace")
         if proc.returncode != 0 or not stdout.strip():
             out_lua.unlink(missing_ok=True)
+            native = native_fallback("unluac returned no source")
+            if native.get("ok"):
+                native["java_error"] = stderr.strip()[:1200]
+                return native
             return {"ok": False, "error": stderr.strip()[:1200] or "unluac returned no source",
                     "code": proc.returncode, "jar": str(jar),
+                    "native_fallback": native,
                     **({"unwrapped": str(normalized), "container": ci.format} if ci else {})}
         out_lua.write_text(stdout, encoding="utf-8")
         valid, msg = validate_lua_source(out_lua)
         if not valid:
             out_lua.unlink(missing_ok=True)
+            native = native_fallback("Java unluac output failed Lua validation")
+            if native.get("ok"):
+                native["java_validation_error"] = msg
+                return native
             return {"ok": False, "error": "Lua validation failed: " + msg, "code": proc.returncode,
-                    "jar": str(jar), **({"unwrapped": str(normalized)} if ci else {})}
+                    "jar": str(jar), "native_fallback": native,
+                    **({"unwrapped": str(normalized)} if ci else {})}
         return {"ok": True, "out": str(out_lua), "code": proc.returncode, "jar": str(jar),
-                "validation": msg, **({"unwrapped": str(normalized), "container": ci.format,
+                "validation": msg, "engine": "unluac-java",
+                **({"unwrapped": str(normalized), "container": ci.format,
                 "container_chunks": ci.chunks} if ci else {})}
-    except Exception as e:
-        return {"ok": False, "error": str(e), "jar": str(jar),
-                **({"unwrapped": str(normalized)} if ci else {})}
+    except Exception as exc:
+        out_lua.unlink(missing_ok=True)
+        return native_fallback(f"Java unluac exception: {exc}")
 
 
 def run_lua_xor(input_path, out_dir, key_hex=None):
