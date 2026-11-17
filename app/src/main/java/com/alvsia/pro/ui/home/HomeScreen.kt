@@ -179,8 +179,8 @@ fun HomeScreen(
             ) {
                 Column(Modifier.weight(1f)) {
                     Text("ALVSIA", color = AlvisiaCyan, fontWeight = FontWeight.Black, fontSize = 12.sp, letterSpacing = 4.sp)
-                    Text("PRO // SECURITY WORKSPACE", color = Color.White, fontWeight = FontWeight.Black, fontSize = 18.sp)
-                    Text("19 integrated modules  ·  ARM64", color = AlvisiaSilver.copy(alpha = 0.62f), fontSize = 10.sp)
+                    Text("SMART PREMIUM // INTELLIGENCE WORKSPACE", color = Color.White, fontWeight = FontWeight.Black, fontSize = 18.sp)
+                    Text("UNIFIED SMART ENGINES  ·  ARM64", color = AlvisiaSilver.copy(alpha = 0.62f), fontSize = 10.sp)
                 }
                 DigitalLiveClock()
                 Spacer(Modifier.width(12.dp))
@@ -200,14 +200,14 @@ fun HomeScreen(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Column(Modifier.weight(1f)) {
-                    Text("LICENSE STATUS", color = AlvisiaCyan, fontWeight = FontWeight.Bold, fontSize = 9.sp, letterSpacing = 1.5.sp)
+                    Text("SMART CORE STATUS", color = AlvisiaCyan, fontWeight = FontWeight.Bold, fontSize = 9.sp, letterSpacing = 1.5.sp)
                     Text(product.ifBlank { "PREMIUM ACCESS" }, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 15.sp)
                     Text("EXP  $countdownText", color = if (countdownText == "EXPIRED") AlvisiaRed else AlvisiaSilver.copy(alpha = 0.72f), fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold, fontSize = 10.sp, letterSpacing = 0.5.sp)
                     if (!status.isNullOrBlank()) Text(status, color = Color(0xFF63E6A6), fontSize = 10.sp, fontWeight = FontWeight.SemiBold)
                 }
                 Column(horizontalAlignment = Alignment.End) {
-                    Text("19", color = Color.White, fontSize = 28.sp, fontWeight = FontWeight.Black)
-                    Text("TOOLS", color = AlvisiaCyan, fontSize = 9.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.5.sp)
+                    Text("SMART", color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.Black)
+                    Text("CORE", color = AlvisiaCyan, fontSize = 9.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.5.sp)
                 }
             }
 
@@ -252,92 +252,40 @@ fun HomeScreen(
             }
             Spacer(Modifier.height(4.dp))
 
-            // ── UX Sprint 1: Quick Actions bar ───────────────────────────
-            // 8 most-used operations — 1 tap from Home to file picker → RUN
-            Text("QUICK ACTIONS", color = AlvisiaSilver.copy(alpha = 0.4f),
-                fontSize = 9.sp, fontWeight = FontWeight.Bold)
-            Spacer(Modifier.height(4.dp))
-            Row(
-                Modifier
-                    .fillMaxWidth()
-                    .horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(6.dp)
-            ) {
-                // Quick actions that jump straight to a module
-                QuickAction("Hash", AlvisiaBlue) { onTool(ToolItem(6, "File Scan", "Strings · hash")) }
-                QuickAction("Decompile", AlvisiaBlue) { onTool(ToolItem(5, "LUA Tools", "Decompile")) }
-                QuickAction("Extract", AlvisiaBlue) { onTool(ToolItem(4, "OBB Tools", "Unzip")) }
-                QuickAction("VM Deobf", AlvisiaBlue) { onTool(ToolItem(5, "LUA Tools", "VM Deobfuscate")) }
-                QuickAction("Strings", AlvisiaBlue) { onTool(ToolItem(6, "File Scan", "String scan")) }
-                QuickAction("Rebrand", AlvisiaBlue) { onTool(ToolItem(9, "Rebrand", "Auto")) }
-                QuickAction("Outputs", AlvisiaBlue, onWorkspace)
-                QuickAction("Protect", AlvisiaBlue) { onTool(ToolItem(18, "Lua Protector", "VM Protect")) }
-            }
+            Text("SMART ENGINES", color = AlvisiaSilver.copy(alpha = 0.45f), fontSize = 9.sp, fontWeight = FontWeight.Bold)
             Spacer(Modifier.height(6.dp))
-
-            // ── UX Sprint 2: Search bar ───────────────────────────────────
-            var searchQuery by remember { mutableStateOf("") }
-            val filteredTools = if (searchQuery.isBlank()) tools
-                else tools.filter {
-                    it.title.contains(searchQuery, ignoreCase = true) ||
-                    it.desc.contains(searchQuery, ignoreCase = true)
-                }
-            androidx.compose.material3.OutlinedTextField(
-                value = searchQuery,
-                onValueChange = { searchQuery = it },
-                placeholder = { Text("🔍 Search tools...", color = AlvisiaSilver.copy(alpha = 0.3f), fontSize = 12.sp) },
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-                colors = androidx.compose.material3.OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = Color(0xFF9DAF80),
-                    unfocusedBorderColor = Color(0xFF596655).copy(alpha = 0.6f),
-                    cursorColor = Color(0xFFC2D0A4),
-                    focusedTextColor = Color.White,
-                    unfocusedTextColor = AlvisiaSilver
-                ),
-                textStyle = androidx.compose.ui.text.TextStyle(fontSize = 13.sp)
-            )
-
-            Text(
-                if (searchQuery.isBlank()) "SEVEN STUDIOS  /  19 MODULES"
-                else "SEARCH RESULTS  /  ${filteredTools.size} MODULES",
-                color = AlvisiaCyan.copy(alpha = 0.9f),
-                fontSize = 10.sp,
-                fontWeight = FontWeight.Bold,
-                letterSpacing = 1.2.sp
-            )
-            Spacer(Modifier.height(8.dp))
-            if (searchQuery.isBlank()) {
-                LazyVerticalGrid(
-                    columns = GridCells.Fixed(2),
-                    contentPadding = PaddingValues(2.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
-                    modifier = Modifier.fillMaxSize()
-                ) {
-                    items(StudioCatalog.all, key = { it.id }) { studio ->
-                        StudioChip(studio = studio, onClick = { onStudio(studio) })
-                    }
-                }
-            } else {
-                LazyVerticalGrid(
-                    columns = GridCells.Fixed(2),
-                    contentPadding = PaddingValues(2.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
-                    modifier = Modifier.fillMaxSize()
-                ) {
-                    items(filteredTools, key = { it.id }) { tool ->
-                        val colors = chipColors[(tool.id - 1) % chipColors.size]
-                        NeonModuleChip(
-                            id = tool.id,
-                            title = tool.title,
-                            colors = colors,
-                            onClick = { onTool(tool) }
-                        )
-                    }
-                }
+            LazyVerticalGrid(
+                columns = GridCells.Fixed(2),
+                contentPadding = PaddingValues(2.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                modifier = Modifier.fillMaxSize()
+            ) {
+                item { SmartEngineCard("◈", "SMART LUA", "Unified analyze • recover • compile • protect • inject", AlvisiaCyan) { onTool(ToolItem(5, "SMART LUA", "Unified Lua intelligence workflow")) } }
+                item { SmartEngineCard("◇", "SMART APK", "Android artifact intelligence and validation", AlvisiaBlue) { onTool(ToolItem(9, "SMART APK", "Unified APK intelligence workflow")) } }
+                item { SmartEngineCard("▣", "SMART PAK", "Detect • transform • rebuild • verify", AlvisiaCyan) { onTool(ToolItem(1, "SMART PAK", "Unified PAK intelligence workflow")) } }
+                item { SmartEngineCard("□", "SMART OBB", "Archive intelligence and integrity", AlvisiaBlue) { onTool(ToolItem(4, "SMART OBB", "Unified OBB intelligence workflow")) } }
+                item { SmartEngineCard("∆", "SMART NATIVE", "SO / ELF evidence and analysis", AlvisiaCyan) { onTool(ToolItem(10, "SMART NATIVE", "Unified native intelligence workflow")) } }
+                item { SmartEngineCard("⌁", "SMART TRANSFORM", "XOR • AES • SM4 • strings • layers", AlvisiaBlue) { onTool(ToolItem(13, "SMART TRANSFORM", "Unified transform intelligence workflow")) } }
+                item { SmartEngineCard("⬡", "SMART SECURITY", "Seven-layer runtime and artifact defense", AlvisiaRed) { onTool(ToolItem(17, "SMART SECURITY", "Unified security intelligence workflow")) } }
+                item { SmartEngineCard("◫", "SMART WORKSPACE", "Missions • provenance • outputs • recovery", AlvisiaCyan) { onWorkspace() } }
             }
+        }
+    }
+}
+
+@Composable
+private fun SmartEngineCard(icon: String, title: String, desc: String, accent: Color, onClick: () -> Unit) {
+    Box(Modifier.fillMaxWidth().height(116.dp).clip(RoundedCornerShape(16.dp))
+        .background(Brush.linearGradient(listOf(Color(0xFF122033), Color(0xFF0B131D))))
+        .border(1.dp, accent.copy(alpha = 0.28f), RoundedCornerShape(16.dp))
+        .clickable(onClick = onClick).padding(11.dp)) {
+        Column {
+            Text(icon, color = accent, fontSize = 20.sp, fontWeight = FontWeight.Black)
+            Text(title, color = Color.White, fontWeight = FontWeight.Black, fontSize = 12.sp)
+            Text(desc, color = AlvisiaSilver.copy(alpha = 0.62f), fontSize = 9.sp, maxLines = 2, lineHeight = 11.sp)
+            Spacer(Modifier.height(4.dp))
+            Text("OPEN SMART WORKFLOW  ›", color = accent, fontSize = 8.sp, fontWeight = FontWeight.Bold)
         }
     }
 }

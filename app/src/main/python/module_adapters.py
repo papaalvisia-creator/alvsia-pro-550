@@ -119,9 +119,128 @@ def _intelligence_analyze(input_path: str | Path, output_dir: str | Path,
     return result
 
 
+
+def _require_output(result: dict, expected_suffixes: tuple[str, ...] = ()) -> dict:
+    """Turn engine-reported success into a verifiable adapter success."""
+    if not isinstance(result, dict):
+        return {"ok": False, "error": "engine returned a non-object result"}
+    result = dict(result)
+    reported = result.get("out") or result.get("output")
+    if reported:
+        candidate = Path(str(reported))
+        if not candidate.is_file() or candidate.stat().st_size <= 0:
+            result["ok"] = False
+            result["error"] = "engine reported an output that does not exist or is empty"
+            return result
+        if expected_suffixes and candidate.suffix.lower() not in expected_suffixes:
+            result["ok"] = False
+            result["error"] = "engine output has an unexpected file type"
+    return result
+
+
+def _lua_inject_patch(input_path: str | Path, output_dir: str | Path,
+                      offset: str, patch_hex: str) -> dict:
+    """Validated adapter for the existing bytecode patch engine."""
+    import alvsia_ultimate as ultimate
+    src = Path(input_path)
+    if not src.is_file():
+        return {"ok": False, "module": "lua", "operation": "inject-patch",
+                "error": "input file not found"}
+    result = ultimate.lua_patch_bytecode(str(src), Path(output_dir), str(offset), str(patch_hex))
+    result = _require_output(dict(result) if isinstance(result, dict) else {"ok": False, "error": str(result)})
+    result.update({"module": "lua", "operation": "inject-patch"})
+    return result
+
+
+def _lua_inject_hook(input_path: str | Path, output_dir: str | Path,
+                     hook_path: str | Path) -> dict:
+    """Validated adapter for the existing hook-injection engine."""
+    import alvsia_ultimate as ultimate
+    src = Path(input_path)
+    hook = Path(hook_path)
+    if not src.is_file() or not hook.is_file():
+        return {"ok": False, "module": "lua", "operation": "inject-hook",
+                "error": "input or hook file not found"}
+    result = ultimate.lua_inject_hook(str(src), Path(output_dir), str(hook))
+    result = _require_output(dict(result) if isinstance(result, dict) else {"ok": False, "error": str(result)})
+    result.update({"module": "lua", "operation": "inject-hook"})
+    return result
+
+
+def _lua_mod_repack(input_path: str | Path, mod_dir: str | Path,
+                    output_path: str | Path) -> dict:
+    """Use the existing Smart PAK repacker, with the legacy engine as fallback."""
+    import alvsia_core as core
+    src = Path(input_path)
+    mods = Path(mod_dir)
+    dest = Path(output_path)
+    if not src.is_file() or not mods.is_dir():
+        return {"ok": False, "module": "lua", "operation": "mod-repack",
+                "error": "base PAK or modified tree not found"}
+    result = core.run_pak_smart_repack(src, mods, dest)
+    if not isinstance(result, dict) or not result.get("ok"):
+        result = core.run_pak_repack(src, mods, dest)
+    result = _require_output(dict(result) if isinstance(result, dict) else {"ok": False, "error": str(result)})
+    result.update({"module": "lua", "operation": "mod-repack"})
+    return result
+
+
+def _lua_vm_protect(input_path: str | Path, output_path: str | Path,
+                    num_decoys: int = 1024) -> dict:
+    """Use the real ALVSEAL3 VM protector and verify the emitted artifact."""
+    from alvsia_vm_protect import vm_protect
+    src = Path(input_path)
+    dest = Path(output_path)
+    if not src.is_file():
+        return {"ok": False, "module": "lua", "operation": "vm-protect",
+                "error": "input file not found"}
+    result = vm_protect(src, dest, output_format="lua", num_decoys=max(64, min(int(num_decoys), 4096)))
+    result = _require_output(dict(result) if isinstance(result, dict) else {"ok": False, "error": str(result)}, (".lua",))
+    result.update({"module": "lua", "operation": "vm-protect"})
+    return result
+
+
+def _archive_repack(input_path: str | Path, output_dir: str | Path) -> dict:
+    """Repack an already extracted OBB tree without changing the archive engine."""
+    from archive_engine import repack_obb
+    src = Path(input_path)
+    out = Path(output_dir)
+    if not src.is_dir():
+        return {"ok": False, "module": "archive", "operation": "repack",
+                "error": "extracted archive directory not found"}
+    out.mkdir(parents=True, exist_ok=True)
+    dest = out / (src.name + "_rezip.obb")
+    result = repack_obb(src, dest)
+    result = _require_output(dict(result) if isinstance(result, dict) else {"ok": False, "error": str(result)}, (".obb",))
+    result.update({"module": "archive", "operation": "repack"})
+    return result
+
+
+def _smart_lua_decompile(input_path, output_path, jars_dir=None):
+    from smart_lua_engine import decompile
+    return decompile(input_path, Path(output_path).parent, jars_dir=jars_dir)
+
+
+def _smart_lua_protect(input_path, output_path, profile="auto"):
+    from smart_lua_engine import protect
+    return protect(input_path, output_path, profile=profile)
+
+
+def _smart_lua_compile(input_path, output_dir, jars_dir=None):
+    from smart_lua_engine import compile_or_recompile
+    return compile_or_recompile(input_path, output_dir, jars_dir=jars_dir)
+
+
+def _smart_lua_inject(input_path, output_dir, mode="auto"):
+    from smart_lua_engine import inject
+    return inject(input_path, output_dir, mode=mode)
+
+
 _ADAPTERS: dict[tuple[str, str], Callable[..., dict]] = {
-    ("lua", "decompile"): _lua_decompile,
-    ("lua", "protect"): _lua_protect,
+    ("lua", "decompile"): _smart_lua_decompile,
+    ("lua", "protect"): _smart_lua_protect,
+    ("lua", "compile"): _smart_lua_compile,
+    ("lua", "inject"): _smart_lua_inject,
     ("string-recovery", "recover"): _string_recover,
     ("archive", "inspect"): _archive_inspect,
     ("archive", "extract"): _archive_extract,

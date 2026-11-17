@@ -32,7 +32,7 @@ fun ProfileScreen(product: String, expiry: String, hwidShort: String, toolCount:
     val muted = AlvisiaSilver.copy(alpha = 0.52f)
     val modules = listOf(
         ModuleChip("📦","PAK Unpack"), ModuleChip("🔧","PAK Rebuild"), ModuleChip("🗜","PAK Compact"),
-        ModuleChip("💾","OBB Tools"), ModuleChip("🌙","LUA Tools"), ModuleChip("🔍","File Scan"),
+        ModuleChip("💾","OBB Tools"), ModuleChip("🌙","SMART LUA"), ModuleChip("🔍","File Scan"),
         ModuleChip("🗑","Workspace"), ModuleChip("📄","Export Report"), ModuleChip("🎨","Rebrand"),
         ModuleChip("🔬","SO Analyzer"), ModuleChip("🎯","Frida Tracer"), ModuleChip("🔑","XOR Suite"),
         ModuleChip("🔓","Decrypt Engine"), ModuleChip("📂","PAK Deep"), ModuleChip("🔤","String Recover"),

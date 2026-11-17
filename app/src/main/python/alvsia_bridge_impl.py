@@ -65,6 +65,53 @@ def run_tool(module_id, sub_id, input_path, out_root, engine_dir, jars_dir):
             return "X AUTH: module/subtool has no Unaux grant mapping"
         core._alvsia_require_operation((grant_operation,))
 
+        # Four-engine Smart Lua surface. All detector/routing/IR/adapters/
+        # recovery/validation/fallback logic stays inside smart_lua_engine.py.
+        if sid in ("smart_lua_decompiler", "smart_lua_protect",
+                   "smart_lua_compile", "smart_lua_inject"):
+            try:
+                from module_adapters import dispatch as _smart_dispatch
+                if sid == "smart_lua_decompiler":
+                    _smart = _smart_dispatch(
+                        "lua", "decompile", input_path=ip,
+                        output_path=out / "OUT" / "LUA" / (Path(ip).stem + "_smart.lua"),
+                        jars_dir=jars,
+                    )
+                elif sid == "smart_lua_protect":
+                    _smart = _smart_dispatch(
+                        "lua", "protect", input_path=ip,
+                        output_path=out / "OUT" / "LPROTECT" / (Path(ip).stem + "_protected.lua"),
+                        profile="auto",
+                    )
+                elif sid == "smart_lua_compile":
+                    _smart = _smart_dispatch(
+                        "lua", "compile", input_path=ip,
+                        output_dir=out / "OUT" / "LUA",
+                        jars_dir=jars,
+                    )
+                else:
+                    _smart = _smart_dispatch(
+                        "lua", "inject", input_path=ip,
+                        output_dir=out / "OUT" / "LINJ",
+                        mode="auto",
+                    )
+                if not isinstance(_smart, dict) or not _smart.get("ok"):
+                    return "\n".join(lines + [
+                        "X SMART LUA ENGINE: " + str((_smart or {}).get("error", "operation failed"))[:1200]
+                    ])
+                lines.append("OK SMART LUA ENGINE -> %s" % _smart.get("engine", sid))
+                lines.append("ROUTES -> %s" % ",".join(_smart.get("routes", [])))
+                if _smart.get("out"):
+                    lines.append("OUT -> %s" % _smart.get("out"))
+                if _smart.get("round_trip") is not None:
+                    lines.append("ROUND-TRIP -> %s" % _smart.get("round_trip"))
+                return "\n".join(lines)
+            except Exception as _smart_exc:
+                return "\n".join(lines + [
+                    "X SMART LUA ENGINE EXCEPTION: %s" %
+                    (str(_smart_exc)[:1200] or type(_smart_exc).__name__)
+                ])
+
         # Unified adapter facade: route the production Smart Lua/protection,
         # string-recovery, and bounded OBB operations through one fail-closed
         # dispatcher after the existing authentication/grant gates pass.
