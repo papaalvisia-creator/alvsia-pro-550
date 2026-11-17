@@ -39,6 +39,7 @@ MODULES = (
     "alvsia_ultimate.py",
     "alvsia_ultimate_compat.py",
     "alvsia_features.py",
+    "sm4_secret_registry.py",
     "pinned_http.py",
     "lua_output_validator.py",
     "lua_engine/lua_decompiler_final.py",

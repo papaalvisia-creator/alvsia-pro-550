@@ -14,5 +14,5 @@ dependencyResolutionManagement {
         maven { url = uri("https://chaquo.com/maven") }
     }
 }
-rootProject.name = "ALVISIA_PREMIUM_TOOL"
+rootProject.name = "ALVSIA_SMART_PREMIUM"
 include(":app")

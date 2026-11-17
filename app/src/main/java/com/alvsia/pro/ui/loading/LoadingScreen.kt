@@ -21,7 +21,7 @@ import com.alvsia.pro.ui.theme.AlvisiaSilver
 
 @Composable
 fun LoadingScreen(
-    subtitle: String = "Secure channel...",
+    subtitle: String = "Initializing Smart Core...",
     progress: Float = -1f
 ) {
     Box(Modifier.fillMaxSize()) {
@@ -31,7 +31,7 @@ fun LoadingScreen(
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Text(
-                "LOADING FOR NOOB",
+                "ALVSIA SMART PREMIUM",
                 color = AlvisiaCyan,
                 fontWeight = FontWeight.Black,
                 fontSize = 22.sp

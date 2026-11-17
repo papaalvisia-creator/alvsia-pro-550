@@ -67,6 +67,56 @@ def _lua_decompile(
     return result
 
 
+
+def _lua_unified(operation: str, input_path: str | Path,
+                 output_dir: str | Path | None = None,
+                 output_path: str | Path | None = None,
+                 jars_dir: str | Path | None = None,
+                 work_dir: str | Path | None = None,
+                 sub_id: str = "", profile: str = "balanced") -> dict:
+    """Single Smart Lua mechanism; providers are selected internally.
+
+    Accept output_path for older callers and output_dir for the unified bridge.
+    A requested decompiler filename is materialized only from a real validated
+    source artifact returned by the engine.
+    """
+    import shutil
+    from smart_lua_engine import execute
+
+    requested = Path(output_path) if output_path is not None else None
+    target_dir = Path(output_dir) if output_dir is not None else (
+        requested.parent if requested is not None else None
+    )
+    if target_dir is None:
+        return {"ok": False, "module": "lua", "operation": operation,
+                "error": "output_dir or output_path is required"}
+    target_dir.mkdir(parents=True, exist_ok=True)
+    result = execute(
+        operation,
+        input_path,
+        target_dir,
+        jars_dir=jars_dir,
+        work_dir=work_dir,
+        sub_id=sub_id,
+        profile=profile,
+    )
+    result = dict(result or {})
+    if operation == "decompile" and result.get("ok") and requested is not None:
+        reported = result.get("out")
+        candidate = Path(str(reported)) if reported else None
+        if candidate is None or not candidate.is_file() or candidate.stat().st_size <= 0:
+            result.update({"ok": False, "error": "decompiler returned no valid source artifact"})
+        elif candidate.suffix.lower() != ".lua":
+            result.update({"ok": False, "error": "decompiler output is not a Lua source file"})
+        else:
+            requested.parent.mkdir(parents=True, exist_ok=True)
+            if candidate.resolve() != requested.resolve():
+                shutil.copy2(candidate, requested)
+            result["out"] = str(requested)
+            result["output_bytes"] = requested.stat().st_size
+    result.update({"module": "lua", "operation": operation})
+    return result
+
 def _lua_protect(input_path: str | Path, output_path: str | Path,
                  profile: str = "balanced", expected_version: str | None = None) -> dict:
     from lua_engine.protection_pipeline import protect_file
@@ -106,6 +156,41 @@ def _archive_extract(input_path: str | Path, output_dir: str | Path) -> dict:
     return result
 
 
+def _data_smart(operation: str, input_path: str | Path,
+                output_dir: str | Path, work_dir: str | Path | None = None) -> dict:
+    from smart_data_engine import execute
+    result = execute(operation, input_path, output_dir, work_dir=work_dir)
+    result = dict(result or {})
+    result.update({"module": "data", "operation": operation})
+    return result
+
+
+def _archive_smart(operation: str, input_path: str | Path | None,
+                  output_dir: str | Path | None = None,
+                  work_dir: str | Path | None = None,
+                  archive_kind: str = "auto") -> dict:
+    from smart_archive_engine import execute
+    target_dir = Path(output_dir) if output_dir is not None else (
+        Path(input_path).parent / "_alvsia_archive_out" if input_path else Path("_alvsia_archive_out")
+    )
+    result = execute(
+        operation, input_path, target_dir,
+        work_dir=work_dir, archive_kind=archive_kind,
+    )
+    result = dict(result or {})
+    result.update({"module": "archive", "operation": operation})
+    return result
+
+
+
+def _pak_lua_smart(input_path: str | Path, output_dir: str | Path,
+                   work_dir: str | Path | None = None) -> dict:
+    from smart_pak_lua_engine import execute
+    result = execute(input_path, output_dir, work_dir=work_dir, archive_kind="pak")
+    result = dict(result or {})
+    result.update({"module": "archive", "operation": "smart-lua-scan"})
+    return result
+
 def _intelligence_analyze(input_path: str | Path, output_dir: str | Path,
                           max_depth: int = 12, max_artifacts: int = 128) -> dict:
     from lua_intelligence.core import IntelligenceConfig, analyze_file
@@ -120,11 +205,24 @@ def _intelligence_analyze(input_path: str | Path, output_dir: str | Path,
 
 
 _ADAPTERS: dict[tuple[str, str], Callable[..., dict]] = {
-    ("lua", "decompile"): _lua_decompile,
-    ("lua", "protect"): _lua_protect,
+    ("lua", "decompile"): lambda **kw: _lua_unified("decompile", **kw),
+    ("lua", "analyze"): lambda **kw: _lua_unified("analyze", **kw),
+    ("lua", "protect"): lambda **kw: _lua_unified("protect", **kw),
+    ("lua", "compile"): lambda **kw: _lua_unified("compile", **kw),
+    ("lua", "inject"): lambda **kw: _lua_unified("inject", **kw),
+    ("lua", "encrypt"): lambda **kw: _lua_unified("encrypt", **kw),
+    ("lua", "restore"): lambda **kw: _lua_unified("restore", **kw),
+    ("lua", "vm-protect"): lambda **kw: _lua_unified("vm-protect", **kw),
     ("string-recovery", "recover"): _string_recover,
-    ("archive", "inspect"): _archive_inspect,
-    ("archive", "extract"): _archive_extract,
+    ("archive", "inspect"): lambda **kw: _archive_smart("inspect", **kw),
+    ("archive", "extract"): lambda **kw: _archive_smart("extract", **kw),
+    ("archive", "rebuild"): lambda **kw: _archive_smart("rebuild", **kw),
+    ("archive", "integrity"): lambda **kw: _archive_smart("integrity", **kw),
+    ("archive", "smart-lua-scan"): _pak_lua_smart,
+    ("data", "recover"): lambda **kw: _data_smart("recover", **kw),
+    ("data", "xor"): lambda **kw: _data_smart("xor", **kw),
+    ("data", "sm4"): lambda **kw: _data_smart("sm4", **kw),
+    ("data", "metadata"): lambda **kw: _data_smart("metadata", **kw),
     ("program-intelligence", "analyze"): _intelligence_analyze,
 }
 

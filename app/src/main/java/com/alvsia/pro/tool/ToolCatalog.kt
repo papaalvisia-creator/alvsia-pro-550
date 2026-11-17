@@ -4,34 +4,16 @@ import com.alvsia.pro.ui.home.ToolItem
 import org.json.JSONArray
 import org.json.JSONObject
 
-/**
- * ALVSIA PRO 5.5.0 — 19-module catalog.
- * Modules 1-9: original. 10-18: v5.5.0 additions. 19: ALVSIA PRIVATE TOOL (sealed runtime).
- */
+/** Small visible catalog; legacy capabilities are providers behind Smart engines. */
 object ToolCatalog {
     fun defaults(): List<ToolItem> = listOf(
-        // --- ORIGINAL ---
-        ToolItem(1,  "PAK Unpack",      "Extract · list · info · CSV"),
-        ToolItem(2,  "PAK Rebuild",     "Repack · inject · encrypt · decrypt"),
-        ToolItem(3,  "PAK Compact",     "Delete entry · empty · clean"),
-        ToolItem(4,  "OBB Tools",       "Unzip · rezip · info"),
-        ToolItem(5,  "LUA Tools",       "Detect · analyze · decompile · clean · XOR · constants"),
-        ToolItem(6,  "File Scan",       "Strings · hash · report"),
-        ToolItem(7,  "Workspace",       "Clear WORK/OUT"),
-        ToolItem(8,  "Export Report",   "Session / file summary"),
-        ToolItem(9,  "Rebrand",         "ALVSIA PRO auto · manual brand/channel"),
-        // --- NEW v5.5.0 ---
-        ToolItem(10, "SO Analyzer",     "XOR-brute · URL extract · AES probe · plaintext URL patch"),
-        ToolItem(11, "Frida Tracer",    "Generate JNI hook scripts and Frida spawn/trace commands"),
-        ToolItem(12, "XOR Suite",       "Single-byte scan · multi-key · LuaS strip · batch"),
-        ToolItem(13, "Decrypt Engine",  "AES-CBC/ECB · ZUC-like fallback · SM4 · SIMPLE1 · auto-detect"),
-        ToolItem(14, "PAK Deep",        "AES-SHA1 PAK · Zstd decompress · ZUC-like fallback · SM4"),
-        ToolItem(15, "String Recover",  "Obfuscated string restore · constant pool dump"),
-        ToolItem(16, "Lua Inject",      "Patch Lua bytes · prepend hook source · repack edited PAK tree"),
-        ToolItem(17, "Anti-RE Audit",   "Detect weak points in target APK · generate report"),
-        ToolItem(18, "Lua Protector",    "Smart source protection · AES-256-GCM · VM wrapper"),
-        // --- PRIVATE MODULE ---
-        ToolItem(19, "ALVSIA PRIVATE TOOL", "Private analysis suite · sealed runtime required"),
+        ToolItem(1, "SMART LUA", "One engine: decompile · analyze · protect · compile/recompile · inject"),
+        ToolItem(2, "SMART PAK", "Detect · inspect · unpack · modify · repack · integrity"),
+        ToolItem(3, "SMART OBB", "Detect · extract · modify · rebuild · integrity"),
+        ToolItem(4, "SMART DATA", "XOR · AES · SM4 NEW · strings · metadata recovery"),
+        ToolItem(5, "SMART ANALYSIS", "SO · URL · JNI trace · APK/Lua audit"),
+        ToolItem(6, "WORKSPACE & REPORT", "Workspace · hash · reports"),
+        ToolItem(7, "ALVSIA PRIVATE", "Private analysis providers")
     )
 
     fun parseCore(bytes: ByteArray?): List<ToolItem> {
@@ -42,19 +24,14 @@ object ToolCatalog {
             val json = bytes.copyOfRange(8, bytes.size).toString(Charsets.UTF_8)
             val root = JSONObject(json)
             val arr: JSONArray = root.optJSONArray("tools") ?: return defaults()
-            val out = ArrayList<ToolItem>(arr.length().coerceAtLeast(defaults().size))
+            val merged = defaults().associateBy { it.id }.toMutableMap()
             for (i in 0 until arr.length()) {
                 val o = arr.getJSONObject(i)
-                out.add(ToolItem(
-                    id    = o.optInt("id", i + 1),
-                    title = o.optString("title", "Tool ${i+1}"),
-                    desc  = o.optString("desc", "")
-                ))
+                val id = o.optInt("id", -1)
+                if (id in 1..defaults().size) {
+                    merged[id] = ToolItem(id, o.optString("title", merged[id]?.title ?: "Tool $id"), o.optString("desc", merged[id]?.desc ?: ""))
+                }
             }
-            // Always expose the complete local catalog. Server entries override matching
-            // IDs, while missing modules are filled from defaults to prevent menu gaps.
-            val merged = defaults().associateBy { it.id }.toMutableMap()
-            out.forEach { item -> merged[item.id] = item }
             merged.values.sortedBy { it.id }
         } catch (_: Exception) {
             defaults()
