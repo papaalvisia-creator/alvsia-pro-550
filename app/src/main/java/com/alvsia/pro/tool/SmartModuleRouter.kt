@@ -26,7 +26,7 @@ object SmartModuleRouter {
         "asset_locres_umap_classify" -> 19
         "asset_report" -> 6
 
-        "apk_audit", "package_signature_audit" -> 17
+        "apk_audit" -> 17
         "dex_report" -> 6
         "url_scan" -> 10
 
@@ -35,7 +35,6 @@ object SmartModuleRouter {
         "aes_scan" -> 19
         "zuc_decrypt" -> 13
         "string_recovery" -> 15
-        "url_recovery" -> 10
 
         "file_report" -> 6
         "strings" -> 6
@@ -66,8 +65,8 @@ object SmartModuleRouter {
         "asset_uasset_classify", "asset_uexp_classify",
         "asset_locres_umap_classify" -> "priv_dump_audit"
 
-        "apk_audit", "package_signature_audit" -> "audit_apk"
-        "url_scan", "url_recovery" -> "so_url_dump"
+        "apk_audit" -> "audit_apk"
+        "url_scan" -> "so_url_dump"
 
         "so_audit", "native_strings", "abi_dependency_report" -> "so_dump_audit"
 
