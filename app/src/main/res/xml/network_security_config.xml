@@ -1,19 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
 <network-security-config>
     <base-config cleartextTrafficPermitted="false">
-        <trust-anchors>
-            <certificates src="system" />
-        </trust-anchors>
+        <trust-anchors><certificates src="system" /></trust-anchors>
     </base-config>
-    <!-- New panel only. Platform CA + hostname validation and measured SPKI pin are enforced.
-         Re-measure the key before certificate rotation; do not reuse retired-host pins. -->
+    <!-- Owner-supplied current Unaux leaf and CA backup SPKI pins. -->
     <domain-config cleartextTrafficPermitted="false">
         <domain includeSubdomains="true">alvsiapanel.unaux.com</domain>
-        <!-- SPKI measured by the owner's Termux audit on 2026-10-26.
-             Keep CA and hostname validation enabled. Re-measure before key rotation;
-             no verified backup SPKI was present in the supplied audit. -->
         <pin-set>
-            <pin digest="SHA-256">84+S6cn1vo+IjlQMR5mvqIe5XKMPh28WV9xYVtFKTkk=</pin>
+            <pin digest="SHA-256">3dKRo5uvtVM2x5/NJsOEKFEy803l0rPct3Jv0AoiukE=</pin>
+            <pin digest="SHA-256">xwyjb5aN7tSRWj02XSZa2cKGLxXLdKHUBfLT/7twjhQ=</pin>
+            <pin digest="SHA-256">sLVjNUaFYfW7n6EtgBeEpjOlcnBdNPMrZDRF36iwBdE=</pin>
         </pin-set>
     </domain-config>
 </network-security-config>
