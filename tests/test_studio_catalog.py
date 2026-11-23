@@ -13,7 +13,7 @@ MAIN = ROOT / "app/src/main/java/com/alvsia/pro/MainActivity.kt"
 class SmartCatalogTests(unittest.TestCase):
     def test_nine_smart_modules_are_the_public_catalog(self):
         source = CATALOG.read_text(encoding="utf-8")
-        items = re.findall(r'ToolItem\\(\\s*(\\d+)\\s*,\\s*"([^"]+)"', source)
+        items = re.findall(r'ToolItem\(\s*(\d+)\s*,\s*"([^"]+)"', source)
         self.assertEqual([int(i) for i, _ in items], list(range(1, 10)))
         self.assertEqual(
             [name for _, name in items],
@@ -23,7 +23,7 @@ class SmartCatalogTests(unittest.TestCase):
 
     def test_public_subtools_are_exactly_33_and_unique(self):
         menus = MENUS.read_text(encoding="utf-8")
-        all_ids = re.findall(r'SubTool\\(\\s*"([^"]+)"', menus)
+        all_ids = re.findall(r'SubTool\(\s*"([^"]+)"', menus)
         expected = [
             "universal_file_detect", "workspace_report", "engine_health",
             "lua_smart_analyze", "lua_recovery_normalize", "lua_t24_convert", "lua_multi_xor", "lua_protect_transform", "lua_custom_inject",
