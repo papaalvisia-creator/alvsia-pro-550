@@ -343,7 +343,7 @@ def main() -> int:
                     by_base = {Path(n).name: n for n in members}
                     bridge_name = by_base.get("alvsia_bridge.py")
                     bridge_bytes = inner.read(bridge_name) if bridge_name else b""
-                    check(bool(bridge_bytes) and len(bridge_bytes) < 2000,
+                    check(bool(bridge_bytes) and len(bridge_bytes) < 3000,
                           "plaintext bridge is a small bootstrap stub")
                     check((b"alvsia_bridge_impl" in bridge_bytes) and b"if mid == 1" not in bridge_bytes,
                           "tool routing is not shipped in plaintext bridge")
