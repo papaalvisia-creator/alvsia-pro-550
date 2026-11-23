@@ -7,12 +7,13 @@ import hmac
 from urllib.parse import urlparse
 
 PANEL_HOSTS = frozenset(("alvsiapanel.unaux.com",))
-# The active panel is alvsiapanel.unaux.com. Match the Android Vault pin.
-# Only the owner-measured pin is trusted; fail closed until a verified backup is measured.
+# Owner-supplied current leaf and backup CA SPKI pins; match Android Vault.
 PANEL_SPKI_PINS = tuple(
     base64.b64decode(p)
     for p in (
-        "84+S6cn1vo+IjlQMR5mvqIe5XKMPh28WV9xYVtFKTkk=",  # measured SPKI for alvsiapanel.unaux.com
+        "3dKRo5uvtVM2x5/NJsOEKFEy803l0rPct3Jv0AoiukE=",  # current leaf
+        "xwyjb5aN7tSRWj02XSZa2cKGLxXLdKHUBfLT/7twjhQ=",  # ZeroSSL ECC DV SSL CA 2
+        "sLVjNUaFYfW7n6EtgBeEpjOlcnBdNPMrZDRF36iwBdE=",  # Sectigo Public Server Authentication Root E46
     )
 )
 
