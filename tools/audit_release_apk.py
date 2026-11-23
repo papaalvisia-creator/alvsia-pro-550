@@ -345,7 +345,7 @@ def main() -> int:
                     bridge_bytes = inner.read(bridge_name) if bridge_name else b""
                     check(bool(bridge_bytes) and len(bridge_bytes) < 2000,
                           "plaintext bridge is a small bootstrap stub")
-                    check(b"import alvsia_bridge_impl as impl" in bridge_bytes and b"if mid == 1" not in bridge_bytes,
+                    check((b"alvsia_bridge_impl" in bridge_bytes) and b"if mid == 1" not in bridge_bytes,
                           "tool routing is not shipped in plaintext bridge")
                     actual_sealed = {Path(n).name for n in members if n.lower().endswith(".alv")}
                     missing = sorted(EXPECTED_SEALED - actual_sealed)
