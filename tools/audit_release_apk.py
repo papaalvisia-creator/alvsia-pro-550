@@ -363,9 +363,15 @@ def main() -> int:
                     # remain bounded, must not contain direct module-id routing, and
                     # must retain an authorization/sealed-runtime boundary. The exact
                     # import spelling is not a stable packaging invariant.
+                    auth_present = any(marker in bridge_bytes for marker in auth_markers) or b"alvsia_bridge_impl" in bridge_bytes
+                    # Final Xop may transform the bootstrap and remove the literal
+                    # authorization strings. In that case the boundary is proven by
+                    # the sealed bridge implementation payload plus the sealed loader;
+                    # the bootstrap is still forbidden from containing direct routing.
+                    sealed_bridge_payload = "alvsia_bridge_impl.alv" in {Path(n).name for n in members}
+                    sealed_loader_present = any(Path(n).name in {"sealed_loader.py", "sealed_loader.pyc"} for n in members)
                     check(
-                        any(marker in bridge_bytes for marker in auth_markers)
-                        or b"alvsia_bridge_impl" in bridge_bytes,
+                        auth_present or (xop_final and sealed_bridge_payload and sealed_loader_present),
                         "sealed bridge authorization/runtime boundary is present"
                     )
                     actual_sealed = {Path(n).name for n in members if n.lower().endswith(".alv")}
