@@ -27,7 +27,7 @@ object SubMenus {
         1 -> listOf(
             SubTool("universal_file_detect", "UNIVERSAL FILE DETECT", "Identify file family, signatures, entropy and likely Smart route", "Select any supported artifact. Detection is read-only and evidence-based."),
             SubTool("workspace_report", "WORKSPACE REPORT", "Workspace inventory, hashes and task evidence", "Select a file or workspace artifact to generate a compact report."),
-            SubTool("engine_health", "ENGINE HEALTH", "Run provider self-checks and report available Smart backends", "Select a diagnostic input when requested; no source files are modified.")
+            SubTool("engine_health", "ENGINE HEALTH", "Run provider self-checks and report available Smart backends", "Runs internal provider self-tests; no source file is required.", needsFile = false)
         )
         2 -> listOf(
             SubTool("lua_smart_analyze", "SMART ANALYZE", "Fingerprint Lua/LuaJIT/T24/BGMI layers before transformation", "Select Lua or bytecode. The analyzer chooses the next recovery path."),
@@ -75,7 +75,7 @@ object SubMenus {
         9 -> listOf(
             SubTool("batch_audit", "BATCH AUDIT", "Run repeatable static audit operations over a staged batch", "Prepare a batch/workspace input. The engine keeps task outputs isolated."),
             SubTool("regression_compare", "REGRESSION / COMPARE", "Compare regression outputs and summarize pass/fail evidence", "Select a regression workspace or supported corpus artifact."),
-            SubTool("self_test", "SELF TEST", "Run provider self-tests and report failures without modifying inputs", "Select diagnostic input when required; outputs are diagnostic only.")
+            SubTool("self_test", "SELF TEST", "Run provider self-tests and report failures without modifying inputs", "Runs internal provider self-tests; outputs are diagnostic only.", needsFile = false)
         )
         else -> emptyList()
     }
