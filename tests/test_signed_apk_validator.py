@@ -12,6 +12,53 @@ PIN = "99b33815c88a17abbcfe22be15250363f6dfc79c11ffc980e71b62b74b1f295c"
 
 
 class SignedApkCertificatePinTests(unittest.TestCase):
+    def test_accepts_xop_encrypted_index_and_validates_pas1(self):
+        names = {
+            "AndroidManifest.xml", "classes.dex",
+            "lib/arm64-v8a/librasp_guard.so", "assets/chaquopy/app.imy",
+            "lib/arm64-v8a/libprotector.so", "assets/protector/dexes.zip",
+            "assets/protector/assets.map", "assets/protector/aenc/nx/i.dat",
+        }
+        validator.validate_required_entries(names, lambda name: b"PAS1payload")
+
+    def test_rejects_xop_index_without_asset_map(self):
+        names = {
+            "AndroidManifest.xml", "classes.dex",
+            "lib/arm64-v8a/librasp_guard.so", "assets/chaquopy/app.imy",
+            "lib/arm64-v8a/libprotector.so", "assets/protector/dexes.zip",
+            "assets/protector/aenc/nx/i.dat",
+        }
+        with self.assertRaisesRegex(SystemExit, "asset map missing"):
+            validator.validate_required_entries(names, lambda name: b"PAS1payload")
+
+    def test_rejects_invalid_pas1_header(self):
+        names = {
+            "AndroidManifest.xml", "classes.dex",
+            "lib/arm64-v8a/librasp_guard.so", "assets/chaquopy/app.imy",
+            "lib/arm64-v8a/libprotector.so", "assets/protector/dexes.zip",
+            "assets/protector/assets.map", "assets/protector/aenc/nx/i.dat",
+        }
+        with self.assertRaisesRegex(SystemExit, "invalid PAS1"):
+            validator.validate_required_entries(names, lambda name: b"BAD!")
+
+    def test_accepts_plain_baseline_index(self):
+        names = {
+            "AndroidManifest.xml", "classes.dex",
+            "lib/arm64-v8a/librasp_guard.so", "assets/chaquopy/app.imy",
+            "lib/arm64-v8a/libprotector.so", "assets/protector/dexes.zip",
+            "assets/nx/i.dat",
+        }
+        validator.validate_required_entries(names, lambda name: b"plain baseline")
+
+    def test_rejects_missing_both_index_locations(self):
+        names = {
+            "AndroidManifest.xml", "classes.dex",
+            "lib/arm64-v8a/librasp_guard.so", "assets/chaquopy/app.imy",
+            "lib/arm64-v8a/libprotector.so", "assets/protector/dexes.zip",
+        }
+        with self.assertRaisesRegex(SystemExit, "sealed JAR index missing"):
+            validator.validate_required_entries(names, lambda name: b"")
+
     def test_reads_release_certificate_pin_from_gradle_config(self):
         with tempfile.TemporaryDirectory() as tmp:
             config = Path(tmp) / "build.gradle.kts"
@@ -42,6 +89,35 @@ class SignedApkCertificatePinTests(unittest.TestCase):
             config.write_text('buildConfigField("String", "PROTO", "2")\n', encoding="utf-8")
             with self.assertRaises(SystemExit):
                 validator.expected_certificate_sha256(config)
+
+
+    def test_reads_active_gradle_package_identity(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            config = Path(tmp) / "build.gradle.kts"
+            config.write_text(
+                'applicationId = "com.alvsia.pro"\n'
+                'versionCode = 100\n'
+                'versionName = "6.0.0-smart-premium"\n',
+                encoding="utf-8",
+            )
+            self.assertEqual(
+                validator.expected_package_identity(config),
+                ("com.alvsia.pro", "100", "6.0.0-smart-premium"),
+            )
+
+    def test_rejects_missing_gradle_package_identity(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            config = Path(tmp) / "build.gradle.kts"
+            config.write_text('versionCode = 100\n', encoding="utf-8")
+            with self.assertRaises(SystemExit):
+                validator.expected_package_identity(config)
+
+    def test_parses_aapt_package_identity(self):
+        output = "package: name='com.alvsia.pro' versionCode='100' versionName='6.0.0-smart-premium'\n"
+        self.assertEqual(
+            validator.package_identity(output),
+            ("com.alvsia.pro", "100", "6.0.0-smart-premium"),
+        )
 
 
 if __name__ == "__main__":

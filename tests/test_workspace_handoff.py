@@ -17,7 +17,7 @@ class SharedWorkspaceHandoffTests(unittest.TestCase):
         home = (ROOT / "app/src/main/java/com/alvsia/pro/ui/home/HomeScreen.kt").read_text(encoding="utf-8")
         main = (ROOT / "app/src/main/java/com/alvsia/pro/MainActivity.kt").read_text(encoding="utf-8")
         tool = (ROOT / "app/src/main/java/com/alvsia/pro/ui/tool/ToolWorkspaceScreen.kt").read_text(encoding="utf-8")
-        self.assertIn('QuickAction("Outputs"', home)
+        self.assertIn('QuickAction("OUTPUTS"', home)
         self.assertIn('onWorkspace = { screen = "output" }', main)
         self.assertIn("pendingInputUri = uri", main)
         self.assertIn("initialUri = pendingInputUri", main)
