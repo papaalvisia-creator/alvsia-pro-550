@@ -158,7 +158,7 @@ def test_smart_lua_exposes_exactly_four_engines():
 def test_catalog_contains_compact_smart_modules():
     catalog = CATALOG.read_text(encoding="utf-8")
     ids = [int(x) for x in re.findall(r'ToolItem\((\d+),', catalog)]
-    assert ids == list(range(1, 8)), f"Expected compact module IDs 1..7 in order, got {ids}"
+    assert ids == list(range(1, 10)), f"Expected Smart module IDs 1..9 in order, got {ids}"
     assert 'ToolItem(1, "SMART LUA"' in catalog
     assert 'ToolItem(2, "SMART PAK"' in catalog
     assert 'ToolItem(3, "SMART OBB"' in catalog
