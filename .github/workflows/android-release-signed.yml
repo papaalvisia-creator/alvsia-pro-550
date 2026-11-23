@@ -73,8 +73,8 @@ jobs:
           : "${ALVSIA_RELEASE_KEY_ALIAS:?Missing GitHub Actions secret ALVSIA_RELEASE_KEY_ALIAS}"
           : "${ALVSIA_RELEASE_KEY_PASSWORD:?Missing GitHub Actions secret ALVSIA_RELEASE_KEY_PASSWORD}"
           grep -q 'CERT_SHA256' app/build.gradle.kts
-          grep -q 'versionCode = 98' app/build.gradle.kts
-          grep -q 'versionName = "5.5.2-hardened"' app/build.gradle.kts
+          grep -q 'versionCode = 100' app/build.gradle.kts
+          grep -q 'versionName = "6.0.0-smart-premium"' app/build.gradle.kts
           echo "PASS: required signing secrets are present (values are not printed)"
           java -version
           chmod +x ./gradlew
@@ -157,7 +157,7 @@ jobs:
           python3 tools/audit_release_apk.py "$INPUT_APK"
           AAPT="$ANDROID_HOME/build-tools/34.0.0/aapt"
           BADGING="$("$AAPT" dump badging "$INPUT_APK")"
-          printf '%s\\n' "$BADGING" | grep -Fq "package: name='com.alvsia.pro' versionCode='98' versionName='5.5.2-hardened'"
+          printf '%s\\n' "$BADGING" | grep -Fq "package: name='com.alvsia.pro' versionCode='98' versionName='6.0.0-smart-premium'"
           printf '%s\\n' "$BADGING" | grep -Fq "launchable-activity: name='com.alvsia.pro.MainActivity'"
           echo "ALVSIA_XOP_UNSIGNED_APK=$INPUT_APK" >> "$GITHUB_ENV"
           echo "PASS: using plain ALVSIA APK; no XopProtector shell is nested into the artifact"
@@ -191,7 +191,7 @@ jobs:
           BUILD_TOOLS="$ANDROID_HOME/build-tools/34.0.0"
           test -x "$BUILD_TOOLS/zipalign"
           test -x "$BUILD_TOOLS/apksigner"
-          SIGNED_APK="$GITHUB_WORKSPACE/ALVSIA_PRO_5.5.2-hardened_signed.apk"
+          SIGNED_APK="$GITHUB_WORKSPACE/ALVSIA_PRO_6.0.0-smart-premium_signed.apk"
 
           "$BUILD_TOOLS/zipalign" -f 4 "$UNSIGNED" "$RUNNER_TEMP/alvsia-release-aligned.apk"
           # Validate the configured key password first; if this keystore uses the
@@ -238,7 +238,7 @@ jobs:
           "$BUILD_TOOLS/zipalign" -c -v 4 "$SIGNED_APK"
           python3 tools/audit_release_apk.py "$SIGNED_APK"
           BADGING="$("$BUILD_TOOLS/aapt" dump badging "$SIGNED_APK")"
-          printf '%s\n' "$BADGING" | grep -Fq "package: name='com.alvsia.pro' versionCode='98' versionName='5.5.2-hardened'"
+          printf '%s\n' "$BADGING" | grep -Fq "package: name='com.alvsia.pro' versionCode='98' versionName='6.0.0-smart-premium'"
           sha256sum "$SIGNED_APK" | tee "$GITHUB_WORKSPACE/SHA256SUMS.txt"
           echo "PASS: plain APK for external protector, v2/v3 signatures, certificate pin, zip alignment, package and version verified"
           rm -f "$KS"
@@ -248,17 +248,17 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-          tag_name: alvsia-pro-5.5.2-build-${{ github.run_number }}
-          name: ALVSIA PRO 5.5.2-hardened — Build ${{ github.run_number }}
+          tag_name: alvsia-pro-6.0.0-smart-premium-build-${{ github.run_number }}
+          name: ALVSIA PRO 6.0.0-smart-premium — Build ${{ github.run_number }}
           draft: true
           prerelease: true
           fail_on_unmatched_files: true
           body: |
-            Automated private draft release for the verified ALVSIA PRO 5.5.2-hardened build.
+            Automated private draft release for the verified ALVSIA PRO 6.0.0-smart-premium build.
             APK must pass CI signing, certificate, unwrapped APK compatibility, alignment, package/version, and manifest audits before publishing.
             Do not mark this release public until on-device smoke tests pass.
           files: |
-            ALVSIA_PRO_5.5.2-hardened_signed.apk
+            ALVSIA_PRO_6.0.0-smart-premium_signed.apk
             SHA256SUMS.txt
             build_full.log
             release_security_audit.txt
