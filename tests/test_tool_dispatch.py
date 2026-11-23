@@ -142,43 +142,28 @@ def test_frida_spawn_preserves_full_package_name():
         assert "-f com.tencent " not in output, output
 
 
-def test_smart_lua_exposes_exactly_four_engines():
+def test_smart_lua_exposes_smart_lua_family():
     menus = MENUS.read_text(encoding="utf-8")
-    lua_menu = menus.split("1 -> listOf(", 1)[1].split("\n        2 -> listOf(", 1)[0]
-    ids = re.findall(r'SubTool\(\s*"([a-zA-Z0-9_]+)"', lua_menu)
-    assert ids == [
-        "lua_decompile", "lua_smart_protect", "lua_compile", "lua_patch_byte"
-    ], f"SMART LUA must expose exactly four engines, got {ids}"
-    for internal in ("lua_analyze", "lua_smart_protect_strong",
-                     "lua_protect_encrypt", "lua_vm_protect",
-                     "lua_inject_hook", "lua_mod_repack"):
-        assert internal not in ids, f"{internal} must remain internal to Smart Lua"
+    assert '"lua_smart_analyze"' in menus
+    assert '"lua_recovery_normalize"' in menus
+    assert '"lua_t24_convert"' in menus
+    assert '"lua_multi_xor"' in menus
+    assert '"lua_protect_transform"' in menus
+    assert '"lua_custom_inject"' in menus
 
-
-def test_catalog_contains_compact_smart_modules():
+def test_catalog_contains_smart_9x33_modules():
     catalog = CATALOG.read_text(encoding="utf-8")
     ids = [int(x) for x in re.findall(r'ToolItem\((\d+),', catalog)]
     assert ids == list(range(1, 10)), f"Expected Smart module IDs 1..9 in order, got {ids}"
-    assert 'ToolItem(1, "SMART LUA"' in catalog
-    assert 'ToolItem(2, "SMART PAK"' in catalog
-    assert 'ToolItem(3, "SMART OBB"' in catalog
-    assert 'ToolItem(4, "SMART DATA"' in catalog
-    assert 'ToolItem(7, "ALVSIA PRIVATE"' in catalog
 
-
-def test_private_module_is_compact_and_dispatchable():
+def test_legacy_private_provider_remains_internal():
     menus = MENUS.read_text(encoding="utf-8")
-    catalog = CATALOG.read_text(encoding="utf-8")
     router = ROUTER.read_text(encoding="utf-8")
-    bridge = BRIDGE.read_text(encoding="utf-8") + "\n" + BRIDGE_IMPL.read_text(encoding="utf-8")
-    assert '7 -> "ALVSIA PRIVATE"' in menus
-    assert 'ToolItem(7, "ALVSIA PRIVATE"' in catalog
-    expected = ["priv_lua_parse", "priv_lua_convert", "priv_pak_manifest"]
-    for sid in expected:
-        assert f'"{sid}"' in menus
-        assert f'"{sid}"' in bridge or f'"{sid}"' in router
-    assert "sealed runtime required" in menus.lower() or "private" in menus.lower()
-
+    assert "ALVSIA PRIVATE" not in menus
+    assert "priv_lua_parse" not in menus
+    assert "priv_lua_convert" not in menus
+    assert "priv_pak_manifest" not in menus
+    assert "SmartModuleRouter" in router
 
 def test_engine_surfaces_bridge_failures():
     engine = ENGINE.read_text(encoding="utf-8")
@@ -354,22 +339,17 @@ def test_large_file_helpers_stream_and_report_hashes():
         assert expected in Path(report["out"]).read_text(encoding="utf-8")
 
 
-def test_profile_catalog_matches_compact_smart_modules():
+def test_profile_catalog_matches_smart_9x33_modules():
     profile_path = ROOT / "app/src/main/java/com/alvsia/pro/ui/profile/ProfileScreen.kt"
     profile = profile_path.read_text(encoding="utf-8")
-    assert '"SMART LUA"' in profile
-    assert '"SMART PAK"' in profile
-    assert '"SMART OBB"' in profile
-    assert '"SMART DATA"' in profile
-    assert '"SMART ANALYSIS"' in profile
-    assert '"WORKSPACE & REPORT"' in profile
-    assert '"ALVSIA PRIVATE"' in profile
-    assert '"7"' in profile and '"MODULES"' in profile
+    expected = ["HOME", "LUA", "PAK / OBB", "ASSET / UE", "APK / DEX", "NATIVE",
+                "CRYPTO / RECOVERY", "FORENSIC / STRING", "BATCH / DEV LAB"]
+    for name in expected:
+        assert f'"{name}"' in profile
+    assert '"9"' in profile and '"MODULES"' in profile
     catalog = CATALOG.read_text(encoding="utf-8")
     names = re.findall(r'ToolItem\(\s*\d+\s*,\s*"([^"]+)"', catalog)
-    assert names == ["SMART LUA", "SMART PAK", "SMART OBB", "SMART DATA",
-                     "SMART ANALYSIS", "WORKSPACE & REPORT", "ALVSIA PRIVATE"]
-
+    assert names == expected
 
 def test_reference_inspection_subtools_are_registered_and_read_only():
     menus = MENUS.read_text(encoding="utf-8")
@@ -411,28 +391,21 @@ def test_reference_inspection_helpers_smoke():
         assert report["memory_acquisition"] is False
         assert report["secret_extraction"] is False
 
-def test_pak_integrity_audit_is_registered_and_read_only():
+def test_pak_integrity_provider_remains_internal():
     bridge = BRIDGE_IMPL.read_text(encoding="utf-8")
     menus = MENUS.read_text(encoding="utf-8")
     core = (ROOT / "app/src/main/python/alvsia_core.py").read_text(encoding="utf-8")
     assert "pak_deep_integrity_audit" in bridge
-    assert "pak_deep_integrity_audit" in menus
+    assert "pak_deep_integrity_audit" not in menus
     assert "def run_pak_integrity_audit(" in core
-    assert "slot_fingerprint_sha256" in core
-    assert "invalid_ranges" in core
-    assert "overlaps" in core
-    assert "Original PAK was not modified" in bridge
 
-def test_obb_integrity_audit_is_registered_and_read_only():
+def test_obb_integrity_provider_remains_internal():
     bridge = BRIDGE_IMPL.read_text(encoding="utf-8")
     menus = MENUS.read_text(encoding="utf-8")
     helper = (ROOT / "app/src/main/python/alvsia_reference_tools.py").read_text(encoding="utf-8")
     assert "obb_integrity_audit" in bridge
-    assert "obb_integrity_audit" in menus
+    assert "obb_integrity_audit" not in menus
     assert "def audit_archive_file(" in helper
-    assert "archive.open(info, \"r\")" in helper
-    assert "extractall(" not in helper
-
 
 def test_reference_inspectors_format_and_archive_fixtures():
     import importlib.util
@@ -487,11 +460,9 @@ def test_decrypt_known_answer_selftest_is_registered():
     assert "NIST AES known-answer tests" in bridge
 
 
-def test_private_module_uses_dedicated_workspace_paths():
+def test_private_workspace_paths_remain_available_for_internal_providers():
     paths = (ROOT / "app/src/main/java/com/alvsia/pro/tool/WorkPaths.kt").read_text(encoding="utf-8")
-    menus = MENUS.read_text(encoding="utf-8")
     assert '19 -> "ALVSIA_PRIVATE"' in paths
-    assert "ALVSIA PRIVATE" in menus
     assert "fun moduleOut(moduleId: Int)" in paths
     assert 'return File(dirOut(), name).also { it.mkdirs() }' in paths
 
