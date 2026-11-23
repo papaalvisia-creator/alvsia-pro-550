@@ -53,10 +53,11 @@ class SecurityWiringTests(unittest.TestCase):
         self.assertIn("Python fallback will handle this input", runner)
         self.assertIn("normalizedSize > ART_SAFE_LIMIT", runner)
 
-    def test_pinned_panel_transport_does_not_follow_redirects(self):
+    def test_pinned_panel_transport_follows_unaux_redirects(self):
         client = read("app/src/main/java/com/alvsia/pro/panel/PanelClient.kt")
-        self.assertIn(".followRedirects(false)", client)
-        self.assertIn(".followSslRedirects(false)", client)
+        # The proven 7/22 client followed both redirect classes; keep that behavior for Unaux.
+        self.assertIn(".followRedirects(true)", client)
+        self.assertIn(".followSslRedirects(true)", client)
 
     def test_backup_and_device_transfer_are_explicitly_excluded(self):
         manifest = read("app/src/main/AndroidManifest.xml")
