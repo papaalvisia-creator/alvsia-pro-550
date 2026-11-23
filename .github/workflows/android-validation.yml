@@ -19,12 +19,12 @@ jobs:
 
       # Chaquopy 15 host-side pip imports cgi, removed in Python 3.13+.
       # Pin the CI host interpreter; embedded app Python remains set in app/build.gradle.kts.
-      - name: Set up Chaquopy build Python
+      - name: Set up Chaquopy-compatible host Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.8'
+          python-version: '3.12'
 
-      - name: Set up compatible host Python for Chaquopy
+      - name: Verify Chaquopy host Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.12'
