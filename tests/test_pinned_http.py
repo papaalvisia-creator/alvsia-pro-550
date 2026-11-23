@@ -34,9 +34,13 @@ class PinnedHttpTests(unittest.TestCase):
     def test_only_active_unaux_host_is_trusted(self):
         self.assertEqual(pinned_http.PANEL_HOSTS, frozenset(("alvsiapanel.unaux.com",)))
 
-    def test_pin_matches_android_vault_measured_spki(self):
-        expected = base64.b64decode("84+S6cn1vo+IjlQMR5mvqIe5XKMPh28WV9xYVtFKTkk=")
-        self.assertEqual(pinned_http.PANEL_SPKI_PINS, (expected,))
+    def test_leaf_and_backup_pins_match_android_vault(self):
+        expected = tuple(base64.b64decode(pin) for pin in (
+            "3dKRo5uvtVM2x5/NJsOEKFEy803l0rPct3Jv0AoiukE=",
+            "xwyjb5aN7tSRWj02XSZa2cKGLxXLdKHUBfLT/7twjhQ=",
+            "sLVjNUaFYfW7n6EtgBeEpjOlcnBdNPMrZDRF36iwBdE=",
+        ))
+        self.assertEqual(pinned_http.PANEL_SPKI_PINS, expected)
 
     def test_retired_hosts_and_cleartext_are_rejected_before_network(self):
         for url in (
