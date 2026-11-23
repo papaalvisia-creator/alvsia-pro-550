@@ -1,7 +1,7 @@
 name: Android Security Validation
 on:
   push:
-    branches: [ main, feat/alvsia-smart-premium-v1-20261112, feat/alvsia-smart-premium-security-final-20261111, fix/task-output-routing-20261111, feat/combined-smart-lua-xop-release-20261110, feat/lua-intelligence-orchestrator-20261107, fix/chaquopy-python312-ci, fix/lua-normalization-fallback-20261103, release/5.5.2-19-module-redesign ]
+    branches: [ main, feat/alvsia-smart-premium-v1-20261112, feat/smart-premium-final-7x22-source-fused-20261123, feat/alvsia-smart-premium-security-final-20261111, fix/task-output-routing-20261111, feat/combined-smart-lua-xop-release-20261110, feat/lua-intelligence-orchestrator-20261107, fix/chaquopy-python312-ci, fix/lua-normalization-fallback-20261103, release/5.5.2-19-module-redesign ]
   pull_request:
     branches: [ main, feat/full-reference-source-registry-20261106 ]
   workflow_dispatch:
