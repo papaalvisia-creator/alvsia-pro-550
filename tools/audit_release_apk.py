@@ -341,7 +341,7 @@ def main() -> int:
                           "custom cipher/deobfuscator markers absent from plaintext code" if not exposed
                           else "plaintext protection markers exposed: " + ", ".join(exposed))
                     by_base = {Path(n).name: n for n in members}
-                    bridge_name = by_base.get("alvsia_bridge.py")
+                    bridge_name = by_base.get("alvsia_bridge.py") or by_base.get("alvsia_bridge.pyc")
                     bridge_bytes = inner.read(bridge_name) if bridge_name else b""
                     # Xop may rewrite/instrument the bootstrap bridge while preserving
                     # the sealed implementation boundary. Audit the final XOP APK by
@@ -349,7 +349,7 @@ def main() -> int:
                     xop_final = xop_config_name in names
                     bridge_limit = 8192
                     check(bool(bridge_bytes) and len(bridge_bytes) < bridge_limit,
-                          "plaintext bridge is a small bootstrap stub" if not xop_final
+                          "bootstrap bridge is a bounded runtime stub" if not xop_final
                           else "Xop-transformed bridge remains a bounded bootstrap stub")
                     routing_markers = (b"if mid == 1", b"elif mid == 1", b"module_id == 1")
                     check(not any(marker in bridge_bytes for marker in routing_markers),
