@@ -65,8 +65,8 @@ class PanelClient {
         .cookieJar(jar)
         .connectTimeout(30, TimeUnit.SECONDS)
         .readTimeout(120, TimeUnit.SECONDS)
-        .followRedirects(true)
-        .followSslRedirects(true)
+        .followRedirects(false)
+        .followSslRedirects(false)
         .build()
 
     /** Release transport: Android CA-chain, hostname validation, and configured Unaux SPKI pin. Live-host pin match still requires runtime verification. */
