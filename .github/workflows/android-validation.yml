@@ -168,7 +168,7 @@ jobs:
 
       - name: Build and test Android debug variant
         env:
-          CHAQUOPY_BUILD_PYTHON: python3.8
+          CHAQUOPY_BUILD_PYTHON: python3.12
         run: |
           chmod +x ./gradlew
           bash tools/run_gradle_with_retry.sh ./gradlew testDebugUnitTest assembleDebug --no-daemon --stacktrace
