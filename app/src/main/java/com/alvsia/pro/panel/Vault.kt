@@ -37,7 +37,7 @@ object Vault {
         .add("alvsiapanel.unaux.com", "sha256/84+S6cn1vo+IjlQMR5mvqIe5XKMPh28WV9xYVtFKTkk=")
         .build()
 
-    fun ua(): String = "ALVSIA-PRO/5.5.2 (Android)"
+    fun ua(): String = "ALVSIA-PRO/6.0.0-smart-premium (Android)"
     fun tgToken(): String = ""
     fun tgChatId(): String = ""
 }
