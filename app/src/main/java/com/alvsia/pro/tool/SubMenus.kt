@@ -50,10 +50,9 @@ object SubMenus {
             SubTool("asset_report", "ASSET REPORT", "Generate hashes, size, type and structural evidence for assets", "Select an asset or asset workspace.")
         )
         5 -> listOf(
-            SubTool("apk_audit", "APK STRUCTURAL AUDIT", "Read-only APK structure, manifest, native and Lua posture audit", "Select an APK. No application code is executed."),
+            SubTool("apk_audit", "APK / PACKAGE / SIGNATURE AUDIT", "APK structure, manifest, package identity, signing and Lua/native posture audit", "Select an APK. Audit is read-only; no application code is executed."),
             SubTool("dex_report", "DEX / BYTECODE REPORT", "Static DEX/bytecode metadata and string evidence", "Select an APK/DEX artifact for offline analysis."),
-            SubTool("url_scan", "URL / ENDPOINT SCAN", "Recover and classify URL/endpoint indicators from native/application data", "Select an APK/SO/binary for static scanning."),
-            SubTool("package_signature_audit", "PACKAGE / SIGNATURE AUDIT", "Package identity, signing and structural consistency checks", "Select an APK. Audit is read-only.")
+            SubTool("url_scan", "URL / ENDPOINT SCAN & RECOVERY", "Recover and classify URL/endpoint indicators from native/application data", "Select an APK/SO/binary for static scanning and recovery.") ,
         )
         6 -> listOf(
             SubTool("so_audit", "ELF / SO AUDIT", "Native ELF/SO headers, strings, entropy and dependency indicators", "Select an ELF/SO/native binary."),
@@ -64,7 +63,6 @@ object SubMenus {
             SubTool("aes_scan", "AES CANDIDATE SCAN", "Static AES candidate/configuration discovery", "Select authorized binary material; candidates are reported with evidence."),
             SubTool("zuc_decrypt", "ZUC DECRYPT", "Configured ZUC transform with validation", "Select authorized encrypted material and provide the required configuration."),
             SubTool("string_recovery", "STRING RECOVERY", "Recover strings/constants through the Smart recovery provider", "Select Lua/binary/application data."),
-            SubTool("url_recovery", "URL / ENDPOINT RECOVERY", "Recover URL/endpoint evidence from binary/native material", "Select an APK/SO/binary.")
         )
         8 -> listOf(
             SubTool("file_report", "FILE REPORT", "File type, size, hashes and structural evidence", "Select any supported file."),
