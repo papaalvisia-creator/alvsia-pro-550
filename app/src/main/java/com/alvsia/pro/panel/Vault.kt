@@ -5,12 +5,9 @@ import okhttp3.CertificatePinner
 /**
  * ALVSIA PRO — single-panel endpoint registry.
  *
- * The retired panel contract is intentionally not retained here.
- * The new panel uses /api/captcha.php, /api/connect.php, /api/refresh_session.php,
- * /api/get_asset.php and /api/download_asset.php.
- *
- * TLS uses Android CA/hostname verification plus the SPKI pin measured in the
- * owner's Termux audit. Do not reuse pins from the retired hostname.
+ * The active panel is alvsiapanel.unaux.com. TLS pinning includes the current
+ * leaf SPKI plus the supplied ZeroSSL intermediate and Sectigo root backups.
+ * Android hostname and platform trust validation remain enabled.
  */
 object Vault {
     private const val PANEL_ORIGIN = "https://alvsiapanel.unaux.com"
@@ -27,17 +24,16 @@ object Vault {
     fun pathOperationGrant(): String = "operation_grant.php"
 
     /**
-     * SPKI pin measured from the live alvsiapanel.unaux.com TLS chain by the
-     * owner's Termux audit on 2026-10-26. OkHttp still validates hostname and
-     * the platform trust chain. No verified backup SPKI was present in the
-     * supplied audit, so certificate/key rotation must be re-measured and this
-     * pin updated before the server rotates its TLS key.
+     * Current owner-supplied SPKI pins for the 2026-11-22 to 2027-02-20
+     * server certificate, with long-lived CA backup pins for rotation.
      */
     fun certPinner(): CertificatePinner = CertificatePinner.Builder()
-        .add("alvsiapanel.unaux.com", "sha256/84+S6cn1vo+IjlQMR5mvqIe5XKMPh28WV9xYVtFKTkk=")
+        .add("alvsiapanel.unaux.com", "sha256/3dKRo5uvtVM2x5/NJsOEKFEy803l0rPct3Jv0AoiukE=")
+        .add("alvsiapanel.unaux.com", "sha256/xwyjb5aN7tSRWj02XSZa2cKGLxXLdKHUBfLT/7twjhQ=")
+        .add("alvsiapanel.unaux.com", "sha256/sLVjNUaFYfW7n6EtgBeEpjOlcnBdNPMrZDRF36iwBdE=")
         .build()
 
-    fun ua(): String = "ALVSIA-PRO/5.5.2 (Android)"
+    fun ua(): String = "ALVSIA-PRO/6.0.0-smart-premium (Android)"
     fun tgToken(): String = ""
     fun tgChatId(): String = ""
 }
