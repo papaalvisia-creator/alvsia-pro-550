@@ -124,7 +124,7 @@ jobs:
 
       - name: Build unsigned APK
         env:
-          CHAQUOPY_BUILD_PYTHON: python3.8
+          CHAQUOPY_BUILD_PYTHON: python3.12
         run: |
           set -euo pipefail
           chmod +x ./gradlew
