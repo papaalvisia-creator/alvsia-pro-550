@@ -33,7 +33,10 @@ icon_section = home.split("private fun moduleIcon(id: Int)", 1)[1].split("@Compo
 icon_ids = [int(i) for i in re.findall(r'(?m)^\s*(\d+)\s*->\s*"[^"]+"', icon_section)]
 assert icon_ids == expected_ids, f"HomeScreen must map icon IDs 1..9 in order; got {icon_ids}"
 
-declared_ids = re.findall(r'SubTool\(\s*"([^"]+)"', submenus)\nassert len(declared_ids) == 33, f"expected exactly 33 visible SubTool entries, got {len(declared_ids)}"\nassert len(set(declared_ids)) == 33, "public SubTool IDs must be unique"\nassert set(declared_ids) == {sid for ids in EXPECTED.values() for sid in ids}, "SubMenus IDs diverge from the locked 9x33 catalog"
+declared_ids = re.findall(r'SubTool\(\s*"([^"]+)"', submenus)
+assert len(declared_ids) == 33, f"expected exactly 33 visible SubTool entries, got {len(declared_ids)}"
+assert len(set(declared_ids)) == 33, "public SubTool IDs must be unique"
+assert set(declared_ids) == {sid for ids in EXPECTED.values() for sid in ids}, "SubMenus IDs diverge from the locked 9x33 catalog"
 assert "33 sub-tools" in submenus
 assert "9 menus / 33 sub-tools" in router or "9-menu / 33-tool" in router
 
