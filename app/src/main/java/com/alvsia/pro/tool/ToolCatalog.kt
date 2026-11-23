@@ -4,16 +4,18 @@ import com.alvsia.pro.ui.home.ToolItem
 import org.json.JSONArray
 import org.json.JSONObject
 
-/** Small visible catalog; legacy capabilities are providers behind Smart engines. */
+/** ALVSIA SMART PREMIUM public catalog: exactly 9 menus. */
 object ToolCatalog {
     fun defaults(): List<ToolItem> = listOf(
-        ToolItem(1, "SMART LUA", "One engine: decompile · analyze · protect · compile/recompile · inject"),
-        ToolItem(2, "SMART PAK", "Detect · inspect · unpack · modify · repack · integrity"),
-        ToolItem(3, "SMART OBB", "Detect · extract · modify · rebuild · integrity"),
-        ToolItem(4, "SMART DATA", "XOR · AES · SM4 NEW · strings · metadata recovery"),
-        ToolItem(5, "SMART ANALYSIS", "SO · URL · JNI trace · APK/Lua audit"),
-        ToolItem(6, "WORKSPACE & REPORT", "Workspace · hash · reports"),
-        ToolItem(7, "ALVSIA PRIVATE", "Private analysis providers")
+        ToolItem(1, "HOME", "Universal detect · workspace report · engine health"),
+        ToolItem(2, "LUA", "Smart analyze · recovery · T24/BGMI · XOR · protect · inject"),
+        ToolItem(3, "PAK / OBB", "PAK inspect · extract · Lua inject · repack"),
+        ToolItem(4, "ASSET / UE", "UAsset · UExp/UBulk · LOCRES/UMAP · asset reports"),
+        ToolItem(5, "APK / DEX", "APK audit · DEX report · URL scan · package/signature audit"),
+        ToolItem(6, "NATIVE", "ELF/SO audit · strings · ABI/dependency report"),
+        ToolItem(7, "CRYPTO / RECOVERY", "AES · ZUC · string recovery · URL recovery"),
+        ToolItem(8, "FORENSIC / STRING", "File report · strings · entropy · hex preview"),
+        ToolItem(9, "BATCH / DEV LAB", "Batch audit · regression/compare · self test")
     )
 
     fun parseCore(bytes: ByteArray?): List<ToolItem> {
