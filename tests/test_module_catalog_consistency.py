@@ -33,7 +33,7 @@ icon_section = home.split("private fun moduleIcon(id: Int)", 1)[1].split("@Compo
 icon_ids = [int(i) for i in re.findall(r'(?m)^\s*(\d+)\s*->\s*"[^"]+"', icon_section)]
 assert icon_ids == expected_ids, f"HomeScreen must map icon IDs 1..9 in order; got {icon_ids}"
 
-assert submenus.count("SubTool(") == 34, "expected 33 visible SubTool entries plus the data-class constructor"
+assert submenus.count("SubTool(") == 36, "expected 33 visible SubTool entries plus the data-class constructor and documentation references"
 assert sum(len(re.findall(rf'SubTool\(\s*"{re.escape(name)}"', submenus)) for name in []) == 0
 assert "33 sub-tools" in submenus
 assert "9 menus / 33 sub-tools" in router or "9-menu / 33-tool" in router
