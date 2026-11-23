@@ -1,52 +1,85 @@
 package com.alvsia.pro.tool
 
 /**
- * Maps the compact visible Smart catalog to the existing provider IDs.
- *
- * This is intentionally internal: users see Smart engines, while old providers
- * remain compatible implementation modules. No legacy menu is exposed.
+ * Normalizes the 9-menu / 33-tool public catalog to authenticated, existing
+ * provider operations. Public IDs never become arbitrary Python operations.
  */
 object SmartModuleRouter {
-    fun backendModule(visibleModuleId: Int, subId: String): Int = when (visibleModuleId) {
-        1 -> when {
-            subId.startsWith("lua_protect") || subId == "lua_vm_protect" ||
-                subId == "lua_smart_protect" || subId == "lua_smart_protect_strong" -> 18
-            subId.startsWith("lua_patch") || subId.startsWith("lua_inject") -> 16
-            else -> 5
-        }
-        2 -> when {
-            subId.startsWith("pak_deep") || subId == "pak_deep_integrity_audit" -> 14
-            subId == "pak_smart_inspect" || subId == "pak_full_unpack" -> 1
-            else -> 2
-        }
-        3 -> 4
-        4 -> when {
-            subId.startsWith("sm4_") -> 10
-            subId.startsWith("str_") -> 15
-            subId == "metadata_v39_decode" -> 6
-            subId.startsWith("xor_") -> 12
-            else -> 13
-        }
-        5 -> when {
-            subId.startsWith("frida_") -> 11
-            subId.startsWith("audit_") -> 17
-            else -> 10
-        }
-        6 -> when (subId) {
-            "clear_work" -> 7
-            "hash_scan" -> 6
-            else -> 8
-        }
-        7 -> 19
+    fun backendModule(visibleModuleId: Int, subId: String): Int = when (subId) {
+        "universal_file_detect" -> 10
+        "workspace_report" -> 6
+        "engine_health" -> 12
+
+        "lua_smart_analyze" -> 5
+        "lua_recovery_normalize" -> 5
+        "lua_t24_convert" -> 19
+        "lua_multi_xor" -> 5
+        "lua_protect_transform" -> 18
+        "lua_custom_inject" -> 16
+
+        "pak_info" -> 1
+        "pak_extract" -> 1
+        "pak_lua_inject" -> 16
+        "pak_repack" -> 2
+
+        "asset_uasset_classify", "asset_uexp_classify",
+        "asset_locres_umap_classify" -> 19
+        "asset_report" -> 6
+
+        "apk_audit", "package_signature_audit" -> 17
+        "dex_report" -> 6
+        "url_scan" -> 10
+
+        "so_audit", "native_strings", "abi_dependency_report" -> 10
+
+        "aes_scan" -> 19
+        "zuc_decrypt" -> 13
+        "string_recovery" -> 15
+        "url_recovery" -> 10
+
+        "file_report" -> 6
+        "strings" -> 6
+        "entropy" -> 19
+        "hex_preview" -> 19
+
+        "batch_audit", "regression_compare" -> 19
+        "self_test" -> 12
         else -> visibleModuleId
     }
 
-    fun normalizedSubId(visibleModuleId: Int, subId: String): String = when {
-        visibleModuleId == 2 && subId == "pak_smart_inspect" -> "pak_info"
-        visibleModuleId == 2 && subId == "pak_deep_auto" -> "pak_deep_auto"
-        visibleModuleId == 3 && subId == "obb_smart_inspect" -> "obb_info"
-        visibleModuleId == 4 && subId == "data_auto_recover" -> "dec_auto"
-        visibleModuleId == 5 && subId == "so_url_dump" -> "so_url_dump"
+    fun normalizedSubId(visibleModuleId: Int, subId: String): String = when (subId) {
+        "universal_file_detect" -> "so_dump_audit"
+        "workspace_report", "dex_report", "asset_report", "file_report" -> "hash_scan"
+        "engine_health", "self_test" -> "xor_selftest"
+
+        "lua_smart_analyze" -> "lua_analyze"
+        "lua_recovery_normalize" -> "lua_decompile"
+        "lua_t24_convert" -> "pubg_lua_convert"
+        "lua_multi_xor" -> "lua_multi_xor"
+        "lua_protect_transform" -> "lua_smart_protect"
+        "lua_custom_inject", "pak_lua_inject" -> "lua_mod_repack"
+
+        "pak_info" -> "pak_info"
+        "pak_extract" -> "pak_full_unpack"
+        "pak_repack" -> "pak_repack_full"
+
+        "asset_uasset_classify", "asset_uexp_classify",
+        "asset_locres_umap_classify" -> "priv_dump_audit"
+
+        "apk_audit", "package_signature_audit" -> "audit_apk"
+        "url_scan", "url_recovery" -> "so_url_dump"
+
+        "so_audit", "native_strings", "abi_dependency_report" -> "so_dump_audit"
+
+        "aes_scan" -> "priv_aes_scan"
+        "zuc_decrypt" -> "dec_zuc"
+        "string_recovery" -> "str_recover"
+
+        "strings" -> "string_scan"
+        "entropy" -> "priv_entropy_map"
+        "hex_preview" -> "priv_dump_audit"
+
+        "batch_audit", "regression_compare" -> "priv_dump_audit"
         else -> subId
     }
 }
