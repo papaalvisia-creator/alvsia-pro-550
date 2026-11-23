@@ -50,9 +50,9 @@ object SubMenus {
             SubTool("asset_report", "ASSET REPORT", "Generate hashes, size, type and structural evidence for assets", "Select an asset or asset workspace.")
         )
         5 -> listOf(
-            SubTool("apk_audit", "APK / PACKAGE / SIGNATURE AUDIT", "APK structure, manifest, package identity, signing and Lua/native posture audit", "Select an APK. Audit is read-only; no application code is executed."),
+            SubTool("apk_audit", "APK / PACKAGE / SIGNATURE AUDIT", "APK structure, manifest, package identity and signing posture audit", "Select an APK. Audit is read-only; no application code is executed."),
             SubTool("dex_report", "DEX / BYTECODE REPORT", "Static DEX/bytecode metadata and string evidence", "Select an APK/DEX artifact for offline analysis."),
-            SubTool("url_scan", "URL / ENDPOINT SCAN & RECOVERY", "Recover and classify URL/endpoint indicators from native/application data", "Select an APK/SO/binary for static scanning and recovery.") ,
+            SubTool("url_scan", "URL / ENDPOINT SCAN & RECOVERY", "Recover and classify URL/endpoint indicators from native/application data", "Select an APK/SO/binary for static scanning and recovery."),
         )
         6 -> listOf(
             SubTool("so_audit", "ELF / SO AUDIT", "Native ELF/SO headers, strings, entropy and dependency indicators", "Select an ELF/SO/native binary."),
