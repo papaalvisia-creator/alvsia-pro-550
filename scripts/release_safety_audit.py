@@ -22,14 +22,14 @@ for file in (catalog, manifest, network, profile):
 
 catalog_text = catalog.read_text(encoding="utf-8")
 ids = [int(x) for x in re.findall(r"ToolItem\(\s*(\d+)\s*,", catalog_text)]
-if ids != list(range(1, 8)):
-    fail(f"catalog must define Smart module IDs 1..7 in order; found {ids}")
-print("PASS: catalog defines all seven Smart module IDs")
+if ids != list(range(1, 10)):
+    fail(f"catalog must define Smart module IDs 1..9 in order; found {ids}")
+print("PASS: catalog defines all nine Smart module IDs")
 
 profile_text = profile.read_text(encoding="utf-8")
-if "ALVSIA PRIVATE" not in profile_text or '"7"' not in profile_text:
-    fail("profile must retain the private Smart module and seven-module count")
-print("PASS: profile retains the private Smart module")
+if "BATCH / DEV LAB" not in profile_text or '"9"' not in profile_text:
+    fail("profile must expose the 9-menu Smart catalog")
+print("PASS: profile exposes the 9-menu Smart catalog")
 
 manifest_text = manifest.read_text(encoding="utf-8")
 for required in (
