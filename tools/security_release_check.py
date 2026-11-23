@@ -161,17 +161,17 @@ if "android.permission.DELETE_PACKAGES" in manifest or "android.permission.CHANG
     fail.append("unused package-delete/network-state permissions remain in manifest")
 if ".certificatePinner(Vault.certPinner())" not in panel or "clientPinned.newCall(req).execute()" not in panel:
     fail.append("PanelClient TLS policy is not wired")
-if 'sha256/84+S6cn1vo+IjlQMR5mvqIe5XKMPh28WV9xYVtFKTkk=' not in vault or '.add("alvsiapanel.unaux.com", "sha256/' not in vault:
-    fail.append("measured Unaux SPKI pin is missing from the active OkHttp certificate pinner")
+if not all(pin in vault for pin in ["3dKRo5uvtVM2x5/NJsOEKFEy803l0rPct3Jv0AoiukE=","xwyjb5aN7tSRWj02XSZa2cKGLxXLdKHUBfLT/7twjhQ=","sLVjNUaFYfW7n6EtgBeEpjOlcnBdNPMrZDRF36iwBdE="]) or vault.count('.add("alvsiapanel.unaux.com", "sha256/') < 3:
+    fail.append("current leaf and backup Unaux SPKI pins are missing from the active OkHttp certificate pinner")
 network_config = read(ROOT / "app/src/main/res/xml/network_security_config.xml")
 if ("networkSecurityConfig" not in manifest
         or "alvsiapanel.unaux.com" not in network_config
         or "<pin-set>" not in network_config
-        or "84+S6cn1vo+IjlQMR5mvqIe5XKMPh28WV9xYVtFKTkk=" not in network_config
+        or not all(pin in network_config for pin in ["3dKRo5uvtVM2x5/NJsOEKFEy803l0rPct3Jv0AoiukE=","xwyjb5aN7tSRWj02XSZa2cKGLxXLdKHUBfLT/7twjhQ=","sLVjNUaFYfW7n6EtgBeEpjOlcnBdNPMrZDRF36iwBdE="])
         or "alvsiapanel.unaux.com" not in vault):
     fail.append("new-panel network security configuration or measured SPKI pin is missing")
 if ("alvsiapanel.unaux.com" not in python_panel
-        or "84+S6cn1vo+IjlQMR5mvqIe5XKMPh28WV9xYVtFKTkk=" not in python_panel
+        or not all(pin in python_panel for pin in ["3dKRo5uvtVM2x5/NJsOEKFEy803l0rPct3Jv0AoiukE=","xwyjb5aN7tSRWj02XSZa2cKGLxXLdKHUBfLT/7twjhQ=","sLVjNUaFYfW7n6EtgBeEpjOlcnBdNPMrZDRF36iwBdE="])
         or "alvsiapro.cc.cd" in python_panel
         or "api.alvsiapro.cc.cd" in python_panel):
     fail.append("Python HTTP pinning must use only the active Unaux panel host and measured SPKI pin")
@@ -244,6 +244,6 @@ if fail:
 print("SECURITY SOURCE CHECK: PASS")
 print(f"- protected Python modules scheduled for sealing: {len(required_modules)}")
 print("- AES-GCM decryption in Kotlin/native bridge; seed and cert digest not exposed to Python")
-print("- New-panel TLS CA/hostname validation, SessionGate HMAC/TTL, R8, VCS stripping checked")
+print("- New-panel TLS CA/hostname validation with leaf + ZeroSSL + Sectigo SPKI pins; SessionGate HMAC/TTL, R8, VCS stripping checked")
 print("- CodeMagic release restricted to main; APK audit required")
 print("NOTE: one Termux-measured Unaux SPKI pin is enforced; no verified backup pin was supplied, so certificate rotation must be re-measured. Native seed is build-bound obfuscation, not a server secret.")
