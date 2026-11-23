@@ -31,13 +31,15 @@ fun ProfileScreen(product: String, expiry: String, hwidShort: String, toolCount:
     val accent = AlvisiaCyan
     val muted = AlvisiaSilver.copy(alpha = 0.52f)
     val modules = listOf(
-        ModuleChip("🌙", "SMART LUA"),
-        ModuleChip("📦", "SMART PAK"),
-        ModuleChip("💾", "SMART OBB"),
-        ModuleChip("🔑", "SMART DATA"),
-        ModuleChip("🔬", "SMART ANALYSIS"),
-        ModuleChip("📊", "WORKSPACE & REPORT"),
-        ModuleChip("⚙", "ALVSIA PRIVATE")
+        ModuleChip("⌂", "HOME"),
+        ModuleChip("🌙", "LUA"),
+        ModuleChip("📦", "PAK / OBB"),
+        ModuleChip("🧩", "ASSET / UE"),
+        ModuleChip("📱", "APK / DEX"),
+        ModuleChip("⚙", "NATIVE"),
+        ModuleChip("🔐", "CRYPTO / RECOVERY"),
+        ModuleChip("🔎", "FORENSIC / STRING"),
+        ModuleChip("🧪", "BATCH / DEV LAB")
     )
     Column(Modifier.fillMaxSize()
         .background(Brush.verticalGradient(listOf(Color(0xFF101D30), AlvisiaDeep, Color(0xFF07191D))))
@@ -55,7 +57,7 @@ fun ProfileScreen(product: String, expiry: String, hwidShort: String, toolCount:
         Row(Modifier.fillMaxWidth(), horizontalArrangement=Arrangement.spacedBy(7.dp)) {
             _InfoTile("PLAN", product.ifBlank { "PREMIUM" }, Modifier.weight(1f))
             _InfoTile("EXPIRES", expiry.ifBlank { "—" }, Modifier.weight(1f))
-            _InfoTile("MODULES", "7", Modifier.weight(1f))
+            _InfoTile("MODULES", "9", Modifier.weight(1f))
         }
         Spacer(Modifier.height(10.dp))
         Row(Modifier.fillMaxWidth(), horizontalArrangement=Arrangement.spacedBy(8.dp)) {
@@ -82,7 +84,7 @@ fun ProfileScreen(product: String, expiry: String, hwidShort: String, toolCount:
         Row(Modifier.fillMaxWidth(), verticalAlignment=Alignment.CenterVertically) {
             Text("TOOL MODULES", color=muted, fontSize=10.sp, letterSpacing=1.5.sp)
             Spacer(Modifier.weight(1f))
-            Text("${modules.size} / 7 MODULES", color=AlvisiaCyan, fontSize=9.sp)
+            Text("${modules.size} / 9 MODULES", color=AlvisiaCyan, fontSize=9.sp)
         }
         Spacer(Modifier.height(7.dp))
         modules.chunked(3).forEach { items ->
