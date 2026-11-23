@@ -55,10 +55,10 @@ class SmartCatalogTests(unittest.TestCase):
         self.assertIn("SmartModuleRouter.backendModule", main)
         self.assertIn("SmartModuleRouter.normalizedSubId", main)
         self.assertIn("engine.runSub(dispatchModuleId, dispatchSubId", main)
-        self.assertIn('subId == "lua_smart_protect"', router)
-        self.assertIn('subId == "pak_smart_inspect"', router)
-        self.assertIn('subId == "obb_smart_inspect"', router)
-        self.assertIn('subId == "data_auto_recover"', router)
+        self.assertIn('"lua_protect_transform" -> "lua_smart_protect"', router)
+        self.assertIn('"pak_info" -> "pak_info"', router)
+        self.assertIn('"pak_extract" -> "pak_full_unpack"', router)
+        self.assertIn('"zuc_decrypt" -> "dec_zuc"', router)
 
 
 if __name__ == "__main__":
