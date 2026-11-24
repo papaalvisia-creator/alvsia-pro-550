@@ -24,7 +24,8 @@ object SmartModuleRouter {
         "lua_custom_inject" -> 16
 
         "crypto_xor_multi_xor", "crypto_aes_candidate_transform",
-        "crypto_sm4_engine", "crypto_zuc_engine", "crypto_key_pattern_scanner" -> 19
+        "crypto_zuc_engine", "crypto_key_pattern_scanner" -> 19
+        "crypto_sm4_engine" -> 14
 
         "forensics_universal_file_detection" -> 10
         "forensics_file_signature_hash" -> 6
