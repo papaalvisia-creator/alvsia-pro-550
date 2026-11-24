@@ -85,7 +85,7 @@ fun ProfileScreen(product: String, expiry: String, hwidShort: String, toolCount:
         Row(Modifier.fillMaxWidth(), verticalAlignment=Alignment.CenterVertically) {
             Text("TOOL MODULES", color=muted, fontSize=10.sp, letterSpacing=1.5.sp)
             Spacer(Modifier.weight(1f))
-            Text("${modules.size} / 9 MODULES", color=AlvisiaCyan, fontSize=9.sp)
+            Text("${modules.size} / $toolCount MODULES", color=AlvisiaCyan, fontSize=9.sp)
         }
         Spacer(Modifier.height(7.dp))
         modules.chunked(3).forEach { items ->
