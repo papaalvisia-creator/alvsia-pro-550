@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -35,7 +36,7 @@ import com.alvsia.pro.ui.theme.AlvisiaSilver
 @Composable
 fun TaskQueueScreen(onBack: () -> Unit, onOpenTask: (LiveTask) -> Unit) {
     val tasks = TaskCenter.tasks
-    Column(Modifier.fillMaxSize().background(AlvisiaDeep).padding(12.dp)) {
+    Column(Modifier.fillMaxSize().background(AlvisiaDeep).statusBarsPadding().padding(12.dp)) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             TextButton(onClick = onBack) { Text("← BACK", color = AlvisiaCyan, fontWeight = FontWeight.Bold) }
             Spacer(Modifier.weight(1f))
