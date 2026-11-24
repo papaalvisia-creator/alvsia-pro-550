@@ -34,15 +34,14 @@ def test_every_enabled_public_id_has_an_explicit_router_entry():
     enabled = [sid for sid, tail in calls if "enabled = false" not in tail]
     assert len(enabled) == 38
     native_routes = {
-        "workspace_recent_files_favorites": '"workspace_recent_files_favorites" -> screen = "workspace"',
-        "workspace_batch_job_queue": '"workspace_batch_job_queue" -> screen = "tasks"',
-        "workspace_output_browser_history": '"workspace_output_browser_history" -> {',
+        "workspace_recent_files_favorites": '"workspace_recent_files_favorites" -> "workspace"',
+        "workspace_batch_job_queue": '"workspace_batch_job_queue" -> "tasks"',
+        "workspace_output_browser_history": '"workspace_output_browser_history" -> "output"',
     }
-    main_activity = (ROOT / "app/src/main/java/com/alvsia/pro/MainActivity.kt").read_text(encoding="utf-8")
     missing = [
         sid for sid in enabled
         if not (
-            native_routes[sid] in main_activity if sid in native_routes
+            native_routes[sid] in ROUTER_TEXT if sid in native_routes
             else f'"{sid}"' in ROUTER_TEXT
         )
     ]
