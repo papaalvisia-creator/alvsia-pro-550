@@ -100,7 +100,7 @@ fun SubMenuScreen(
                             else AlvisiaBlue.copy(alpha = 0.35f),
                             RoundedCornerShape(12.dp)
                         )
-                        .clickable { onSelect(item) }
+                        .clickable(enabled = item.enabled) { if (item.enabled) onSelect(item) }
                         .padding(14.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
@@ -122,9 +122,9 @@ fun SubMenuScreen(
                             fontSize = 14.sp
                         )
                         Text(item.desc, color = AlvisiaSilver.copy(alpha = 0.62f), fontSize = 11.sp)
-                        Text(item.guide, color = AlvisiaSilver.copy(alpha = 0.48f), fontSize = 9.sp, maxLines = 2)
+                        Text(if (item.enabled) item.guide else item.statusNote, color = if (item.enabled) AlvisiaSilver.copy(alpha = 0.48f) else Color(0xFFFFC66D), fontSize = 9.sp, maxLines = 2)
                     }
-                    Text("→", color = AlvisiaCyan, fontSize = 18.sp)
+                    Text(if (item.enabled) "OPEN →" else "PENDING", color = if (item.enabled) AlvisiaCyan else Color(0xFFFFC66D), fontSize = 9.sp, fontWeight = FontWeight.Bold)
                 }
             }
         }
