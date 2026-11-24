@@ -149,4 +149,12 @@ object SmartModuleRouter {
         "batch_audit", "regression_compare" -> "priv_dump_audit"
         else -> subId
     }
+
+    /** Native Compose destinations; these IDs never fall through to a Python backend. */
+    fun nativeScreen(subId: String): String? = when (subId) {
+        "workspace_recent_files_favorites" -> "workspace"
+        "workspace_batch_job_queue" -> "tasks"
+        "workspace_output_browser_history" -> "output"
+        else -> null
+    }
 }
