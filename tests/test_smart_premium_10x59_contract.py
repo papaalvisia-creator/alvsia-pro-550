@@ -13,7 +13,8 @@ def test_contract_defines_exactly_ten_main_menus_and_fifty_nine_submenus():
     assert declared_counts == [6, 7, 5, 9, 6, 6, 6, 5, 5, 4]
     assert sum(declared_counts) == 59
 
-    numbered = [int(number) for number in re.findall(r"(?m)^(\d+)\. ", text)]
+    catalog_section = text.split("## Main menu and submenu target", 1)[1].split("**Count check:**", 1)[0]
+    numbered = [int(number) for number in re.findall(r"(?m)^(\d+)\. ", catalog_section)]
     assert numbered == list(range(1, 60))
     assert len(set(numbered)) == 59
 
@@ -23,7 +24,7 @@ def test_contract_preserves_task_workflow_and_truthful_backend_rules():
         "Preserve all working legacy operations",
         "Combine PAK and UnPAK",
         "Never overwrite source inputs by default",
-        "Every visible operation",
+        "Each visible operation must map to one Smart Engine workflow",
         "ARM64 acceptance evidence",
     ):
         assert phrase in text
