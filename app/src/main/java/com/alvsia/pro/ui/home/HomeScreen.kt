@@ -80,13 +80,14 @@ private fun DigitalLiveClock() {
     }
 }
 
+// Blue / white neon-metallic palette: distinct cards, restrained glow, no olive tint.
 private val chipColors = listOf(
-    listOf(Color(0xFF18212A), Color(0xFF26352F)),
-    listOf(Color(0xFF1B242B), Color(0xFF354137)),
-    listOf(Color(0xFF171F27), Color(0xFF303A35)),
-    listOf(Color(0xFF1D252C), Color(0xFF3B4338)),
-    listOf(Color(0xFF192128), Color(0xFF303B34)),
-    listOf(Color(0xFF1A2229), Color(0xFF343F38))
+    listOf(Color(0xFF10263D), Color(0xFF16445C)),
+    listOf(Color(0xFF142A45), Color(0xFF23516C)),
+    listOf(Color(0xFF17283B), Color(0xFF31516B)),
+    listOf(Color(0xFF102D3A), Color(0xFF1D5362)),
+    listOf(Color(0xFF1B2A40), Color(0xFF405A75)),
+    listOf(Color(0xFF172B3C), Color(0xFF3B5368))
 )
 
 @Composable
