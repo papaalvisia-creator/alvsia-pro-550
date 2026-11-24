@@ -33,8 +33,20 @@ def test_every_enabled_public_id_has_an_explicit_router_entry():
     calls = re.findall(r'SubTool\(\s*"([^"]+)"([^\n]*)', CATALOG_TEXT)
     enabled = [sid for sid, tail in calls if "enabled = false" not in tail]
     assert len(enabled) == 38
-    missing = [sid for sid in enabled if f'"{sid}"' not in ROUTER_TEXT]
-    assert not missing, f"Enabled menu IDs without explicit router mappings: {missing}"
+    native_routes = {
+        "workspace_recent_files_favorites": '"workspace_recent_files_favorites" -> screen = "workspace"',
+        "workspace_batch_job_queue": '"workspace_batch_job_queue" -> screen = "tasks"',
+        "workspace_output_browser_history": '"workspace_output_browser_history" -> {',
+    }
+    main_activity = (ROOT / "app/src/main/java/com/alvsia/pro/MainActivity.kt").read_text(encoding="utf-8")
+    missing = [
+        sid for sid in enabled
+        if not (
+            native_routes[sid] in main_activity if sid in native_routes
+            else f'"{sid}"' in ROUTER_TEXT
+        )
+    ]
+    assert not missing, f"Enabled menu IDs without explicit backend/native routes: {missing}"
 
 def test_unwired_items_are_disabled_and_not_fake_success_actions():
     calls = re.findall(r'SubTool\(\s*"([^"]+)"([^\n]*)', CATALOG_TEXT)
