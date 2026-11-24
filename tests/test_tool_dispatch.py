@@ -94,10 +94,12 @@ def test_sm4_47_modders_authoritative_secret_set():
 def test_menu_ids_are_unique_and_reachable():
     menus = MENUS.read_text(encoding="utf-8")
     bridge = BRIDGE.read_text(encoding="utf-8") + "\n" + BRIDGE_IMPL.read_text(encoding="utf-8")
-    ids = re.findall(r'SubTool\(\s*"([a-zA-Z0-9_]+)"', menus)
-    assert ids, "No SubTool IDs found; menu parsing may have drifted"
+    calls = re.findall(r'SubTool\(\s*"([a-zA-Z0-9_]+)"([^\n]*)', menus)
+    ids = [sid for sid, _ in calls]
+    assert len(ids) == 59, f"Expected 59 public submenu IDs, got {len(ids)}"
     duplicates = sorted({sid for sid in ids if ids.count(sid) > 1})
     assert not duplicates, f"Duplicate sub-tool IDs: {duplicates}"
+    enabled_ids = [sid for sid, tail in calls if "enabled = false" not in tail]
 
     generic = {
         "pak_delete_entry": '"delete" in sid',
@@ -146,15 +148,15 @@ def test_smart_lua_exposes_smart_lua_family():
     menus = MENUS.read_text(encoding="utf-8")
     assert '"lua_smart_analyze"' in menus
     assert '"lua_recovery_normalize"' in menus
-    assert '"lua_t24_convert"' in menus
-    assert '"lua_multi_xor"' in menus
-    assert '"lua_protect_transform"' in menus
+    assert '"lua_t24_bgmi_pubg_converter"' in menus
+    assert '"crypto_xor_multi_xor"' in menus
+    assert '"lua_protect_compile"' in menus
     assert '"lua_custom_inject"' in menus
 
-def test_catalog_contains_smart_9x33_modules():
+def test_catalog_contains_smart_10x59_modules():
     catalog = CATALOG.read_text(encoding="utf-8")
     ids = [int(x) for x in re.findall(r'ToolItem\((\d+),', catalog)]
-    assert ids == list(range(1, 10)), f"Expected Smart module IDs 1..9 in order, got {ids}"
+    assert ids == list(range(1, 11)), f"Expected Smart module IDs 1..10 in order, got {ids}"
 
 def test_legacy_private_provider_remains_internal():
     menus = MENUS.read_text(encoding="utf-8")
@@ -339,14 +341,14 @@ def test_large_file_helpers_stream_and_report_hashes():
         assert expected in Path(report["out"]).read_text(encoding="utf-8")
 
 
-def test_profile_catalog_matches_smart_9x33_modules():
+def test_profile_catalog_matches_smart_10x59_modules():
     profile_path = ROOT / "app/src/main/java/com/alvsia/pro/ui/profile/ProfileScreen.kt"
     profile = profile_path.read_text(encoding="utf-8")
     expected = ["HOME", "LUA", "PAK / OBB", "ASSET / UE", "APK / DEX", "NATIVE",
                 "CRYPTO / RECOVERY", "FORENSIC / STRING", "BATCH / DEV LAB"]
     for name in expected:
         assert f'"{name}"' in profile
-    assert '"9"' in profile and '"MODULES"' in profile
+    assert '"10"' in profile and '"MODULES"' in profile
     catalog = CATALOG.read_text(encoding="utf-8")
     names = re.findall(r'ToolItem\(\s*\d+\s*,\s*"([^"]+)"', catalog)
     assert names == expected
@@ -472,13 +474,13 @@ if __name__ == "__main__":
         test_python_auth_normalizes_java_string_and_lua_avoids_art_oom,
         test_sm4_47_modders_authoritative_secret_set,
         test_menu_ids_are_unique_and_reachable,
-        test_catalog_contains_smart_9x33_modules,
+        test_catalog_contains_smart_10x59_modules,
         test_smart_lua_exposes_smart_lua_family,
         test_legacy_private_provider_remains_internal,
         test_frida_spawn_preserves_full_package_name,
         test_engine_surfaces_bridge_failures,
         test_tool_argument_and_storage_contracts,
-        test_profile_catalog_matches_smart_9x33_modules,
+        test_profile_catalog_matches_smart_10x59_modules,
         test_bridge_call_signatures_match_helpers,
         test_obb_extract_normalizes_archive_paths,
         test_large_lua_source_is_detected_before_bytecode_fallback,
