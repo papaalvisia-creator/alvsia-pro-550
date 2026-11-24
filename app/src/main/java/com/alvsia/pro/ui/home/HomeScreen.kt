@@ -87,7 +87,11 @@ private val chipColors = listOf(
     listOf(Color(0xFF17283B), Color(0xFF31516B)),
     listOf(Color(0xFF102D3A), Color(0xFF1D5362)),
     listOf(Color(0xFF1B2A40), Color(0xFF405A75)),
-    listOf(Color(0xFF172B3C), Color(0xFF3B5368))
+    listOf(Color(0xFF172B3C), Color(0xFF3B5368)),
+    listOf(Color(0xFF172D43), Color(0xFF2C607A)),
+    listOf(Color(0xFF152D3A), Color(0xFF2B6670)),
+    listOf(Color(0xFF202C42), Color(0xFF49627D)),
+    listOf(Color(0xFF17283D), Color(0xFF35627A))
 )
 
 @Composable
