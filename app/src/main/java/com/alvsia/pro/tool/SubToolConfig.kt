@@ -165,7 +165,7 @@ fun subToolConfig(subId: String): List<SubToolConfig> = when (subId) {
             workFileName = "zuc_config.txt"
         )
     )
-    "pak_deep_sm4" -> listOf(
+    "pak_deep_sm4", "crypto_sm4_engine" -> listOf(
         SubToolConfig(
             field = "sm4_config",
             label = "SM4 Config",
@@ -277,7 +277,7 @@ fun subToolConfig(subId: String): List<SubToolConfig> = when (subId) {
     )
 
     // ALVISIA PRIVATE TOOL configs
-    "priv_zuc_decrypt" -> listOf(
+    "priv_zuc_decrypt", "crypto_zuc_engine" -> listOf(
         SubToolConfig(field = "key", label = "ZUC Key (32 hex chars = 16 bytes)",
             type = ConfigType.HEX, hint = "0000000000000000ffffffffffffffff",
             required = true, workFileName = "zuc_config.txt"),
