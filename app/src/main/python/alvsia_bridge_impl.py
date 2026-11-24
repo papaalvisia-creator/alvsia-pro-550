@@ -62,11 +62,13 @@ def run_tool(module_id, sub_id, input_path, out_root, engine_dir, jars_dir):
             "modding_zsdic_analyzer", "modding_offset_size_fixer",
             "modding_resource_mapping_recovery", "native_xref_reference_analyzer",
             "workspace_file_manager", "workspace_resume_cancel_progress",
+            "apk_resource_table_inspector", "native_authorized_runtime_trace",
             "lab_engine_registry", "lab_regression_diff_compare",
             "lab_large_file_benchmark",
         ):
             pending_grant_map = {
                 "apk_compare_resource_diff": "apk_audit",
+                "apk_resource_table_inspector": "apk_audit",
                 "pak_selective_extract": "pak_tools",
                 "mini_obb_zsdic_adapter": "obb_tools",
                 "gamepatch_obb_repacker": "obb_tools",
@@ -80,6 +82,7 @@ def run_tool(module_id, sub_id, input_path, out_root, engine_dir, jars_dir):
                 "modding_offset_size_fixer": "pak_tools",
                 "modding_resource_mapping_recovery": "pak_tools",
                 "native_xref_reference_analyzer": "so_analyzer",
+                "native_authorized_runtime_trace": "so_analyzer",
                 "workspace_file_manager": "workspace",
                 "workspace_resume_cancel_progress": "workspace",
                 "lab_engine_registry": "xor_suite",
@@ -111,6 +114,7 @@ def run_tool(module_id, sub_id, input_path, out_root, engine_dir, jars_dir):
             "modding_zsdic_analyzer", "modding_offset_size_fixer",
             "modding_resource_mapping_recovery", "native_xref_reference_analyzer",
             "workspace_file_manager", "workspace_resume_cancel_progress",
+            "apk_resource_table_inspector", "native_authorized_runtime_trace",
             "lab_engine_registry", "lab_regression_diff_compare",
             "lab_large_file_benchmark",
         ))
@@ -119,6 +123,7 @@ def run_tool(module_id, sub_id, input_path, out_root, engine_dir, jars_dir):
                 from pending_subtool_adapters import dispatch_pending
                 _folder = {
                     "apk_compare_resource_diff": "APKDIFF",
+                    "apk_resource_table_inspector": "ARSC",
                     "pak_selective_extract": "PAK",
                     "mini_obb_zsdic_adapter": "OBB",
                     "gamepatch_obb_repacker": "OBB",
@@ -132,6 +137,7 @@ def run_tool(module_id, sub_id, input_path, out_root, engine_dir, jars_dir):
                     "modding_offset_size_fixer": "MODDING",
                     "modding_resource_mapping_recovery": "MODDING",
                     "native_xref_reference_analyzer": "XREF",
+                    "native_authorized_runtime_trace": "XREF",
                     "workspace_file_manager": "WORKSPACE",
                     "workspace_resume_cancel_progress": "WORKSPACE",
                     "lab_engine_registry": "LAB",

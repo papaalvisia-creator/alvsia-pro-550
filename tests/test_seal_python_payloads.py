@@ -49,7 +49,7 @@ class ProductionSealPayloadTests(unittest.TestCase):
                 _seed()
 
     def test_module_manifest_is_nonempty_and_unique(self):
-        self.assertEqual(len(MODULES), 28, "release sealing inventory must include all 28 reviewed modules")
+        self.assertEqual(len(MODULES), 52, "release sealing inventory must include all 52 reviewed modules")
         self.assertIn("alvsia_metadata.py", MODULES)
         self.assertIn("sm4_secret_registry.py", MODULES)
         self.assertEqual(len(MODULES), len(set(MODULES)))
@@ -57,7 +57,9 @@ class ProductionSealPayloadTests(unittest.TestCase):
         loader = (ROOT / "app/src/main/python" / "sealed_loader.py").read_text(encoding="utf-8")
         audit = (ROOT / "tools/audit_release_apk.py").read_text(encoding="utf-8")
         for rel in MODULES:
-            module = rel[:-3].replace("/", ".")
+            parts = rel[:-3].split("/")
+            # a package __init__.py is imported by its package name
+            module = ".".join(parts[:-1]) if parts[-1] == "__init__" else ".".join(parts)
             blob = rel[:-3].replace("/", "_") + ".alv"
             self.assertIn(f'"{module}": "{blob}"', loader, f"loader missing {module}")
             self.assertIn(f'"{blob}"', audit, f"APK audit missing {blob}")

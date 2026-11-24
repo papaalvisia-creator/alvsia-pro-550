@@ -58,6 +58,33 @@ MODULES = (
     "lua_engine/protection.py",
     "lua_engine/protection_pipeline.py",
     "lua_engine/vm_deobfuscator.py",
+    # Batch 2 — every remaining tool module is sealed too; only the thin
+    # bootstrap pair (alvsia_bridge.py, sealed_loader.py, sealed/__init__.py)
+    # stays as plain bytecode because it must load before native decryption.
+    "alvsia_reference_tools.py",
+    "archive_engine.py",
+    "lua_engine/__init__.py",
+    "lua_engine/protector_registry.py",
+    "lua_intelligence/__init__.py",
+    "lua_intelligence/candidates.py",
+    "lua_intelligence/core.py",
+    "lua_intelligence/fingerprint.py",
+    "lua_intelligence/fusion.py",
+    "lua_intelligence/ir.py",
+    "lua_intelligence/knowledge.py",
+    "lua_intelligence/layers.py",
+    "lua_intelligence/model.py",
+    "lua_intelligence/oracle.py",
+    "lua_intelligence/structure.py",
+    "lua_recovery_proof.py",
+    "module_adapters.py",
+    "pending_subtool_adapters.py",
+    "smart_archive_engine.py",
+    "smart_archive_lua_engine.py",
+    "smart_data_engine.py",
+    "smart_lua_engine.py",
+    "smart_pak_lua_engine.py",
+    "smart_premium_source_fusion.py",
 )
 
 def _seed() -> bytes:

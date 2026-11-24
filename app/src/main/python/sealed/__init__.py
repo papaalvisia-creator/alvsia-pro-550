@@ -1,1 +1,1 @@
-"""Encrypted ALVISIA runtime payload resources; generated .alv files are release-only."""
+"""Authenticated ALVSEAL2 payload resources."""

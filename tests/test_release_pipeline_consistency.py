@@ -21,7 +21,7 @@ name_match = re.search(r'versionName\s*=\s*"([^"]+)"', gradle)
 if not code_match or not name_match:
     raise SystemExit("FAIL: Gradle release identity cannot be parsed")
 version_code, version_name = code_match.group(1), name_match.group(1)
-if (version_code, version_name) != ("101", "6.0.1-smart-premium"):
+if (version_code, version_name) != ("102", "6.0.2-smart-premium"):
     raise SystemExit(f"FAIL: unexpected Gradle identity {(version_code, version_name)!r}")
 
 expected_badging = (

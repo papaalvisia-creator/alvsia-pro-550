@@ -1339,6 +1339,320 @@ def lab_regression_diff_compare(input_path, output_dir, work_dir=None, **_):
             "sha256_report": _sha256(rpath)}
 
 
+def apk_resource_table_inspector(input_path, output_dir, work_dir=None, **_):
+    """Decode the Android resources.arsc binary table: global/package
+    string pools, package names, type/key counts, entry counts and
+    resource IDs (0xPPTTEEEE) with resolved names.
+
+    Input may be a bare .arsc file or a full .apk/.zip whose
+    resources.arsc member is parsed in place."""
+    src = _require_file(input_path)
+    if src is None:
+        return {"ok": False, "subtool": "apk_resource_table_inspector",
+                "error": "input file not found or empty"}
+    out = Path(output_dir)
+    out.mkdir(parents=True, exist_ok=True)
+
+    def _fail(reason: str) -> dict:
+        return {"ok": False, "subtool": "apk_resource_table_inspector",
+                "error": reason}
+
+    # ── minimal .arsc reader (Android ResTable binary format) ──
+    RES_TABLE_TYPE = 0x0002
+    RES_STRING_POOL_TYPE = 0x0001
+    RES_TABLE_PACKAGE_TYPE = 0x0200
+    RES_TABLE_TYPE_TYPE = 0x0201
+
+    def _u16(buf, off):
+        return struct.unpack_from("<H", buf, off)[0]
+
+    def _u32(buf, off):
+        return struct.unpack_from("<I", buf, off)[0]
+
+    def _parse_string_pool(buf, off):
+        """Return (strings, end_off) for a string pool chunk at `off`."""
+        if off + 28 > len(buf):
+            raise ValueError("string pool header truncated")
+        if _u16(buf, off) != RES_STRING_POOL_TYPE:
+            raise ValueError("expected string pool chunk")
+        chunk_size = _u32(buf, off + 4)
+        string_count = _u32(buf, off + 8)
+        flags = _u32(buf, off + 16)
+        strings_start = _u32(buf, off + 20)
+        is_utf8 = bool(flags & (1 << 8))
+        strings = []
+        base = off + strings_start
+        for i in range(string_count):
+            idx_off = off + 28 + 4 * i
+            if idx_off + 4 > len(buf) or base > len(buf):
+                strings.append(None)
+                continue
+            str_off = base + _u32(buf, idx_off)
+            if str_off + 2 > len(buf):
+                strings.append(None)
+                continue
+            try:
+                if is_utf8:
+                    p = str_off
+                    n = buf[p]; p += 1
+                    if n & 0x80:
+                        n = ((n & 0x7F) << 8) | buf[p]; p += 1
+                    b = buf[p]; p += 1
+                    if b & 0x80:
+                        b = ((b & 0x7F) << 8) | buf[p]; p += 1
+                    strings.append(buf[p:p + b].decode("utf-8", "replace"))
+                else:
+                    p = str_off
+                    n = _u16(buf, p); p += 2
+                    if n & 0x8000:
+                        n2 = _u16(buf, p); p += 2
+                        n = ((n & 0x7FFF) << 16) | n2
+                    strings.append(buf[p:p + 2 * n].decode("utf-16-le", "replace"))
+            except (struct.error, IndexError):
+                strings.append(None)
+        return strings, off + chunk_size
+
+    try:
+        # load bytes: bare .arsc, or resources.arsc inside an APK/ZIP
+        with src.open("rb") as fh:
+            head = fh.read(4)
+        if head[:2] == b"PK":
+            with zipfile.ZipFile(src) as zf:
+                cand = [n for n in zf.namelist()
+                        if n == "resources.arsc" or n.endswith("/resources.arsc")]
+                if not cand:
+                    return _fail("no resources.arsc member inside this APK")
+                data = zf.read(cand[0])
+                container = cand[0]
+        else:
+            data = src.read_bytes()
+            container = src.name
+        if len(data) < 12:
+            return _fail("file too small for a resource table")
+        if _u16(data, 0) != RES_TABLE_TYPE:
+            return _fail("not an Android resource table (bad RES_TABLE header)")
+        # ResTable_header: type@0(u16) headerSize@2(u16) size@4(u32) packageCount@8(u32)
+        header_size = _u16(data, 2)
+        package_count = _u32(data, 8)
+        if header_size < 12 or header_size > len(data):
+            return _fail("corrupt resource table header size")
+
+        lines = ["ALVSIA RESOURCE TABLE INSPECTOR",
+                 f"container: {container}",
+                 f"table size: {len(data):,} bytes | declared packages: {package_count}",
+                 ""]
+
+        # global string pool (first chunk after the table header)
+        global_strings, off = _parse_string_pool(data, header_size)
+        non_null = sum(1 for s in global_strings if s is not None)
+        lines.append(f"global string pool: {len(global_strings)} entries "
+                     f"({non_null} decoded)")
+        lines.append("")
+
+        packages = []
+        entries_scanned = 0
+        res_ids = []
+        while off + 8 <= len(data):
+            ctype = _u16(data, off)
+            csize = _u32(data, off + 4)
+            if csize <= 0 or off + csize > len(data):
+                break
+            if ctype == RES_TABLE_PACKAGE_TYPE:
+                pkg_id = _u32(data, off + 8)
+                name = data[off + 12: off + 12 + 256].decode(
+                    "utf-16-le", "replace").split("\x00", 1)[0]
+                type_strings_off = _u32(data, off + 268)
+                key_strings_off = _u32(data, off + 272)
+                type_names: list = []
+                key_names: list = []
+                try:
+                    if type_strings_off:
+                        type_names, _e = _parse_string_pool(data, off + type_strings_off)
+                    if key_strings_off:
+                        key_names, _e = _parse_string_pool(data, off + key_strings_off)
+                except ValueError:
+                    pass
+                packages.append({"id": pkg_id, "name": name})
+                lines.append(f"package 0x{pkg_id:02X} '{name}': "
+                             f"{len(type_names)} types, {len(key_names)} key names")
+
+                # walk inner TYPE chunks of this package
+                # ResTable_package: type@0 headerSize@2 size@4 id@8(u32) name@12(256)
+                #   typeStrings@268(u32) keyStrings@272(u32)
+                pkg_header_size = _u16(data, off + 2)
+                inner = off + pkg_header_size
+                while inner + 8 <= off + csize:
+                    ictype = _u16(data, inner)
+                    icsize = _u32(data, inner + 4)
+                    if icsize <= 0 or inner + icsize > off + csize:
+                        break
+                    if ictype == RES_TABLE_TYPE_TYPE and inner + 24 <= len(data):
+                        tid = data[inner + 8]
+                        entry_count = _u32(data, inner + 12)
+                        entries_start = _u32(data, inner + 16)
+                        tname = (type_names[tid - 1]
+                                 if 0 < tid <= len(type_names) else f"type{tid}")
+                        lines.append(f"  type '{tname}' (id {tid}): {entry_count} entries")
+                        entries_scanned += entry_count
+                        for i in range(min(entry_count, 20)):
+                            eoff = inner + entries_start + 4 * i
+                            if eoff + 8 > len(data):
+                                break
+                            e_flags = _u16(data, eoff + 2)
+                            key_idx = _u32(data, eoff + 4)
+                            key = (key_names[key_idx]
+                                   if key_idx < len(key_names) else f"key{key_idx}")
+                            rid = (pkg_id << 24) | (tid << 16) | i
+                            complex_entry = bool(e_flags & 0x0001)
+                            vtype = "complex"
+                            if not complex_entry and eoff + 12 <= len(data):
+                                vt = data[eoff + 8]
+                                vdata = _u32(data, eoff + 8) >> 8
+                                if vt == 0x03 and vdata < len(global_strings):
+                                    s = global_strings[vdata]
+                                    vtype = f"string:{(s or '')[:40]!r}"
+                                elif vt == 0x01:
+                                    vtype = f"reference@0x{vdata:08X}"
+                                else:
+                                    vtype = f"value_type=0x{vt:02X}"
+                            res_ids.append((rid, tname, key, vtype))
+                    inner += icsize
+            off += csize
+
+        lines.append("")
+        lines.append(f"total packages: {len(packages)} | entries scanned: {entries_scanned}")
+        lines.append("resource id samples (max 60):")
+        for rid, tname, key, vtype in res_ids[:60]:
+            lines.append(f"  0x{rid:08X}  {tname}/{key}  {vtype}")
+
+        rpath = _write_report(out, "resource_table", "\n".join(lines))
+        if not rpath.is_file() or rpath.stat().st_size == 0:
+            return _fail("report generation failed")
+        if not packages:
+            return _fail("resource table parsed but contains no packages")
+        return {"ok": True, "subtool": "apk_resource_table_inspector",
+                "container": container, "packages": len(packages),
+                "package_names": [p["name"] for p in packages],
+                "entries_scanned": entries_scanned,
+                "resource_ids_resolved": len(res_ids),
+                "report": str(rpath), "sha256_report": _sha256(rpath)}
+    except (struct.error, ValueError, zipfile.BadZipFile, OSError, IndexError) as exc:
+        return _fail(f"{type(exc).__name__}: {exc}")
+
+
+def native_authorized_runtime_trace(input_path, output_dir, work_dir=None, **_):
+    """Authorized, user-controlled runtime diagnostics: a read-only,
+    offline traceability report of the diagnostic session itself.
+
+    Scope (deliberately never executes the target):
+    - record runtime environment facts (python build, platform,
+      sealed-runtime markers, staged engine binaries);
+    - fingerprint the selected artifact (size, sha256, magic, format);
+    - preview which verified providers WOULD be dispatched for the
+      artifact, per module_adapters' registry;
+    - require an explicit user authorization line in
+      WORK/trace_consent.txt ('allow-local-analysis'); else fail closed.
+
+    No ptrace, no injection, no execution of the target, no network."""
+    CONSENT_DEFAULT = "allow-local-analysis"
+    consent_lines = _read_lines_config(work_dir, "trace_consent.txt")
+    consent = consent_lines[0].strip().lower() if consent_lines else ""
+    if consent != CONSENT_DEFAULT:
+        return {"ok": False, "subtool": "native_authorized_runtime_trace",
+                "error": "explicit user authorization missing; write "
+                         f"'{CONSENT_DEFAULT}' to WORK/trace_consent.txt "
+                         "to authorize a local diagnostic session"}
+    out = Path(output_dir)
+    out.mkdir(parents=True, exist_ok=True)
+
+    import platform as _platform
+    lines = ["ALVSIA AUTHORIZED RUNTIME TRACE (local, read-only)",
+             f"generated: {time.strftime('%Y-%m-%d %H:%M:%S')}",
+             f"consent: {CONSENT_DEFAULT} (explicit, user-controlled)",
+             "",
+             "== runtime environment ==",
+             f"python: {_platform.python_version()} ({_platform.machine()})",
+             f"platform: {_platform.system()} {_platform.release()}",
+             f"sealed-runtime marker: {os.environ.get('ALVSIA_SEALED_RUNTIME', '(unset)')}",
+             f"apk session marker: {os.environ.get('ALVSIA_APK_SESSION', '(unset)')}",
+             ""]
+    engine_bins = []
+    for env_key, label in (
+        ("ALVSIA_UNLUAC_RS_BIN", "unluac-rs"),
+        ("ALVSIA_LUAU_DECOMPILER_BIN", "luau-decompiler"),
+    ):
+        p = os.environ.get(env_key, "")
+        if p and Path(p).is_file():
+            engine_bins.append(f"{label}: {Path(p).name} "
+                               f"({Path(p).stat().st_size:,} B, "
+                               f"sha256[:16]={_sha256(Path(p))[:16]})")
+        else:
+            engine_bins.append(f"{label}: not staged in this session")
+    lines += ["== staged engine binaries =="] + [f"  {b}" for b in engine_bins] + [""]
+
+    src = _require_file(input_path)
+    if src is not None:
+        digest = _sha256(src)
+        with src.open("rb") as fh:
+            head = fh.read(16)
+        fmt = _sniff_format(head)
+        lines += ["== target artifact (read-only fingerprint) ==",
+                  f"  path: {src.name}",
+                  f"  size: {src.stat().st_size:,} bytes",
+                  f"  sha256: {digest}",
+                  f"  magic: {head.hex()}",
+                  f"  sniffed format: {fmt}",
+                  ""]
+        providers = _engine_routing_plan()
+        lines += ["== dispatch plan (would run, NOT executed) =="]
+        lines += [f"  {row}" for row in providers]
+        lines.append("  NOTE: this trace did not execute the target artifact.")
+        artifact = {"name": src.name, "size": src.stat().st_size,
+                    "sha256": digest, "format": fmt}
+    else:
+        lines.append("== target artifact: none selected ==")
+        artifact = None
+
+    rpath = _write_report(out, "runtime_trace", "\n".join(lines))
+    if not rpath.is_file() or rpath.stat().st_size == 0:
+        return {"ok": False, "subtool": "native_authorized_runtime_trace",
+                "error": "report generation failed"}
+    return {"ok": True, "subtool": "native_authorized_runtime_trace",
+            "consent": CONSENT_DEFAULT,
+            "engines_staged": len([b for b in engine_bins
+                                    if "not staged" not in b]),
+            "artifact": artifact, "report": str(rpath),
+            "sha256_report": _sha256(rpath)}
+
+
+def _sniff_format(head: bytes) -> str:
+    if head[:4] == b"\x1bLua":
+        return "Lua bytecode (LuaS)"
+    if head[:2] == b"PK":
+        return "ZIP container (apk/jar/zip)"
+    if head[:4] == b"\x7fELF":
+        return "ELF binary (.so/executable)"
+    # Android resource table: type@0 = 0x0002 (u16), headerSize@2 = 12 (u16)
+    if len(head) >= 4 and head[0] == 0x02 and head[1] == 0x00 and head[2] == 0x0C and head[3] == 0x00:
+        return "Android resource table (resources.arsc)"
+    return "unknown / raw"
+
+
+def _engine_routing_plan() -> list[str]:
+    """Declarative routing preview: which verified provider would handle
+    this artifact type. Mirrors module_adapters' registry without
+    executing anything."""
+    try:
+        from module_adapters import list_adapters
+        rows = []
+        for op, meta in sorted(list_adapters().items()):
+            rows.append(f"{op}: provider={meta.get('provider', '?')} "
+                        f"formats={meta.get('formats', [])}")
+        return rows[:40] if rows else ["(adapter registry unavailable)"]
+    except Exception:
+        return ["(adapter registry unavailable in this session)"]
+
+
 def lab_large_file_benchmark(input_path, output_dir, **_):
     """Streaming throughput, memory bounds and output integrity benchmark:
     stream-copy the input while hashing (no full-file read), measure MB/s,
@@ -1412,6 +1726,9 @@ PENDING_ADAPTERS: dict[str, Callable[..., dict]] = {
     "modding_resource_mapping_recovery": modding_resource_mapping_recovery,
     # batch 4 — workspace / lab
     "native_xref_reference_analyzer": native_xref_reference_analyzer,
+    # batch 5 — resource table / runtime trace (last previously-pending pair)
+    "apk_resource_table_inspector": apk_resource_table_inspector,
+    "native_authorized_runtime_trace": native_authorized_runtime_trace,
     "workspace_file_manager": workspace_file_manager,
     "workspace_resume_cancel_progress": workspace_resume_cancel_progress,
     "lab_engine_registry": lab_engine_registry,

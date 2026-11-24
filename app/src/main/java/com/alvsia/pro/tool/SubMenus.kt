@@ -35,7 +35,7 @@ object SubMenus {
             SubTool("apk_structure_inspector", "APK STRUCTURE INSPECTOR", "Read-only APK package structure, ZIP entries, DEX presence and native ABI inventory.", "Select an APK. The audit does not execute application code.", enabled = true),
             SubTool("apk_manifest_permission_audit", "MANIFEST & PERMISSION AUDIT", "Extract the binary manifest and report package identity and declared permissions.", "Select an APK. Raw manifest extraction is preserved as an output artifact.", enabled = true),
             SubTool("apk_dex_bytecode_inspector", "DEX / BYTECODE INSPECTOR", "Inspect DEX metadata and bytecode indicators without executing the target application.", "Select an APK or DEX file.", enabled = true),
-            SubTool("apk_resource_table_inspector", "RESOURCE TABLE INSPECTOR", "Decode Android resources.arsc tables, resource IDs and linked resource names.", "This dedicated resource-table adapter is not wired yet.", enabled = false),
+            SubTool("apk_resource_table_inspector", "RESOURCE TABLE INSPECTOR", "Decode Android resources.arsc tables, resource IDs and linked resource names.", "Select an APK or a bare resources.arsc. Decoding is read-only.", enabled = true),
             SubTool("apk_compare_resource_diff", "APK COMPARE & RESOURCE DIFF", "Compare two APK resource inventories and report added, removed and changed entries.", "Select APK A as input; put the absolute path of APK B in WORK/compare_base.txt.", enabled = true),
             SubTool("apk_signature_integrity_verify", "APK SIGNATURE & INTEGRITY VERIFY", "Audit APK signing blocks, package structure and integrity indicators.", "Select an APK. Signature verification is read-only.", enabled = true)
         )
@@ -95,7 +95,7 @@ object SubMenus {
             SubTool("native_strings_symbols", "NATIVE STRINGS & SYMBOLS", "Extract bounded printable strings and report native symbol indicators.", "Select an ELF/SO/native binary.", enabled = true),
             SubTool("native_abi_dependency_report", "ABI / DEPENDENCY REPORT", "Report native ABI and dependency indicators from supported ELF files.", "Select an ELF/SO/native library.", enabled = true),
             SubTool("native_xref_reference_analyzer", "XREF & REFERENCE ANALYZER", "Trace supported cross-references and static reference relationships.", "Static ELF/SO and DEX reference analysis: symbol-to-site counts, no execution.", enabled = true),
-            SubTool("native_authorized_runtime_trace", "AUTHORIZED RUNTIME TRACE ADAPTER", "Run authorized, user-controlled runtime diagnostics on a permitted target.", "Runtime trace adapter remains gated until its device/consent checks are verified.", enabled = false)
+            SubTool("native_authorized_runtime_trace", "AUTHORIZED RUNTIME TRACE ADAPTER", "Run authorized, user-controlled runtime diagnostics on a permitted target.", "Write 'allow-local-analysis' to WORK/trace_consent.txt to authorize a read-only session. The target is never executed.", enabled = true)
         )
         9 -> listOf(
             SubTool("workspace_file_manager", "FILE WORKSPACE MANAGER", "Manage staged input, work, output and task artifacts.", "Inventory of INPUT/WORK/OUT/TASKS with sizes and hashes; optional cleanup via WORK/cleanup.txt.", enabled = true),

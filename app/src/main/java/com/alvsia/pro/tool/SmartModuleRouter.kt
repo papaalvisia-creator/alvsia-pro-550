@@ -150,13 +150,15 @@ object SmartModuleRouter {
 
         // Previously-pending subtools — routed to their dedicated
         // pending_subtool_adapters dispatch (grant-mapped in the bridge).
-        "apk_compare_resource_diff", "pak_selective_extract",
+        "apk_compare_resource_diff", "apk_resource_table_inspector",
+        "pak_selective_extract",
         "mini_obb_zsdic_adapter", "gamepatch_obb_repacker",
         "lua_protect_compile", "lua_round_trip_validator",
         "crypto_output_validator", "modding_uasset_uexp_inspector",
         "modding_ue4_string_id_extractor", "modding_skin_pair_finder",
         "modding_zsdic_analyzer", "modding_offset_size_fixer",
         "modding_resource_mapping_recovery", "native_xref_reference_analyzer",
+        "native_authorized_runtime_trace",
         "workspace_file_manager", "workspace_resume_cancel_progress",
         "lab_engine_registry", "lab_regression_diff_compare",
         "lab_large_file_benchmark" -> subId

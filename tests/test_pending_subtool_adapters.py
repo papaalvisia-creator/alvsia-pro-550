@@ -37,8 +37,8 @@ def workdir(tmp_path):
 
 # ── registry ────────────────────────────────────────────────────────
 
-def test_registry_contains_19_enabled_subtools():
-    assert len(PENDING_ADAPTERS) == 19
+def test_registry_contains_21_enabled_subtools():
+    assert len(PENDING_ADAPTERS) == 21
     for sid, runner in PENDING_ADAPTERS.items():
         assert callable(runner), sid
 
@@ -538,3 +538,107 @@ def test_lab_large_file_benchmark(workdir):
     # benchmark copy must not be left behind as a deliverable
     assert not (workdir / "OUT" / "big.bin.benchcopy").exists()
     assert Path(result["report"]).is_file()
+
+
+# ── batch 5: resource table inspector & authorized runtime trace ─────────────
+
+def _build_arsc(tmp_path):
+    """Minimal valid resources.arsc: one package, two string pools,
+    one TYPE chunk with three STRING entries."""
+    import struct as _s
+
+    def pool(strings):
+        offsets, data = [], b""
+        for st in strings:
+            units = st.encode("utf-16-le")
+            offsets.append(len(data))
+            data += _s.pack("<H", len(units) // 2) + units + b"\x00\x00"
+        start = 28 + 4 * len(strings)
+        hdr = _s.pack("<HHIIIIII", 0x0001, 28, start + len(data),
+                      len(strings), 0, 0, start, 0)
+        return hdr + b"".join(_s.pack("<I", o) for o in offsets) + data
+
+    gpool = pool(["OK", "Hello", "World", "app_name"])
+    tpool = pool(["string", "layout"])
+    kpool = pool(["hello", "world", "main"])
+
+    entries = b""
+    for k, gidx in ((0, 1), (1, 2), (2, 0)):
+        entries += _s.pack("<HHI", 8, 0, k) + _s.pack("<HBBI", 8, 0, 0x03, gidx)
+    cfg = 20
+    hdr_t = 20 + cfg
+    e_start = hdr_t + 4 * 3
+    tchunk = (_s.pack("<HHI", 0x0201, hdr_t, e_start + len(entries))
+              + _s.pack("<BBH", 1, 0, 0)
+              + _s.pack("<II", 3, e_start)
+              + _s.pack("<IIIII", cfg, 0, 0, 0, 0)
+              + b"".join(_s.pack("<I", 0) for _ in range(3))
+              + entries)
+
+    pkg = (_s.pack("<HHI", 0x0200, 288, 288 + len(tpool) + len(kpool) + len(tchunk))
+           + _s.pack("<I", 0x7F)
+           + "com.test.app".encode("utf-16-le").ljust(256, b"\x00")
+           + _s.pack("<II", 288, 288 + len(tpool))
+           + _s.pack("<III", 0, 0, 0))
+    table = _s.pack("<HHII", 0x0002, 12,
+                    12 + len(gpool) + len(pkg), 1)
+    arsc = tmp_path / "resources.arsc"
+    arsc.write_bytes(table + gpool + pkg + tpool + kpool + tchunk)
+    return arsc
+
+
+def test_apk_resource_table_inspector_bare(workdir):
+    arsc = _build_arsc(workdir)
+    result = dispatch_pending("apk_resource_table_inspector",
+                              input_path=arsc, output_dir=workdir / "OUT")
+    assert result["ok"] is True, result
+    assert result["packages"] == 1
+    assert "com.test.app" in result["package_names"]
+    text = Path(result["report"]).read_text(encoding="utf-8")
+    assert "global string pool: 4 entries" in text
+    assert "type 'string' (id 1): 3 entries" in text
+
+
+def test_apk_resource_table_inspector_rejects_garbage(workdir):
+    bad = workdir / "bad.arsc"
+    bad.write_bytes(b"\x00" * 64)
+    result = dispatch_pending("apk_resource_table_inspector",
+                              input_path=bad, output_dir=workdir / "OUT")
+    assert result["ok"] is False
+    assert "not an Android resource table" in result["error"]
+
+
+def test_apk_resource_table_inspector_inside_apk(workdir):
+    import zipfile as _zf
+    arsc = _build_arsc(workdir)
+    apk = workdir / "test.apk"
+    with _zf.ZipFile(apk, "w") as zf:
+        zf.writestr("resources.arsc", arsc.read_bytes())
+    result = dispatch_pending("apk_resource_table_inspector",
+                              input_path=apk, output_dir=workdir / "OUT")
+    assert result["ok"] is True, result
+    assert result["container"] == "resources.arsc"
+    assert result["package_names"] == ["com.test.app"]
+
+
+def test_native_runtime_trace_requires_consent(workdir):
+    arsc = _build_arsc(workdir)
+    result = dispatch_pending("native_authorized_runtime_trace",
+                              input_path=arsc, output_dir=workdir / "OUT")
+    assert result["ok"] is False
+    assert "authorization missing" in result["error"]
+
+
+def test_native_runtime_trace_authorized(workdir):
+    arsc = _build_arsc(workdir)
+    wd = workdir / "WORK"
+    wd.mkdir(parents=True, exist_ok=True)
+    (wd / "trace_consent.txt").write_text("allow-local-analysis\n", encoding="utf-8")
+    result = dispatch_pending("native_authorized_runtime_trace",
+                              input_path=arsc, output_dir=workdir / "OUT",
+                              work_dir=wd)
+    assert result["ok"] is True, result
+    assert result["consent"] == "allow-local-analysis"
+    assert result["artifact"]["format"].startswith("Android resource table")
+    text = Path(result["report"]).read_text(encoding="utf-8")
+    assert "did not execute the target artifact" in text

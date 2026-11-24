@@ -37,11 +37,11 @@ calls = re.findall(r'SubTool\(\s*"([^"]+)"([^\n]*)', submenus)
 declared_ids = [sid for sid, _ in calls]
 assert len(declared_ids) == 59
 assert len(set(declared_ids)) == 59
-assert sum("enabled = false" not in tail for _, tail in calls) == 57
+assert sum("enabled = false" not in tail for _, tail in calls) == 59
 assert "10 menus / 59 unique submenu contract" in submenus
 assert "10-menu / 59-subtool" in router
 
-# The 57 enabled subtools must all resolve to a real dispatch path:
+# The 59 enabled subtools must all resolve to a real dispatch path:
 # either a native screen, a router alias, or the pending-adapter registry.
 import sys
 sys.path.insert(0, str(ROOT / "app/src/main/python"))
@@ -53,4 +53,4 @@ for sid, _tail in calls:
             or re.search(rf'"{re.escape(sid)}"', router)
             or f'"{sid}"' in router), f"enabled subtool has no route: {sid}"
 
-print("MODULE CATALOG CONSISTENCY: PASS (10/10 Smart menus, 59 unique subtools, 57 enabled all routed, profile/home/router parity)")
+print("MODULE CATALOG CONSISTENCY: PASS (10/10 Smart menus, 59 unique subtools, 59 enabled all routed, profile/home/router parity)")
