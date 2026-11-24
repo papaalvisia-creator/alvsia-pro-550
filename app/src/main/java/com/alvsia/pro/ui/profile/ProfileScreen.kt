@@ -31,15 +31,16 @@ fun ProfileScreen(product: String, expiry: String, hwidShort: String, toolCount:
     val accent = AlvisiaCyan
     val muted = AlvisiaSilver.copy(alpha = 0.52f)
     val modules = listOf(
-        ModuleChip("⌂", "HOME"),
-        ModuleChip("🌙", "LUA"),
-        ModuleChip("📦", "PAK / OBB"),
-        ModuleChip("🧩", "ASSET / UE"),
-        ModuleChip("📱", "APK / DEX"),
-        ModuleChip("⚙", "NATIVE"),
-        ModuleChip("🔐", "CRYPTO / RECOVERY"),
-        ModuleChip("🔎", "FORENSIC / STRING"),
-        ModuleChip("🧪", "BATCH / DEV LAB")
+        ModuleChip("📱", "SMART APK"),
+        ModuleChip("📦", "SMART PAK"),
+        ModuleChip("🗃️", "SMART OBB"),
+        ModuleChip("🌙", "SMART LUA"),
+        ModuleChip("🔐", "SMART CRYPTO"),
+        ModuleChip("🔎", "SMART FORENSICS"),
+        ModuleChip("🧩", "SMART MODDING"),
+        ModuleChip("⚙", "SMART NATIVE"),
+        ModuleChip("🗂️", "SMART WORKSPACE"),
+        ModuleChip("🧪", "SMART ENGINE LAB")
     )
     Column(Modifier.fillMaxSize()
         .background(Brush.verticalGradient(listOf(Color(0xFF101D30), AlvisiaDeep, Color(0xFF07191D))))
@@ -57,7 +58,7 @@ fun ProfileScreen(product: String, expiry: String, hwidShort: String, toolCount:
         Row(Modifier.fillMaxWidth(), horizontalArrangement=Arrangement.spacedBy(7.dp)) {
             _InfoTile("PLAN", product.ifBlank { "PREMIUM" }, Modifier.weight(1f))
             _InfoTile("EXPIRES", expiry.ifBlank { "—" }, Modifier.weight(1f))
-            _InfoTile("MODULES", "9", Modifier.weight(1f))
+            _InfoTile("MODULES", toolCount.toString(), Modifier.weight(1f))
         }
         Spacer(Modifier.height(10.dp))
         Row(Modifier.fillMaxWidth(), horizontalArrangement=Arrangement.spacedBy(8.dp)) {
