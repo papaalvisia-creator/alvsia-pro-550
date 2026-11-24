@@ -5,6 +5,8 @@ on:
     branches: [main, feat/smart-premium-10x59-ui-refresh-20261124]
     paths:
       - "docs/SMART_PREMIUM_10X59_UI_CONTRACT.md"
+      - "docs/ALVSIA_SMART_PREMIUM_EXECUTION_PLAN_2026-11-24.md"
+      - "docs/source-audits/KUMPULAN_SOURCE_TOOL_AUDIT_2026-11-24.md"
       - "tests/test_smart_premium_10x59_contract.py"
       - "tests/test_panel_pin_parity.py"
       - "app/src/main/java/com/alvsia/pro/panel/Vault.kt"
