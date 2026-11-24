@@ -47,7 +47,7 @@ jobs:
 
       - name: Verify security protections are wired into runtime
         run: python3 -m unittest tests.test_security_wiring tests.test_security_fabric
-      - name: Verify Smart Premium 9x33 source-fusion contracts
+      - name: Verify Smart Premium 10x59 source-fusion contracts
         run: python3 -m unittest tests.test_smart_premium_source_fusion
 
       - name: Verify active Unaux Python TLS pin policy
