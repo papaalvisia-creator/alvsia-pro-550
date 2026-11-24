@@ -132,6 +132,11 @@ jobs:
           python3 -m pip install --disable-pip-version-check pycryptodome pytest zstandard
           python3 -m pytest -q tests/test_pak_extraction_contract.py
 
+      - name: Run pending-subtool adapter acceptance tests
+        run: |
+          python3 -m pip install --disable-pip-version-check pycryptodome pytest zstandard
+          python3 -m pytest -q tests/test_pending_subtool_adapters.py
+
       - name: Run Lua Protector round-trip tests
         run: python3 tests/test_vm_protect_roundtrip.py
 
