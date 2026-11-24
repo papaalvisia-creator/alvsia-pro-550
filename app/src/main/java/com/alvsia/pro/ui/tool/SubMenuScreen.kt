@@ -14,12 +14,15 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -45,11 +48,16 @@ fun SubMenuScreen(
     onSelect: (SubTool) -> Unit
 ) {
     val ctx = LocalContext.current
-    val favorites = remember { UXStore.getFavoritesSet(ctx) }
+    // SharedPreferences persistence alone does not trigger Compose recomposition.
+    // Mirror the persisted set in observable state so the star and ordering refresh
+    // immediately after every user toggle.
+    var favorites by remember(ctx) { mutableStateOf(UXStore.getFavoritesSet(ctx)) }
 
-    // Sort: favorites first, then original order
     val sortedItems = remember(items, favorites) {
-        items.sortedByDescending { it.id in favorites }
+        items.sortedWith(
+            compareByDescending<SubTool> { it.id in favorites }
+                .thenBy { items.indexOf(it) }
+        )
     }
 
     Column(
@@ -72,19 +80,20 @@ fun SubMenuScreen(
             )
         }
         Text(moduleTitle, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 18.sp)
-        Text("Select sub-tool · ★ = favorite",
-            color = AlvisiaSilver.copy(alpha = 0.55f), fontSize = 12.sp)
+        Text(
+            "Select task · ★ = favorite",
+            color = AlvisiaSilver.copy(alpha = 0.55f),
+            fontSize = 12.sp
+        )
         Spacer(Modifier.height(12.dp))
         LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            itemsIndexed(sortedItems) { index, item ->
+            items(sortedItems, key = { it.id }) { item ->
                 val isFav = item.id in favorites
                 Row(
                     Modifier
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(12.dp))
-                        .background(
-                            if (isFav) Color(0xFF0D1B2A) else Color(0xFF0C1622)
-                        )
+                        .background(if (isFav) Color(0xFF0D1B2A) else Color(0xFF0C1622))
                         .border(
                             1.dp,
                             if (isFav) AlvisiaCyan.copy(alpha = 0.5f)
@@ -95,22 +104,25 @@ fun SubMenuScreen(
                         .padding(14.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    // Favorite star — tap to toggle
                     Text(
                         text = if (isFav) "★" else "☆",
-                        color = if (isFav) Color(0xFFFFD700) else AlvisiaSilver.copy(alpha = 0.3f),
-                        fontSize = 16.sp,
+                        color = if (isFav) Color(0xFFFFD700) else AlvisiaSilver.copy(alpha = 0.45f),
+                        fontSize = 18.sp,
                         modifier = Modifier.clickable {
                             UXStore.toggleFavorite(ctx, item.id)
+                            favorites = UXStore.getFavoritesSet(ctx)
                         }
                     )
-                    Spacer(Modifier.width(8.dp))
+                    Spacer(Modifier.width(10.dp))
                     Column(Modifier.weight(1f)) {
-                        Text(item.title,
+                        Text(
+                            item.title,
                             color = if (isFav) Color.White else AlvisiaSilver,
-                            fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
-                        Text(item.desc, color = AlvisiaSilver.copy(alpha = 0.55f), fontSize = 11.sp)
-                        Text(item.guide, color = AlvisiaSilver.copy(alpha = 0.4f), fontSize = 9.sp, maxLines = 2)
+                            fontWeight = FontWeight.SemiBold,
+                            fontSize = 14.sp
+                        )
+                        Text(item.desc, color = AlvisiaSilver.copy(alpha = 0.62f), fontSize = 11.sp)
+                        Text(item.guide, color = AlvisiaSilver.copy(alpha = 0.48f), fontSize = 9.sp, maxLines = 2)
                     }
                     Text("→", color = AlvisiaCyan, fontSize = 18.sp)
                 }
