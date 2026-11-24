@@ -9,7 +9,7 @@ permissions:
 jobs:
   intelligence:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
       - name: Set up Python
@@ -31,3 +31,13 @@ jobs:
           python -m unittest tests/test_lua_intelligence_candidates.py -v
           python -m unittest tests/test_lua_intelligence_ir.py -v
           python -m unittest tests/test_lua_intelligence_oracle.py -v
+      - name: Audit all five canonical source ZIPs (read-only)
+        run: python tools/audit_canonical_archives.py
+      - name: Upload canonical archive audit report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: alvsia-canonical-five-zip-audit
+          path: reports/canonical-archive-audit.md
+          if-no-files-found: warn
+          retention-days: 14
