@@ -69,6 +69,15 @@ object UXStore {
         }
     }
 
+    /** Remove one URI from the recent list without disturbing the remaining order. */
+    fun removeRecent(ctx: Context, uriString: String) {
+        try {
+            val prefs = ctx.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            val updated = getRecentList(ctx).filterNot { it == uriString }
+            prefs.edit().putString(KEY_RECENT, updated.joinToString("\n")).apply()
+        } catch (_: Exception) {}
+    }
+
     /**
      * Clear all recent files.
      */
