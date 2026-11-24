@@ -159,6 +159,21 @@ def _compact_tokens(tokens):
             result.append(("space", " "))
     return result
 
+def _inside_table_constructor(tokens, idx) -> bool:
+    """True when token idx sits inside `{ ... }` (a table constructor)."""
+    depth = 0
+    j = idx - 1
+    while j >= 0:
+        value = tokens[j][1]
+        if value == "}":
+            depth += 1
+        elif value == "{":
+            if depth == 0:
+                return True
+            depth -= 1
+        j -= 1
+    return False
+
 def _function_parameter_indices(tokens, function_index):
     """Find simple function parameters and return their token indices."""
     j = _next_significant(tokens, function_index)
@@ -199,7 +214,12 @@ def protect_source(source: str, profile: ProtectionProfile | str = "balanced") -
         profile = PROFILES[profile]
 
     tokens = [(m.lastgroup, m.group()) for m in _TOKEN.finditer(source)]
+    # active maps scope depth -> {name: replacement}; scope_locals tracks the
+    # plain `local` declarations made at each depth so they can be removed
+    # when that block closes. Function parameters are owned by the function
+    # scope created at the `function` keyword itself.
     active: dict[int, dict[str, str]] = {}
+    scope_locals: dict[int, list[str]] = {}
     used = set(KEYWORDS)
     counter = 0
     out = []
@@ -229,7 +249,9 @@ def protect_source(source: str, profile: ProtectionProfile | str = "balanced") -
             out.append((kind, value))
             j = _next_significant(tokens, i)
             declaration_indices = []
+            local_function = False
             if j is not None and tokens[j] == ("ident", "function"):
+                local_function = True
                 j = _next_significant(tokens, j)
                 if j is not None and tokens[j][0] == "ident":
                     declaration_indices.append(j)
@@ -249,13 +271,32 @@ def protect_source(source: str, profile: ProtectionProfile | str = "balanced") -
                 for di in declaration_indices:
                     name = tokens[di][1]
                     if name not in KEYWORDS:
-                        declared_by_index[di] = active.setdefault(depth, {}).setdefault(name, fresh())
+                        replacement = active.setdefault(depth, {}).setdefault(name, fresh())
+                        declared_by_index[di] = replacement
+                        # Track plain-local names declared at this depth so the
+                        # scope exit for THIS block removes exactly them.
+                        scope_locals.setdefault(depth, []).append(name)
                 for k in range(i + 1, last_decl + 1):
                     tk, tv = tokens[k]
                     if k in declared_by_index:
                         tv = declared_by_index[k]
                     out.append((tk, tv))
                 i = last_decl + 1
+                # `local function name(...)`: the declaration branch consumed
+                # the `function` keyword, so register the parameters here at
+                # the function's own depth (mirrors the plain-`function` path),
+                # and open the body scope immediately so references inside the
+                # body resolve against the parameter mapping.
+                if local_function and profile.rename_locals:
+                    function_depth = depth + 1
+                    scope = active.setdefault(function_depth, {})
+                    for pi in _function_parameter_indices(tokens, i - 1):
+                        name = tokens[pi][1]
+                        if name not in KEYWORDS and name not in scope:
+                            replacement = fresh()
+                            scope[name] = replacement
+                            tokens[pi] = ("ident", replacement)
+                    depth = function_depth
                 continue
 
         if kind == "ident" and value == "function" and profile.rename_locals:
@@ -275,7 +316,16 @@ def protect_source(source: str, profile: ProtectionProfile | str = "balanced") -
             if replacement:
                 prev = _significant(tokens, i)
                 if prev is None or tokens[prev][1] not in (".", ":"):
-                    value = replacement
+                    nxt = _next_significant(tokens, i)
+                    # Inside a table constructor, `name = expr` is a FIELD KEY,
+                    # not a variable reference; do not rename it. The value
+                    # side is still renamed through its own ident occurrence.
+                    in_table_key = (
+                        nxt is not None and tokens[nxt][1] == "="
+                        and _inside_table_constructor(tokens, i)
+                    )
+                    if not in_table_key:
+                        value = replacement
 
         if kind == "string" and profile.encode_strings:
             body_len = max(0, len(value) - 2)
@@ -288,7 +338,15 @@ def protect_source(source: str, profile: ProtectionProfile | str = "balanced") -
 
         if kind == "ident":
             if value in ("end", "until"):
-                active.pop(depth, None)
+                # Pop only the names this block declared; names declared in an
+                # enclosing block (e.g. `local x` before `do ... end`) must
+                # survive the inner block's exit.
+                for name in scope_locals.pop(depth, []):
+                    mapping = active.get(depth)
+                    if mapping is not None:
+                        mapping.pop(name, None)
+                if not active.get(depth):
+                    active.pop(depth, None)
                 depth = max(0, depth - 1)
             elif value in ("do", "function", "repeat", "then"):
                 depth += 1

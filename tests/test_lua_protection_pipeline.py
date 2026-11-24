@@ -78,8 +78,11 @@ def test_protect_file_reports_semantic_differential_gate(tmp_path):
     result = protect_file(source, output, "strong")
 
     assert result["ok"] is True, result
-    assert result["differential"]["function_markers"] == 1
-    assert result["differential"]["return_markers"] == 2
+    differential = result["differential"]
+    assert differential["original"]["function_markers"] == 1
+    assert differential["original"]["return_markers"] == 2
+    assert differential["reconstructed"]["function_markers"] == 1
+    assert differential["reconstructed"]["return_markers"] == 2
 
 
 def test_strong_profile_preserves_common_lua_string_escapes():
@@ -103,7 +106,10 @@ end
 return value, t.value
 '''
     transformed = protect_source(source, "balanced")
-    assert "value =" in transformed
-    assert ":value(" in transformed
-    assert "t.value" in transformed
+    # Local identifiers are renamed at every scope level...
+    assert "local _a" in transformed
     assert "local value" not in transformed
+    # ...but member names stay intact: table key, method name, field access.
+    assert "value=" in transformed.replace(" ", "") or "value =" in transformed
+    assert ":value(" in transformed
+    assert ".value" in transformed
