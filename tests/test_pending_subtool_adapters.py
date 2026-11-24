@@ -404,56 +404,87 @@ def test_native_xref_analyzer_rejects_other(workdir):
     assert result["ok"] is False
 
 
+def _make_bridge_workspace(tmp_path):
+    """Mirror the ToolEngine bridge contract: out_root = TASKS/<id> with a
+    staged input inside it, plus the shared IN/WORK/OUT at the root."""
+    task = tmp_path / "TASKS" / "task-0"
+    (task / "IN").mkdir(parents=True)
+    staged = task / "IN" / "in.pak"
+    staged.write_bytes(b"PK\x03\x04")
+    (tmp_path / "IN").mkdir(exist_ok=True)
+    (tmp_path / "WORK").mkdir(exist_ok=True)
+    (tmp_path / "OUT").mkdir(exist_ok=True)
+    return task, staged
+
+
 def test_workspace_file_manager(workdir):
-    (workdir / "INPUT" / "job").mkdir(parents=True)
-    (workdir / "INPUT" / "job" / "in.pak").write_bytes(b"PK\x03\x04")
+    task, staged = _make_bridge_workspace(workdir)
+    (workdir / "IN" / "job").mkdir(parents=True)
+    (workdir / "IN" / "job" / "in.pak").write_bytes(b"PK\x03\x04")
     (workdir / "OUT" / "PAK").mkdir(parents=True)
     (workdir / "OUT" / "PAK" / "out.bin").write_bytes(b"result")
     (workdir / "WORK" / "xor_key.txt").write_text("DEADBEEF", encoding="utf-8")
     result = dispatch_pending("workspace_file_manager",
-                              input_path=workdir, output_dir=workdir / "OUT")
+                              input_path=staged, output_dir=workdir / "OUT",
+                              work_dir=task / "WORK")
     assert result["ok"] is True, result
-    assert result["total_files"] == 3
-    assert result["sections"]["INPUT"] == 1
+    # root must be resolved as the parent of TASKS (bridge contract)
+    assert Path(result["root"]) == workdir
+    assert result["total_files"] == 4  # IN/job/in.pak, OUT/PAK/out.bin, xor_key.txt, staged in.pak (under TASKS)
+    assert result["sections"]["IN"] == 1
+    assert result["sections"]["WORK"] == 1
+    assert result["sections"]["TASKS"] == 1
     text = Path(result["report"]).read_text(encoding="utf-8")
     assert "in.pak" in text and "xor_key.txt" in text
 
 
-def test_workspace_file_manager_cleanup(workdir):
-    (workdir / "WORK" / "junk.bin").write_bytes(b"junk")
-    (workdir / "WORK" / "cleanup.txt").write_text("clear-work\n", encoding="utf-8")
+def test_workspace_file_manager_accepts_direct_root(workdir):
+    (workdir / "IN").mkdir()
+    (workdir / "IN" / "a.bin").write_bytes(b"a")
     result = dispatch_pending("workspace_file_manager",
                               input_path=workdir, output_dir=workdir / "OUT")
     assert result["ok"] is True, result
+    assert Path(result["root"]) == workdir
+    assert result["sections"]["IN"] == 1
+
+
+def test_workspace_file_manager_cleanup(workdir):
+    task, staged = _make_bridge_workspace(workdir)
+    (workdir / "WORK" / "junk.bin").write_bytes(b"junk")
+    (workdir / "WORK" / "cleanup.txt").write_text("clear-work\n", encoding="utf-8")
+    result = dispatch_pending("workspace_file_manager",
+                              input_path=staged, output_dir=workdir / "OUT",
+                              work_dir=task / "WORK")
+    assert result["ok"] is True, result
     assert result["cleanup"] == ["clear-work"]
     assert not (workdir / "WORK" / "junk.bin").exists()
-    # cleanup.txt itself was consumed by the cleanup
     assert not any(workdir.joinpath("WORK").rglob("junk*"))
 
 
 def test_workspace_resume_cancel_progress(workdir):
-    tasks = workdir / "TASKS"
-    t1 = tasks / "task-1"
-    t1.mkdir(parents=True)
-    (t1 / "status.json").write_text(
-        json.dumps({"status": "RUNNING", "progress": 42}), encoding="utf-8")
-    (t1 / "run.log").write_text("log", encoding="utf-8")
-    (t1 / "WORK").mkdir()
+    task, staged = _make_bridge_workspace(workdir)
+    t1 = workdir / "TASKS" / "task-1"
+    (t1 / "WORK").mkdir(parents=True)
     (t1 / "WORK" / "staged.bin").write_bytes(b"s")
-    t2 = tasks / "task-2"
-    t2.mkdir(parents=True)
-    (t2 / "status.json").write_text(
-        json.dumps({"status": "COMPLETED"}), encoding="utf-8")
-    (workdir / "WORK").mkdir(exist_ok=True)
+    (t1 / "run.log").write_text("log", encoding="utf-8")
+    t2 = workdir / "TASKS" / "task-2"
+    t2.mkdir(parents=True)  # empty task tree: not resumable
     (workdir / "WORK" / "cancel.txt").write_text("task-1\n", encoding="utf-8")
     result = dispatch_pending("workspace_resume_cancel_progress",
-                              input_path=workdir, output_dir=workdir / "OUT")
+                              input_path=staged, output_dir=workdir / "OUT",
+                              work_dir=task / "WORK")
     assert result["ok"] is True, result
     by_task = {t["task"]: t for t in result["tasks"]}
     assert by_task["task-1"]["resumable"] is True
-    assert by_task["task-1"]["status"] == "RUNNING"
+    assert by_task["task-1"]["logs"] == ["run.log"]
+    assert by_task["task-2"]["resumable"] is False
     assert result["cancelled"] == ["task-1"]
     assert (t1 / "CANCEL_REQUESTED").is_file()
+    # idempotent: a second run must not duplicate the journal entry
+    result2 = dispatch_pending("workspace_resume_cancel_progress",
+                               input_path=staged, output_dir=workdir / "OUT",
+                               work_dir=task / "WORK")
+    assert result2["cancelled"] == []
 
 
 def test_lab_engine_registry_lists_registered_operations(workdir):

@@ -991,21 +991,77 @@ def native_xref_reference_analyzer(input_path, output_dir, **_):
             "report": str(rpath), "sha256_report": _sha256(rpath)}
 
 
-def workspace_file_manager(input_path, output_dir, work_root=None, **_):
-    """Workspace inventory: list staged INPUT/, WORK/, OUT/ and TASKS/ trees
-    with sizes, mtimes and sha256 (files <= 64 MiB), plus optional cleanup
-    actions from WORK/cleanup.txt (lines: 'clear-work', 'clear-out')."""
-    base = Path(input_path) if input_path else None
-    if base is None or not base.is_dir():
+def _workspace_root(input_path, work_dir) -> Path | None:
+    """Resolve the ALVSIA workspace root from the bridge call contract.
+
+    ToolEngine passes out_root = TASKS/<task-id> and the staged input file
+    inside that task tree, so the shared root is the parent of TASKS.
+    Also accept a direct root path (file picker pointed at the ALVSIA
+    directory) and a work_dir-based fallback (<root>/WORK or
+    <root>/TASKS/<id>/WORK).
+    """
+    candidates = []
+    if input_path:
+        p = Path(input_path)
+        candidates.append(p if p.is_dir() else p.parent)
+        candidates.extend(p.parents)
+    if work_dir:
+        wd = Path(work_dir)
+        if wd.name.upper() == "WORK":
+            candidates.extend(wd.parents)
+    # de-duplicate, nearest-first
+    seen: list[Path] = []
+    for cand in candidates:
+        if cand not in seen:
+            seen.append(cand)
+
+    def _inside_tasks(cand: Path) -> bool:
+        # a path strictly below the TASKS/ directory belongs to one task tree
+        return any(a.name == "TASKS" for a in cand.parents)
+
+    # The shared workspace root owns TASKS/ plus IN/WORK/OUT; prefer an
+    # ancestor that is NOT itself inside a task tree, so a task's own
+    # IN/WORK/OUT subdirs cannot shadow the real root.
+    for cand in seen:
+        if (not _inside_tasks(cand) and cand.is_dir()
+                and (cand / "TASKS").is_dir()
+                and any((cand / s).is_dir() for s in ("IN", "WORK", "OUT"))):
+            return cand
+    for cand in seen:
+        if (not _inside_tasks(cand) and cand.is_dir()
+                and (cand / "TASKS").is_dir()):
+            return cand
+    # fallback: any candidate with the IN/WORK/OUT conventions (a direct
+    # root picked via the file picker, or the task tree itself)
+    for cand in seen:
+        if cand.is_dir() and any((cand / s).is_dir() for s in ("IN", "WORK", "OUT")):
+            return cand
+    for cand in seen:
+        if cand.is_dir():
+            return cand
+    return None
+
+
+def workspace_file_manager(input_path, output_dir, work_dir=None, **_):
+    """Workspace inventory: list IN/, WORK/, OUT/ and TASKS/ trees with
+    sizes and sha256 (files <= 64 MiB), plus optional cleanup actions
+    from WORK/cleanup.txt (lines: 'clear-work', 'clear-out').
+
+    The workspace root is resolved via the bridge call contract
+    (out_root = TASKS/<id>, so root = its parent); a direct root path
+    from the file picker is also accepted."""
+    base = _workspace_root(input_path, work_dir)
+    if base is None:
         return {"ok": False, "subtool": "workspace_file_manager",
-                "error": "workspace root directory not found"}
+                "error": "workspace root could not be resolved; run from any "
+                         "tool task or point the picker at the ALVSIA directory"}
     out = Path(output_dir)
     out.mkdir(parents=True, exist_ok=True)
     sections = {}
     lines = ["ALVSIA FILE WORKSPACE MANAGER", f"root: {base}", ""]
     total_files = 0
     total_bytes = 0
-    for sub in ("INPUT", "WORK", "OUT", "TASKS"):
+    for sub in ("IN", "WORK", "OUT", "TASKS"):
         d = base / sub
         if not d.is_dir():
             continue
@@ -1033,20 +1089,26 @@ def workspace_file_manager(input_path, output_dir, work_root=None, **_):
         lines.append("")
     lines.append(f"TOTAL: {total_files} files, {total_bytes} bytes")
 
-    actions = _read_lines_config(Path(base) / "WORK", "cleanup.txt")
+    # Config contract: the inline form is staged into the task WORK tree
+    # (= work_dir); users may also have placed it in the shared root WORK.
+    cleanup_sources = [work_dir, base / "WORK"]
+    actions: list[str] = []
+    for cleanup_src in cleanup_sources:
+        if cleanup_src:
+            actions = _read_lines_config(cleanup_src, "cleanup.txt")
+            if actions:
+                break
     performed = []
     for action in actions:
         if action == "clear-work":
             target = base / "WORK"
             if target.is_dir():
-                shutil_used = False
                 import shutil as _sh
                 for child in target.iterdir():
                     if child.is_dir():
                         _sh.rmtree(child, ignore_errors=True)
                     else:
                         child.unlink(missing_ok=True)
-                shutil_used = True
                 performed.append("clear-work")
         elif action == "clear-out":
             target = base / "OUT"
@@ -1062,19 +1124,27 @@ def workspace_file_manager(input_path, output_dir, work_root=None, **_):
         return {"ok": False, "subtool": "workspace_file_manager",
                 "error": "report generation failed"}
     return {"ok": True, "subtool": "workspace_file_manager",
-            "sections": sections, "total_files": total_files,
+            "root": str(base), "sections": sections, "total_files": total_files,
             "total_bytes": total_bytes, "cleanup": performed,
             "report": str(rpath), "sha256_report": _sha256(rpath)}
 
 
-def workspace_resume_cancel_progress(input_path, output_dir, work_root=None, **_):
-    """Inspect the task journal: active, completed and failed tasks with
-    progress and logs; report which artifacts support resume (packaged
-    WORK trees) and optionally cancel RUNNING entries via WORK/cancel.txt."""
-    base = Path(input_path) if input_path else None
-    if base is None or not base.is_dir():
+def workspace_resume_cancel_progress(input_path, output_dir, work_dir=None, **_):
+    """Task-tree journal: per-task inventory of TASKS/<id>/ (IN, WORK, OUT,
+    logs, markers) with resume support assessment, plus cancellation
+    requests recorded as WORK/cancel.txt entries.
+
+    Truthful scope: the Kotlin TaskCenter tracks live RUNNING/COMPLETED/
+    ERROR state in memory for the current session; it does not persist
+    status.json. This adapter therefore reports the on-disk task trees
+    (what a resume attempt would actually consume) and treats cancel as
+    a journaled request against a task tree — it cannot stop a live
+    Python process from here, and does not claim to."""
+    base = _workspace_root(input_path, work_dir)
+    if base is None:
         return {"ok": False, "subtool": "workspace_resume_cancel_progress",
-                "error": "workspace root directory not found"}
+                "error": "workspace root could not be resolved; run from any "
+                         "tool task or point the picker at the ALVSIA directory"}
     tasks_dir = base / "TASKS"
     if not tasks_dir.is_dir():
         return {"ok": False, "subtool": "workspace_resume_cancel_progress",
@@ -1083,36 +1153,63 @@ def workspace_resume_cancel_progress(input_path, output_dir, work_root=None, **_
     out.mkdir(parents=True, exist_ok=True)
     rows = []
     for task_dir in sorted(p for p in tasks_dir.iterdir() if p.is_dir()):
-        status_file = task_dir / "status.json"
         entry = {"task": task_dir.name}
-        if status_file.is_file():
-            try:
-                entry.update(json.loads(status_file.read_text(encoding="utf-8")))
-            except (OSError, ValueError):
-                entry["status"] = "unknown (unreadable status.json)"
-        else:
-            entry["status"] = "unknown (no status.json)"
-        logs = sorted(task_dir.glob("*.log"))
-        entry["logs"] = [lg.name for lg in logs]
-        work_tree = task_dir / "WORK"
-        entry["resumable"] = bool(work_tree.is_dir() and any(work_tree.rglob("*")))
+        # On-disk evidence only; live session state lives in the Kotlin
+        # TaskCenter (see the Tasks screen), not in a status file.
+        parts = {}
+        for sub in ("IN", "WORK", "OUT"):
+            d = task_dir / sub
+            if d.is_dir():
+                count = 0
+                size = 0
+                for _r, _d, fs in os.walk(d):
+                    for f in fs:
+                        full = Path(_r) / f
+                        count += 1
+                        try:
+                            size += full.stat().st_size
+                        except OSError:
+                            pass
+                parts[sub] = {"files": count, "bytes": size}
+        entry["trees"] = parts
+        entry["resumable"] = bool(parts.get("WORK", {}).get("files", 0) > 0
+                                  or parts.get("IN", {}).get("files", 0) > 0)
+        marker = task_dir / "CANCEL_REQUESTED"
+        entry["cancel_requested"] = marker.is_file()
+        logs = sorted(p.name for p in task_dir.rglob("*.log"))
+        entry["logs"] = logs[:50]
         rows.append(entry)
-    cancels = {c.strip().lower() for c in
-               _read_lines_config(Path(base) / "WORK", "cancel.txt")}
+    # Config contract: the inline form is staged into the task WORK tree
+    # (= work_dir); users may also have placed it in the shared root WORK.
+    cancel_actions: list[str] = []
+    for cancel_src in (work_dir, base / "WORK"):
+        if cancel_src:
+            cancel_actions = _read_lines_config(cancel_src, "cancel.txt")
+            if cancel_actions:
+                break
+    cancels = {c.strip().lower() for c in cancel_actions}
     cancelled = []
     for entry in rows:
-        if str(entry.get("task", "")).lower() in cancels and str(
-                entry.get("status", "")).upper() == "RUNNING":
+        if str(entry.get("task", "")).lower() in cancels and not entry["cancel_requested"]:
             marker = tasks_dir / entry["task"] / "CANCEL_REQUESTED"
-            marker.write_text("requested by user", encoding="utf-8")
+            marker.write_text(
+                "cancel requested via WORK/cancel.txt on "
+                + time.strftime("%Y-%m-%d %H:%M:%S"), encoding="utf-8")
+            entry["cancel_requested"] = True
             cancelled.append(entry["task"])
-    lines = ["ALVSIA RESUME / CANCEL / PROGRESS CENTER",
-             f"tasks: {len(rows)}", ""]
+    lines = ["ALVSIA RESUME / CANCEL / PROGRESS CENTER (task-tree journal)",
+             f"tasks on disk: {len(rows)}",
+             "live session state: see the Tasks screen (in-memory TaskCenter)",
+             ""]
     for e in rows:
-        lines.append(f"* {e['task']}  status={e.get('status')}  "
-                     f"resumable={e['resumable']}  logs={e['logs']}")
+        trees = ", ".join(f"{k}:{v['files']}f/{v['bytes']}B"
+                          for k, v in e["trees"].items()) or "empty"
+        lines.append(f"* {e['task']}  resumable={e['resumable']}  "
+                     f"cancel_requested={e['cancel_requested']}  [{trees}]")
     if cancelled:
-        lines += ["", "cancel requested for: " + ", ".join(cancelled)]
+        lines += ["", "cancel request journaled for: " + ", ".join(cancelled),
+                  "NOTE: a running bridge process cannot be interrupted from "
+                  "this report; the marker is honored by the task UI on next poll."]
     rpath = _write_report(out, "task_center", "\n".join(lines))
     if not rpath.is_file() or rpath.stat().st_size == 0:
         return {"ok": False, "subtool": "workspace_resume_cancel_progress",
