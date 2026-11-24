@@ -99,10 +99,10 @@ object SubMenus {
         )
         9 -> listOf(
             SubTool("workspace_file_manager", "FILE WORKSPACE MANAGER", "Manage staged input, work, output and task artifacts.", "Dedicated workspace browser integration is pending.", enabled = false),
-            SubTool("workspace_recent_files_favorites", "RECENT FILES & FAVORITES", "Browse and manage recent file references and favorite tools.", "Recent/Favorites hub integration is pending; existing per-tool favorites remain available.", enabled = false),
-            SubTool("workspace_batch_job_queue", "BATCH JOB QUEUE", "Queue multiple supported files and track per-file outcomes.", "Batch queue integration is pending.", enabled = false),
+            SubTool("workspace_recent_files_favorites", "RECENT FILES & FAVORITES", "Browse recent input URIs and favorite Smart Engine shortcuts.", "Recent file references and favorite tools are refreshed from the local UX store.", enabled = true),
+            SubTool("workspace_batch_job_queue", "BATCH JOB QUEUE", "Review active, completed and failed jobs with per-task progress and logs.", "This view reports current-session tasks; multi-file enqueue is a separate pending capability.", enabled = true),
             SubTool("workspace_resume_cancel_progress", "RESUME / CANCEL / PROGRESS CENTER", "Resume supported jobs, cancel work and inspect live progress.", "Task-control hub integration is pending.", enabled = false),
-            SubTool("workspace_output_browser_history", "OUTPUT BROWSER & HISTORY", "Browse validated outputs and prior task reports.", "Output history hub integration is pending.", enabled = false)
+            SubTool("workspace_output_browser_history", "OUTPUT BROWSER & HISTORY", "Browse validated outputs from legacy OUT and task-isolated TASKS output folders.", "Open the output browser to preview, share or continue with another Smart Engine.", enabled = true)
         )
         10 -> listOf(
             SubTool("lab_engine_registry", "ENGINE REGISTRY & CAPABILITY MATRIX", "Show installed providers, format coverage and verified capability status.", "Registry UI and capability probes are pending.", enabled = false),
