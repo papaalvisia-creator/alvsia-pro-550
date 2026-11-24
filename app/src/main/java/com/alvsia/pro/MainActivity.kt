@@ -378,19 +378,15 @@ class MainActivity : ComponentActivity() {
                         items = SubMenus.forModule(moduleId),
                         onBack = { screen = moduleReturnScreen },
                         onSelect = { sub ->
-                            when (sub.id) {
-                                "workspace_recent_files_favorites" -> screen = "workspace"
-                                "workspace_batch_job_queue" -> screen = "tasks"
-                                "workspace_output_browser_history" -> {
-                                    outputReturnScreen = "submenu"
-                                    screen = "output"
-                                }
-                                else -> {
-                                    toolReturnScreen = "submenu"
-                                    activeSub = sub
-                                    activeTaskId = TaskCenter.tasks.lastOrNull { it.moduleId == moduleId && it.subId == sub.id }?.id
-                                    screen = "tool"
-                                }
+                            val nativeScreen = SmartModuleRouter.nativeScreen(sub.id)
+                            if (nativeScreen != null) {
+                                if (nativeScreen == "output") outputReturnScreen = "submenu"
+                                screen = nativeScreen
+                            } else {
+                                toolReturnScreen = "submenu"
+                                activeSub = sub
+                                activeTaskId = TaskCenter.tasks.lastOrNull { it.moduleId == moduleId && it.subId == sub.id }?.id
+                                screen = "tool"
                             }
                         }
                     )
