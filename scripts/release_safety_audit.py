@@ -14,9 +14,9 @@ def fail(message: str) -> None:
 catalog = ROOT / "app/src/main/java/com/alvsia/pro/tool/ToolCatalog.kt"
 manifest = ROOT / "app/src/main/AndroidManifest.xml"
 network = ROOT / "app/src/main/res/xml/network_security_config.xml"
-profile = ROOT / "app/src/main/java/com/alvsia/pro/ui/profile/ProfileScreen.kt"
+profile = ROOT / "app/src/main/java/com/alvsia/pro/ui/profile/ProfileScreen.kt"\nsubmenus = ROOT / "app/src/main/java/com/alvsia/pro/tool/SubMenus.kt"
 
-for file in (catalog, manifest, network, profile):
+for file in (catalog, manifest, network, profile, submenus):
     if not file.is_file():
         fail(f"required file missing: {file.relative_to(ROOT)}")
 
