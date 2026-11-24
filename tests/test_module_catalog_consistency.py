@@ -37,7 +37,7 @@ calls = re.findall(r'SubTool\(\s*"([^"]+)"([^\n]*)', submenus)
 declared_ids = [sid for sid, _ in calls]
 assert len(declared_ids) == 59
 assert len(set(declared_ids)) == 59
-assert sum("enabled = false" not in tail for _, tail in calls) == 35
+assert sum("enabled = false" not in tail for _, tail in calls) == 38
 assert "10 menus / 59 unique submenu contract" in submenus
 assert "10-menu / 59-subtool" in router
 
