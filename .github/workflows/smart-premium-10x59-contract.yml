@@ -1,0 +1,42 @@
+name: Smart Premium 10x59 contract validation
+
+on:
+  push:
+    branches: [main, feat/smart-premium-10x59-ui-refresh-20261124]
+    paths:
+      - "docs/SMART_PREMIUM_10X59_UI_CONTRACT.md"
+      - "tests/test_smart_premium_10x59_contract.py"
+      - "tests/test_panel_pin_parity.py"
+      - "app/src/main/java/com/alvsia/pro/panel/Vault.kt"
+      - "app/src/main/res/xml/network_security_config.xml"
+      - "app/src/main/python/pinned_http.py"
+      - ".github/workflows/smart-premium-10x59-contract.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "docs/SMART_PREMIUM_10X59_UI_CONTRACT.md"
+      - "tests/test_smart_premium_10x59_contract.py"
+      - "tests/test_panel_pin_parity.py"
+      - "app/src/main/java/com/alvsia/pro/panel/Vault.kt"
+      - "app/src/main/res/xml/network_security_config.xml"
+      - "app/src/main/python/pinned_http.py"
+      - ".github/workflows/smart-premium-10x59-contract.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install test runner
+        run: python3 -m pip install --disable-pip-version-check pytest
+      - name: Validate 10 menus / 59 submenus
+        run: python3 -m pytest -q tests/test_smart_premium_10x59_contract.py
+      - name: Validate all three Unaux SPKI pins stay in sync
+        run: python3 -m pytest -q tests/test_panel_pin_parity.py
