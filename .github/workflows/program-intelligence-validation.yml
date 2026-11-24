@@ -4,6 +4,7 @@ on:
     branches: [ feat/alvsia-program-intelligence-core-20261109, feat/smart-lua-recovery-fusion-20261109 ]
   pull_request:
     branches: [ main, feat/full-reference-source-registry-20261106 ]
+  workflow_dispatch:
 permissions:
   contents: read
 jobs:
@@ -41,3 +42,15 @@ jobs:
           path: reports/canonical-archive-audit.md
           if-no-files-found: warn
           retention-days: 14
+      # Temporary handoff for detailed offline source review. The source ZIPs
+      # remain unchanged in their canonical repository; artifact retention is
+      # intentionally short and this does not publish them to the APK.
+      - name: Upload verified canonical ZIP bytes for offline review
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: alvsia-canonical-five-source-archives
+          path: build/archive-audit/*.zip
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 3
