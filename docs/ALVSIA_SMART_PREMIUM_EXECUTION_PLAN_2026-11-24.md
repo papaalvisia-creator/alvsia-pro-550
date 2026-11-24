@@ -29,7 +29,7 @@ For each archive:
 - Classify each capability as: reusable, adapt, reference/test-only, incompatible with Android ARM64, duplicate, unsafe, or unresolved.
 - Do not ship regression corpora, desktop executables/DLLs, unrelated payloads, or unreviewed secrets.
 
-**Input gate:** the five raw ZIPs must be readable before this phase can be marked complete. The current GitHub `main` tree has no `.zip` entries; the existing source-fusion test currently names only the first three archives. Do not claim all-five audit or integration until the raw archives are actually available and hashed.
+**Input gate:** the five raw ZIPs must be readable before the all-five phase can be marked complete. One supplementary Library archive, `kumpulan_source_tool.zip`, is now available and has been audited read-only: root CRC PASS, 71 root entries, three nested ZIPs, 83 recursive files, 68 Python sources (64 AST PASS / 4 requiring repair or encoding review), and three exact duplicate groups. Its root SHA-256 and detailed inventory are recorded in `docs/source-audits/KUMPULAN_SOURCE_TOOL_AUDIT_2026-11-24.md`. This bundle is not a substitute for the five specifically named archives below; do not claim all-five audit or integration until those exact raw archives are available and hashed.
 
 ### Phase 2 — 10/59 catalog and compatibility map
 - Implement the approved 10 menu / 59 unique submenu IDs from `ALVSIA_SMART_PREMIUM_10_MENU_59_SUBMENU_CONTRACT.md`.
@@ -101,7 +101,7 @@ Required evidence:
 - Main currently includes Python pinning and Android XML/OkHttp pinning for `alvsiapanel.unaux.com`, with three configured SPKI entries.
 - The current PR adds the 10/59 contract, records UI requirements, and makes the Favorites star/list update Compose state immediately.
 - The live host could not be DNS-resolved from the current execution environment; live TLS validation is pending.
-- The five raw ZIP archives are not present in the GitHub repository tree; complete archive audit is pending.
+- The GitHub repository tree has no raw ZIP entries. One supplementary Library archive (`kumpulan_source_tool.zip`) has been recursively inventoried; the five specifically named source archives remain pending byte-level access.
 - No completed 6.0.0 APK or device acceptance is claimed by this plan.
 
 ## Stop conditions
