@@ -16,8 +16,9 @@ manifest = ROOT / "app/src/main/AndroidManifest.xml"
 network = ROOT / "app/src/main/res/xml/network_security_config.xml"
 profile = ROOT / "app/src/main/java/com/alvsia/pro/ui/profile/ProfileScreen.kt"
 submenus = ROOT / "app/src/main/java/com/alvsia/pro/tool/SubMenus.kt"
+release_workflow = ROOT / ".github/workflows/alvsia-final-release.yml"
 
-for file in (catalog, manifest, network, profile, submenus):
+for file in (catalog, manifest, network, profile, submenus, release_workflow):
     if not file.is_file():
         fail(f"required file missing: {file.relative_to(ROOT)}")
 
@@ -37,6 +38,19 @@ profile_text = profile.read_text(encoding="utf-8")
 if "SMART ENGINE LAB" not in profile_text or "toolCount.toString()" not in profile_text:
     fail("profile must expose the 10-menu Smart catalog")
 print("PASS: profile exposes the 10-menu Smart catalog")
+
+workflow_text = release_workflow.read_text(encoding="utf-8")
+for flag in ("--v1-signing-enabled false", "--v2-signing-enabled true", "--v3-signing-enabled true"):
+    if flag not in workflow_text:
+        fail(f"final release workflow must explicitly set {flag}")
+print("PASS: final release workflow explicitly disables v1 and enables v2/v3 signing")
+
+upload_section = workflow_text.split("      - name: Upload final APK and audit", 1)[1]
+if "ALVSIA_SMART_PREMIUM_6.0.0_unsigned.apk" in upload_section:
+    fail("final workflow must not publish the unsigned baseline APK")
+if "ALVSIA_SMART_PREMIUM_6.0.0-xop-signed.apk" not in upload_section:
+    fail("final workflow must publish the single signed XOP APK")
+print("PASS: final workflow publishes one signed APK only")
 
 manifest_text = manifest.read_text(encoding="utf-8")
 for required in (
