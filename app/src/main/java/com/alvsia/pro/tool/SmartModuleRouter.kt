@@ -147,6 +147,19 @@ object SmartModuleRouter {
         "hex_preview" -> "priv_dump_audit"
 
         "batch_audit", "regression_compare" -> "priv_dump_audit"
+
+        // Previously-pending subtools — routed to their dedicated
+        // pending_subtool_adapters dispatch (grant-mapped in the bridge).
+        "apk_compare_resource_diff", "pak_selective_extract",
+        "mini_obb_zsdic_adapter", "gamepatch_obb_repacker",
+        "lua_protect_compile", "lua_round_trip_validator",
+        "crypto_output_validator", "modding_uasset_uexp_inspector",
+        "modding_ue4_string_id_extractor", "modding_skin_pair_finder",
+        "modding_zsdic_analyzer", "modding_offset_size_fixer",
+        "modding_resource_mapping_recovery", "native_xref_reference_analyzer",
+        "workspace_file_manager", "workspace_resume_cancel_progress",
+        "lab_engine_registry", "lab_regression_diff_compare",
+        "lab_large_file_benchmark" -> subId
         else -> subId
     }
 

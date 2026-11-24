@@ -32,7 +32,7 @@ def test_catalog_is_exactly_10x59():
 def test_every_enabled_public_id_has_an_explicit_router_entry():
     calls = re.findall(r'SubTool\(\s*"([^"]+)"([^\n]*)', CATALOG_TEXT)
     enabled = [sid for sid, tail in calls if "enabled = false" not in tail]
-    assert len(enabled) == 38
+    assert len(enabled) == 57
     native_routes = {
         "workspace_recent_files_favorites": '"workspace_recent_files_favorites" -> "workspace"',
         "workspace_batch_job_queue": '"workspace_batch_job_queue" -> "tasks"',
@@ -50,7 +50,9 @@ def test_every_enabled_public_id_has_an_explicit_router_entry():
 def test_unwired_items_are_disabled_and_not_fake_success_actions():
     calls = re.findall(r'SubTool\(\s*"([^"]+)"([^\n]*)', CATALOG_TEXT)
     pending = [sid for sid, tail in calls if "enabled = false" in tail]
-    assert len(pending) == 21
+    # 19 previously-pending subtools are now adapter-backed and enabled;
+    # only resource-table inspector and runtime trace stay disabled.
+    assert pending == ["apk_resource_table_inspector", "native_authorized_runtime_trace"]
     screen = (ROOT / "app/src/main/java/com/alvsia/pro/ui/tool/SubMenuScreen.kt").read_text(encoding="utf-8")
     assert ".clickable(enabled = item.enabled)" in screen
     assert 'else "PENDING"' in screen
