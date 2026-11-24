@@ -344,11 +344,13 @@ def test_large_file_helpers_stream_and_report_hashes():
 def test_profile_catalog_matches_smart_10x59_modules():
     profile_path = ROOT / "app/src/main/java/com/alvsia/pro/ui/profile/ProfileScreen.kt"
     profile = profile_path.read_text(encoding="utf-8")
-    expected = ["HOME", "LUA", "PAK / OBB", "ASSET / UE", "APK / DEX", "NATIVE",
-                "CRYPTO / RECOVERY", "FORENSIC / STRING", "BATCH / DEV LAB"]
+    expected = ["SMART APK", "SMART PAK", "SMART OBB", "SMART LUA", "SMART CRYPTO",
+                "SMART FORENSICS", "SMART MODDING", "SMART NATIVE", "SMART WORKSPACE",
+                "SMART ENGINE LAB"]
     for name in expected:
         assert f'"{name}"' in profile
-    assert '"10"' in profile and '"MODULES"' in profile
+    assert "toolCount.toString()" in profile
+    assert '${modules.size} / $toolCount MODULES' in profile
     catalog = CATALOG.read_text(encoding="utf-8")
     names = re.findall(r'ToolItem\(\s*\d+\s*,\s*"([^"]+)"', catalog)
     assert names == expected
