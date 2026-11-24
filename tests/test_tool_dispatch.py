@@ -112,7 +112,7 @@ def test_menu_ids_are_unique_and_reachable():
     engine = ENGINE.read_text(encoding="utf-8")
     router = ROUTER.read_text(encoding="utf-8")
     missing = []
-    for sid in ids:
+    for sid in enabled_ids:
         if sid in direct_engine_routes and direct_engine_routes[sid] in engine:
             continue
         # Compact Smart menus may normalize a visible operation to a legacy
