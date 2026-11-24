@@ -14,7 +14,8 @@ def fail(message: str) -> None:
 catalog = ROOT / "app/src/main/java/com/alvsia/pro/tool/ToolCatalog.kt"
 manifest = ROOT / "app/src/main/AndroidManifest.xml"
 network = ROOT / "app/src/main/res/xml/network_security_config.xml"
-profile = ROOT / "app/src/main/java/com/alvsia/pro/ui/profile/ProfileScreen.kt"\nsubmenus = ROOT / "app/src/main/java/com/alvsia/pro/tool/SubMenus.kt"
+profile = ROOT / "app/src/main/java/com/alvsia/pro/ui/profile/ProfileScreen.kt"
+submenus = ROOT / "app/src/main/java/com/alvsia/pro/tool/SubMenus.kt"
 
 for file in (catalog, manifest, network, profile, submenus):
     if not file.is_file():
@@ -22,14 +23,20 @@ for file in (catalog, manifest, network, profile, submenus):
 
 catalog_text = catalog.read_text(encoding="utf-8")
 ids = [int(x) for x in re.findall(r"ToolItem\(\s*(\d+)\s*,", catalog_text)]
-if ids != list(range(1, 10)):
-    fail(f"catalog must define Smart module IDs 1..9 in order; found {ids}")
-print("PASS: catalog defines all nine Smart module IDs")
+if ids != list(range(1, 11)):
+    fail(f"catalog must define Smart module IDs 1..10 in order; found {ids}")
+print("PASS: catalog defines all ten Smart module IDs")
+
+submenu_text = submenus.read_text(encoding="utf-8")
+submenu_ids = re.findall(r'SubTool\(\s*"([^"]+)"', submenu_text)
+if len(submenu_ids) != 59 or len(set(submenu_ids)) != 59:
+    fail(f"catalog must define 59 unique submenu IDs; found {len(submenu_ids)}")
+print("PASS: catalog defines 59 unique submenu IDs")
 
 profile_text = profile.read_text(encoding="utf-8")
-if "BATCH / DEV LAB" not in profile_text or '"9"' not in profile_text:
-    fail("profile must expose the 9-menu Smart catalog")
-print("PASS: profile exposes the 9-menu Smart catalog")
+if "SMART ENGINE LAB" not in profile_text or "toolCount.toString()" not in profile_text:
+    fail("profile must expose the 10-menu Smart catalog")
+print("PASS: profile exposes the 10-menu Smart catalog")
 
 manifest_text = manifest.read_text(encoding="utf-8")
 for required in (
