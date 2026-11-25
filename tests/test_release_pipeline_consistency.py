@@ -21,7 +21,7 @@ name_match = re.search(r'versionName\s*=\s*"([^"]+)"', gradle)
 if not code_match or not name_match:
     raise SystemExit("FAIL: Gradle release identity cannot be parsed")
 version_code, version_name = code_match.group(1), name_match.group(1)
-if (version_code, version_name) != ("102", "6.0.4-smart-premium"):
+if (version_code, version_name) != ("104", "6.0.4-smart-premium"):
     raise SystemExit(f"FAIL: unexpected Gradle identity {(version_code, version_name)!r}")
 
 expected_badging = (
@@ -79,7 +79,7 @@ if "--profile industry" not in codemagic or "--protect-so" not in codemagic:
     raise SystemExit("FAIL: expected XopProtector profile/SO protection is not configured")
 
 if "ALVSIA_SMART_PREMIUM_6.0.4-xop-signed.apk" not in final_workflow:
-    raise SystemExit("FAIL: GitHub final workflow does not publish the 6.0.0 Xop artifact")
+    raise SystemExit("FAIL: GitHub final workflow does not publish the 6.0.4 Xop artifact")
 if "python3 tools/prepare_xop_final.py" not in final_workflow:
     raise SystemExit("FAIL: Xop native provenance normalization is missing")
 if "6.0.4-smart-premium" not in readme or "Version code | 104" not in readme:
