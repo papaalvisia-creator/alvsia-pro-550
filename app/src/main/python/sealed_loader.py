@@ -4,7 +4,6 @@ import importlib.abc
 import importlib.util
 import os
 import pkgutil
-import re
 import sys
 
 _MAGIC = b"ALVSEAL2"
@@ -64,6 +63,14 @@ _MAP = {
     "smart_premium_source_fusion": "smart_premium_source_fusion.alv",
 }
 
+# A sealed package must be presented to Python as a real package. Without this,
+# importlib executes lua_engine.__init__ as a flat module, so relative imports
+# fail with "attempted relative import with no known parent package".
+_PACKAGES = frozenset(
+    name for name in _MAP
+    if any(other.startswith(name + ".") for other in _MAP)
+)
+
 def _valid_session() -> bool:
     try:
         from com.alvsia.pro.sec import SessionGate
@@ -76,6 +83,9 @@ class _SealedLoader(importlib.abc.Loader):
         self.fullname = fullname
         self.blob = blob
 
+    def is_package(self, fullname: str) -> bool:
+        return fullname in _PACKAGES
+
     def create_module(self, spec):
         return None
 
@@ -83,14 +93,10 @@ class _SealedLoader(importlib.abc.Loader):
         if not _valid_session():
             raise ImportError("sealed runtime authorization missing")
         try:
-            # Keep the seed, certificate-derived key, and AES key derivation out
-            # of Python. The Kotlin/JNI bridge performs authenticated decryption.
             from com.alvsia.pro.sec import NativeGuard
             raw = pkgutil.get_data("sealed", self.blob)
             if raw is None:
                 raise FileNotFoundError("sealed payload resource missing")
-            # Kotlin object methods may be exposed as instance methods by Chaquopy;
-            # call the singleton explicitly so the payload is never mistaken for `self`.
             guard = getattr(NativeGuard, "INSTANCE", None)
             if guard is not None:
                 build_id = guard.sealBuildId()
@@ -104,7 +110,12 @@ class _SealedLoader(importlib.abc.Loader):
         except Exception as exc:
             raise ImportError("sealed payload authentication/decryption failed") from exc
         module.__file__ = "<ALVISIA-SEALED:%s>" % self.fullname
-        module.__package__ = self.fullname.rpartition(".")[0]
+        # A package needs its own name as __package__ so .detector resolves
+        # correctly to lua_engine.detector.
+        if self.fullname in _PACKAGES:
+            module.__package__ = self.fullname
+        else:
+            module.__package__ = self.fullname.rpartition(".")[0]
         code = compile(source, module.__file__, "exec")
         del source
         exec(code, module.__dict__)
@@ -114,7 +125,10 @@ class _SealedFinder(importlib.abc.MetaPathFinder):
         blob = _MAP.get(fullname)
         if blob is None:
             return None
-        return importlib.util.spec_from_loader(fullname, _SealedLoader(fullname, blob))
+        loader = _SealedLoader(fullname, blob)
+        return importlib.util.spec_from_loader(
+            fullname, loader, is_package=(fullname in _PACKAGES)
+        )
 
 _installed = False
 
