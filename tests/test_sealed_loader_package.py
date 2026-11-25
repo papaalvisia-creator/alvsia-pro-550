@@ -14,14 +14,14 @@ tree = ast.parse(SOURCE)
 
 # The package set must be derived from the sealed module map.
 assert "_PACKAGES" in SOURCE
-assert "any(other.startswith(name + ".") for other in _MAP)" in SOURCE
+assert 'any(other.startswith(name + ".") for other in _MAP)' in SOURCE
 
 # Loader must report package status to importlib and preserve package context.
 assert "def is_package(self, fullname: str) -> bool:" in SOURCE
 assert "return fullname in _PACKAGES" in SOURCE
 assert "is_package=(fullname in _PACKAGES)" in SOURCE
 assert "module.__package__ = self.fullname" in SOURCE
-assert "module.__package__ = self.fullname.rpartition(".")[0]" in SOURCE
+assert 'module.__package__ = self.fullname.rpartition(".")[0]' in SOURCE
 
 # Static AST guard: the finder must call spec_from_loader with is_package.
 calls = [
