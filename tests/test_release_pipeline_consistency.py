@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Regression checks for ALVSIA 6.0.0 release identity and Xop fail-closed behavior."""
+"""Regression checks for ALVSIA 6.0.2 release identity and Xop fail-closed behavior."""
 from pathlib import Path
 import re
 
@@ -78,11 +78,11 @@ if any(flag not in final_workflow for flag in ("--profile industry", "--protect-
 if "--profile industry" not in codemagic or "--protect-so" not in codemagic:
     raise SystemExit("FAIL: expected XopProtector profile/SO protection is not configured")
 
-if "ALVSIA_SMART_PREMIUM_6.0.0-xop-signed.apk" not in final_workflow:
+if "ALVSIA_SMART_PREMIUM_6.0.2-xop-signed.apk" not in final_workflow:
     raise SystemExit("FAIL: GitHub final workflow does not publish the 6.0.0 Xop artifact")
 if "python3 tools/prepare_xop_final.py" not in final_workflow:
     raise SystemExit("FAIL: Xop native provenance normalization is missing")
-if "6.0.0-smart-premium" not in readme or "Version code | 100" not in readme:
+if "6.0.2-smart-premium" not in readme or "Version code | 102" not in readme:
     raise SystemExit("FAIL: README release identity differs from Gradle")
 
 if '"META-INF/*.version"' not in gradle or '"**/META-INF/*.version"' not in gradle:
