@@ -10,7 +10,7 @@
   <img alt="Platform" src="https://img.shields.io/badge/platform-Android-3DDC84?logo=android&logoColor=white">
   <img alt="Architecture" src="https://img.shields.io/badge/ABI-arm64--v8a-blue">
   <img alt="Minimum SDK" src="https://img.shields.io/badge/minimum%20SDK-26-orange">
-  <img alt="Version" src="https://img.shields.io/badge/version-6.0.0--smart--premium-informational">
+  <img alt="Version" src="https://img.shields.io/badge/version-6.0.2--smart--premium-informational">
 </p>
 
 <p align="center">
@@ -70,8 +70,8 @@ Use these capabilities only with files and applications you own or are authorize
 | Property | Current source configuration |
 |---|---|
 | Android application ID | com.alvsia.pro |
-| Display/version name | 6.0.0-smart-premium |
-| Version code | 100 |
+| Display/version name | 6.0.2-smart-premium |
+| Version code | 102 |
 | Minimum Android SDK | 26 (Android 8.0) |
 | Target Android SDK | 34 |
 | Compile SDK | 34 |
