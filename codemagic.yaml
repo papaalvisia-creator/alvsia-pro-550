@@ -374,7 +374,7 @@ workflows:
           "$BUILD_TOOLS/zipalign" -c -v 4 "$SIGNED_APK"
           python3 tools/audit_release_apk.py "$SIGNED_APK"
           BADGING="$("$BUILD_TOOLS/aapt" dump badging "$SIGNED_APK")"
-          printf '%s\n' "$BADGING" | grep -Fq "package: name='com.alvsia.pro' versionCode='102' versionName='6.0.2-smart-premium'" || {
+          printf '%s\n' "$BADGING" | grep -Fq "package: name='com.alvsia.pro' versionCode='104' versionName='6.0.2-smart-premium'" || {
             echo "ERROR: final APK package/version does not match release source"
             printf '%s\n' "$BADGING" | grep -E "^package:|^application-label:" || true
             exit 1
