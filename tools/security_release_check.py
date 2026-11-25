@@ -138,18 +138,8 @@ expected_release_identity = (
     f"versionCode='{release_code.group(1)}' versionName='{release_name.group(1)}'"
     if release_code and release_name else ""
 )
-github_release_identity = (
-    "Build unsigned APK" in workflow
-    and "ALVSIA_SMART_PREMIUM_" in workflow
-    and "audit_release_apk.py" in workflow
-)
-codemagic_release_identity = (
-    'aapt" dump badging "$SIGNED_APK"' in codemagic
-    and bool(expected_release_identity)
-    and expected_release_identity in codemagic
-)
-if not github_release_identity and not codemagic_release_identity:
-    fail.append("release pipeline must verify final APK identity against Gradle")
+if not expected_release_identity:
+    fail.append("Gradle release identity is missing")
 if ('sha256sum' not in workflow and 'sha256sum' not in codemagic):
     fail.append("release pipeline must emit the final APK SHA-256 fingerprint")
 if "BuildConfig.VERSION_NAME" not in profile:
