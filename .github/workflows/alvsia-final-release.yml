@@ -234,7 +234,7 @@ jobs:
           PACKER=$(find "$XOP/packer/build/libs" -maxdepth 1 -type f -name 'protector-packer-*.jar' ! -name '*-sources.jar' | head -n 1)
           test -s "$PACKER"
           # Xop PAS1 asset encryption is enabled; Chaquopy app.imy and engine licenses are excluded by the patched packer.
-          java -jar "$PACKER" "$RUNNER_TEMP/alvsia-xop-input.apk" -o "$RUNNER_TEMP/alvsia-xop-candidate.apk" --shell-dir "$XOP/executable/shell-files" --profile industry --true-vmp-prefix Lcom/alvsia/pro/ --protect-so --encrypt-assets --detect-proxy --pin-certs validation-artifacts/netguard-pins.txt --so-decrypt-mode lazy
+          java -jar "$PACKER" "$RUNNER_TEMP/alvsia-xop-input.apk" -o "$RUNNER_TEMP/alvsia-xop-candidate.apk" --shell-dir "$XOP/executable/shell-files" --profile industry --true-vmp-prefix Lcom/alvsia/pro/sec/VmpAnchor; --protect-so --encrypt-assets --detect-proxy --pin-certs validation-artifacts/netguard-pins.txt --so-decrypt-mode lazy
           test -s "$RUNNER_TEMP/alvsia-xop-candidate.apk"
           python3 tools/prepare_xop_final.py "$RUNNER_TEMP/alvsia-xop-input.apk" "$RUNNER_TEMP/alvsia-xop-candidate.apk"
 
