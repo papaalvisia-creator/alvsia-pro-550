@@ -21,7 +21,7 @@ import com.alvsia.pro.ui.theme.AlvisiaSilver
 
 @Composable
 fun LoadingScreen(
-    subtitle: String = "Initializing Smart Core...",
+    subtitle: String = "Preparing Smart Engine...",
     progress: Float = -1f
 ) {
     Box(Modifier.fillMaxSize()) {
@@ -37,7 +37,11 @@ fun LoadingScreen(
                 fontSize = 22.sp
             )
             Spacer(Modifier.height(12.dp))
-            Text(subtitle, color = AlvisiaSilver, fontSize = 13.sp)
+            Text("HALLO MUKA BOKEP", color = AlvisiaCyan, fontWeight = FontWeight.Black, fontSize = 20.sp)
+            Spacer(Modifier.height(4.dp))
+            Text("JANGAN LUPA NGELOCO SEBELUM BERAKTIVITAS", color = AlvisiaSilver, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+            Spacer(Modifier.height(10.dp))
+            Text(subtitle, color = AlvisiaSilver.copy(alpha = 0.72f), fontSize = 10.sp)
             Spacer(Modifier.height(20.dp))
             CircularProgressIndicator(color = AlvisiaCyan)
         }
