@@ -229,7 +229,7 @@ fun SplashScreen(onFinished: () -> Unit) {
             )
             Spacer(Modifier.height(6.dp))
             Text(
-                "HELLO RAJA COLAY MUKA BOKEP",
+                "ALVSIA SMART PREMIUM",
                 color = AlvisiaBlue.copy(alpha = 0.85f),
                 fontSize = 11.sp,
                 fontFamily = FontFamily.Monospace,
