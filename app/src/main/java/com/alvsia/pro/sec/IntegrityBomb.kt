@@ -51,7 +51,7 @@ object IntegrityBomb {
             @Suppress("DEPRECATION")
             val sig = ctx.packageManager
                 .getPackageInfo(ctx.packageName, PackageManager.GET_SIGNATURES)
-                .signatures[0]
+                .signatures?.firstOrNull() ?: return false
             val md = MessageDigest.getInstance("SHA-256")
             val digest = md.digest(sig.toByteArray())
             val hex = digest.joinToString("") { "%02x".format(it) }
