@@ -24,10 +24,11 @@ class TelegramNotifierContractTests(unittest.TestCase):
                       "ANTI_DUMP", "NET_THREAT", "GUARD_HOSTILE"):
             self.assertIn('"' + event + '"', self.source)
         for event in ("SESSION_OK", "SESSION_START", "HEARTBEAT", "TOOL_OK",
-                      "MODULE_STATUS", "ENGINE_CAP", "SOFT_THREAT"):
+                      "MODULE_STATUS", "ENGINE_CAP", "SOFT_THREAT", "GUARD_SOFT_HOOK"):
             self.assertIn(event, self.source)
         self.assertIn("SECURITY-ALERT ONLY", self.source)
         self.assertIn("safeDetailLooksLikeSoftHook", self.source)
+        self.assertIn("Soft security signal kept local", self.source)
         self.assertIn("Local-only event suppressed from Telegram", self.source)
 
     def test_operational_event_families_are_registered(self):
