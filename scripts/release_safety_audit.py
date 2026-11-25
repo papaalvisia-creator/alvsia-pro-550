@@ -46,9 +46,9 @@ for flag in ("--v1-signing-enabled false", "--v2-signing-enabled true", "--v3-si
 print("PASS: final release workflow explicitly disables v1 and enables v2/v3 signing")
 
 upload_section = workflow_text.split("      - name: Upload final APK and audit", 1)[1]
-if "ALVSIA_SMART_PREMIUM_6.0.2_unsigned.apk" in upload_section:
+if "ALVSIA_SMART_PREMIUM_6.0.4_unsigned.apk" in upload_section:
     fail("final workflow must not publish the unsigned baseline APK")
-if "ALVSIA_SMART_PREMIUM_6.0.2-xop-signed.apk" not in upload_section:
+if "ALVSIA_SMART_PREMIUM_6.0.4-xop-signed.apk" not in upload_section:
     fail("final workflow must publish the single signed XOP APK")
 print("PASS: final workflow publishes one signed APK only")
 
