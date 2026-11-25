@@ -63,12 +63,12 @@ jobs:
         run: |
           set -euo pipefail
           yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
-          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "ndk;27.0.12077973" "cmake;3.22.1"
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "ndk;26.1.10909125" "cmake;3.22.1"
           test -d "$ANDROID_HOME/ndk/27.0.12077973"
 
       - name: Build native Smart Lua engines
         env:
-          ANDROID_NDK_VERSION: 27.0.12077973
+          ANDROID_NDK_VERSION: 26.1.10909125
         run: |
           set -euo pipefail
           bash tools/build_unluac_rs_android.sh
@@ -133,8 +133,8 @@ jobs:
           APK=$(find app/build/outputs/apk/release -type f -name '*.apk' | head -n 1)
           test -s "$APK"
           mkdir -p validation-artifacts
-          cp "$APK" validation-artifacts/ALVSIA_SMART_PREMIUM_6.0.0_unsigned.apk
-          sha256sum validation-artifacts/ALVSIA_SMART_PREMIUM_6.0.0_unsigned.apk
+          cp "$APK" validation-artifacts/ALVSIA_SMART_PREMIUM_6.0.2_unsigned.apk
+          sha256sum validation-artifacts/ALVSIA_SMART_PREMIUM_6.0.2_unsigned.apk
 
       - name: Sign baseline for XOP
         env:
@@ -164,7 +164,7 @@ jobs:
           test -n "$KSPASS"
           export KSPASS KEYPASS
           APKSIGNER=$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -n 1)
-          "$APKSIGNER" sign --v1-signing-enabled false --v2-signing-enabled true --v3-signing-enabled true --ks "$KS" --ks-key-alias "$ALIAS" --ks-pass env:KSPASS --key-pass env:KEYPASS --out "$RUNNER_TEMP/alvsia-xop-input.apk" validation-artifacts/ALVSIA_SMART_PREMIUM_6.0.0_unsigned.apk
+          "$APKSIGNER" sign --v1-signing-enabled false --v2-signing-enabled true --v3-signing-enabled true --ks "$KS" --ks-key-alias "$ALIAS" --ks-pass env:KSPASS --key-pass env:KEYPASS --out "$RUNNER_TEMP/alvsia-xop-input.apk" validation-artifacts/ALVSIA_SMART_PREMIUM_6.0.2_unsigned.apk
           "$APKSIGNER" verify --verbose --print-certs "$RUNNER_TEMP/alvsia-xop-input.apk"
 
       - name: Build XopProtector and pack candidate
@@ -213,7 +213,7 @@ jobs:
           if "ndkVersion" in s: raise SystemExit("unexpected Xop native Gradle layout")
           marker="android {"
           if s.count(marker)!=1: raise SystemExit("unexpected Xop native Gradle layout")
-          p.write_text(s.replace(marker, marker+'\n    ndkVersion = "27.0.12077973"',1))
+          p.write_text(s.replace(marker, marker+'\n    ndkVersion = "26.1.10909125"',1))
           PY
           chmod +x "$XOP/gradlew"
           (cd "$XOP" && bash "$GITHUB_WORKSPACE/tools/run_gradle_with_retry.sh" ./gradlew --no-daemon :packer:jar exportShellFiles)
@@ -250,22 +250,22 @@ jobs:
           INPUT="$RUNNER_TEMP/alvsia-xop-candidate.apk"
           if [ ! -s "$INPUT" ]; then INPUT="$RUNNER_TEMP/xopprotector.apk"; fi
           test -s "$INPUT"
-          "$APKSIGNER" sign --v1-signing-enabled false --v2-signing-enabled true --v3-signing-enabled true --ks "$KS" --ks-key-alias "$ALIAS" --ks-pass env:KSPASS --key-pass env:KEYPASS --out validation-artifacts/ALVSIA_SMART_PREMIUM_6.0.0-xop-signed.apk "$INPUT"
-          VERIFY_OUTPUT="$("$APKSIGNER" verify --verbose --print-certs validation-artifacts/ALVSIA_SMART_PREMIUM_6.0.0-xop-signed.apk)"
+          "$APKSIGNER" sign --v1-signing-enabled false --v2-signing-enabled true --v3-signing-enabled true --ks "$KS" --ks-key-alias "$ALIAS" --ks-pass env:KSPASS --key-pass env:KEYPASS --out validation-artifacts/ALVSIA_SMART_PREMIUM_6.0.2-xop-signed.apk "$INPUT"
+          VERIFY_OUTPUT="$("$APKSIGNER" verify --verbose --print-certs validation-artifacts/ALVSIA_SMART_PREMIUM_6.0.2-xop-signed.apk)"
           printf '%s\n' "$VERIFY_OUTPUT"
           grep -Fq "Verified using v1 scheme (JAR signing): false" <<< "$VERIFY_OUTPUT"
           grep -Fq "Verified using v2 scheme (APK Signature Scheme v2): true" <<< "$VERIFY_OUTPUT"
           grep -Fq "Verified using v3 scheme (APK Signature Scheme v3): true" <<< "$VERIFY_OUTPUT"
-          python3 tools/audit_release_apk.py validation-artifacts/ALVSIA_SMART_PREMIUM_6.0.0-xop-signed.apk
+          python3 tools/audit_release_apk.py validation-artifacts/ALVSIA_SMART_PREMIUM_6.0.2-xop-signed.apk
           echo "PASS APK v1 signing disabled; v2/v3 signing enabled" >> release_security_audit.txt
-          sha256sum validation-artifacts/ALVSIA_SMART_PREMIUM_6.0.0-xop-signed.apk
+          sha256sum validation-artifacts/ALVSIA_SMART_PREMIUM_6.0.2-xop-signed.apk
 
       - name: Upload final APK and audit
         uses: actions/upload-artifact@v4
         with:
-          name: ALVSIA_SMART_PREMIUM_6.0.0-final-xop-signed
+          name: ALVSIA_SMART_PREMIUM_6.0.2-final-xop-signed
           path: |
-            validation-artifacts/ALVSIA_SMART_PREMIUM_6.0.0-xop-signed.apk
+            validation-artifacts/ALVSIA_SMART_PREMIUM_6.0.2-xop-signed.apk
             release_security_audit.txt
           if-no-files-found: error
 
