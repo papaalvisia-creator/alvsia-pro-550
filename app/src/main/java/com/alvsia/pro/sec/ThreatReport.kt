@@ -11,7 +11,16 @@ import android.content.Context
  * coordinates, storage paths and file contents are never included.
  */
 object ThreatReport {
-    private val acceptedKinds = setOf("TAMPER", "FRIDA", "ROOT", "DEBUG", "SIG_BLOCK", "THREAT", "SOFT_THREAT")
+    private val acceptedKinds = setOf(
+        "TAMPER", "FRIDA", "ROOT", "DEBUG", "SIG_BLOCK", "THREAT",
+        "ANTI_DUMP", "NET_THREAT", "GUARD_HOSTILE"
+    )
+    private val suppressedKinds = setOf(
+        "SOFT_THREAT", "GUARD_SOFT_HOOK", "SESSION_OK", "SESSION_START",
+        "SESSION_END", "HEARTBEAT", "TOOL_OK", "TOOL_ERROR", "MODULE_STATUS",
+        "ENGINE_CAP", "STARTUP_OK", "STARTUP_FAIL", "FILE_LOADED", "SCAN_COMPLETE",
+        "PATCH_OK", "BUILD_OK", "BUILD_FAIL", "ERROR"
+    )
     private val sensitiveField = Regex(
         "(?i)\\b(token|api[_-]?key|password|license(?:[_-]?key)?|session[_-]?token|hwid|device[_-]?id)\\b\\s*[:=]\\s*[^\\s,;]+"
     )
@@ -21,7 +30,9 @@ object ThreatReport {
 
     @Suppress("UNUSED_PARAMETER")
     fun emit(ctx: Context, kind: String, detail: String, license: String = "") {
-        val event = kind.trim().uppercase().takeIf { it in acceptedKinds } ?: "THREAT"
+        val normalized = kind.trim().uppercase()
+        if (normalized in suppressedKinds || normalized !in acceptedKinds) return
+        val event = normalized
         val safeDetail = sensitiveField.replace(detail) { match ->
             "${match.groupValues[1]}=[REDACTED]"
         }

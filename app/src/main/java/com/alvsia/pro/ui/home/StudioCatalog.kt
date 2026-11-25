@@ -10,21 +10,22 @@ data class StudioItem(
 
 object StudioCatalog {
     val all: List<StudioItem> = listOf(
-        StudioItem("home", "HOME", "File detection, workspace reports and engine health", "🏠", listOf(1)),
-        StudioItem("lua", "LUA", "Smart analyze, recovery, T24, XOR, protect and inject", "🌙", listOf(2)),
-        StudioItem("pak", "PAK / OBB", "Inspect, extract, inject and rebuild archives", "📦", listOf(3)),
-        StudioItem("asset", "ASSET / UE", "UAsset, UExp, LOCRES and UMAP classification", "🧩", listOf(4)),
-        StudioItem("apk", "APK / DEX", "APK audit, DEX reporting and URL recovery scan", "📱", listOf(5)),
-        StudioItem("native", "NATIVE", "SO audit, native strings and ABI dependencies", "⚙️", listOf(6)),
-        StudioItem("crypto", "CRYPTO / RECOVERY", "AES, ZUC and string recovery", "🔐", listOf(7)),
-        StudioItem("forensic", "FORENSIC / STRING", "File reports, strings, entropy and hex preview", "🔎", listOf(8)),
-        StudioItem("batch", "BATCH / DEV LAB", "Batch audit, regression comparison and self-test", "🧪", listOf(9))
+        StudioItem("apk", "SMART APK", "APK structure, manifest, DEX and signature audit", "📱", listOf(1)),
+        StudioItem("pak", "SMART PAK", "PAK profile, explore, extract, inject and rebuild", "📦", listOf(2)),
+        StudioItem("obb", "SMART OBB", "OBB inspect, extract, repack and integrity", "🗃️", listOf(3)),
+        StudioItem("lua", "SMART LUA", "Lua analyze, bytecode, decompile, convert and inject", "🌙", listOf(4)),
+        StudioItem("crypto", "SMART CRYPTO", "XOR, AES, SM4, ZUC and key-pattern tools", "🔐", listOf(5)),
+        StudioItem("forensics", "SMART FORENSICS", "File detection, strings, entropy and evidence", "🔎", listOf(6)),
+        StudioItem("modding", "SMART MODDING", "UAsset, UEXP, skins, ZSDIC and resource mapping", "🧩", listOf(7)),
+        StudioItem("native", "SMART NATIVE", "ELF, SO, symbols, ABI and authorized trace", "⚙️", listOf(8)),
+        StudioItem("workspace", "SMART WORKSPACE", "Files, favorites, batch jobs, progress and outputs", "🗂️", listOf(9)),
+        StudioItem("engine-lab", "SMART ENGINE LAB", "Engine registry, self-test, regression and benchmark", "🧪", listOf(10))
     )
 
     fun moduleIds(studio: StudioItem): List<Int> = studio.moduleIds
     fun find(id: String): StudioItem? = all.firstOrNull { it.id == id }
     fun hasCompleteUniqueCoverage(): Boolean {
         val ids = all.flatMap { it.moduleIds }
-        return ids.size == 9 && ids.toSet().size == 9 && ids.toSet() == (1..9).toSet()
+        return ids.size == 10 && ids.toSet().size == 10 && ids.toSet() == (1..10).toSet()
     }
 }

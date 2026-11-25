@@ -52,6 +52,44 @@ def run_tool(module_id, sub_id, input_path, out_root, engine_dir, jars_dir):
             grant_operation = "apk_audit"
         elif sid_l.startswith(("priv_", "sm4_")) or sid_l in ("url_scan_so", "pubg_lua_convert"):
             grant_operation = "alvsia_private_tool"
+        elif sid_l in (
+            # Previously-pending subtools: granted under their module's operation set.
+            "apk_compare_resource_diff", "pak_selective_extract",
+            "mini_obb_zsdic_adapter", "gamepatch_obb_repacker",
+            "lua_protect_compile", "lua_round_trip_validator",
+            "crypto_output_validator", "modding_uasset_uexp_inspector",
+            "modding_ue4_string_id_extractor", "modding_skin_pair_finder",
+            "modding_zsdic_analyzer", "modding_offset_size_fixer",
+            "modding_resource_mapping_recovery", "native_xref_reference_analyzer",
+            "workspace_file_manager", "workspace_resume_cancel_progress",
+            "apk_resource_table_inspector", "native_authorized_runtime_trace",
+            "lab_engine_registry", "lab_regression_diff_compare",
+            "lab_large_file_benchmark",
+        ):
+            pending_grant_map = {
+                "apk_compare_resource_diff": "apk_audit",
+                "apk_resource_table_inspector": "apk_audit",
+                "pak_selective_extract": "pak_tools",
+                "mini_obb_zsdic_adapter": "obb_tools",
+                "gamepatch_obb_repacker": "obb_tools",
+                "lua_protect_compile": "lua_tools",
+                "lua_round_trip_validator": "lua_tools",
+                "crypto_output_validator": "decrypt_engine",
+                "modding_uasset_uexp_inspector": "pak_tools",
+                "modding_ue4_string_id_extractor": "pak_tools",
+                "modding_skin_pair_finder": "pak_tools",
+                "modding_zsdic_analyzer": "pak_tools",
+                "modding_offset_size_fixer": "pak_tools",
+                "modding_resource_mapping_recovery": "pak_tools",
+                "native_xref_reference_analyzer": "so_analyzer",
+                "native_authorized_runtime_trace": "so_analyzer",
+                "workspace_file_manager": "workspace",
+                "workspace_resume_cancel_progress": "workspace",
+                "lab_engine_registry": "xor_suite",
+                "lab_regression_diff_compare": "xor_suite",
+                "lab_large_file_benchmark": "xor_suite",
+            }
+            grant_operation = pending_grant_map[sid_l]
         else:
             grant_operation = {
                 1: "pak_tools", 2: "pak_tools", 3: "pak_tools", 4: "obb_tools",
@@ -64,6 +102,67 @@ def run_tool(module_id, sub_id, input_path, out_root, engine_dir, jars_dir):
         if not grant_operation:
             return "X AUTH: module/subtool has no Unaux grant mapping"
         core._alvsia_require_operation((grant_operation,))
+
+        # Previously-pending subtools: dedicated fail-closed adapters that
+        # always produce and verify a real output artifact.
+        _PENDING_IDS = frozenset((
+            "apk_compare_resource_diff", "pak_selective_extract",
+            "mini_obb_zsdic_adapter", "gamepatch_obb_repacker",
+            "lua_protect_compile", "lua_round_trip_validator",
+            "crypto_output_validator", "modding_uasset_uexp_inspector",
+            "modding_ue4_string_id_extractor", "modding_skin_pair_finder",
+            "modding_zsdic_analyzer", "modding_offset_size_fixer",
+            "modding_resource_mapping_recovery", "native_xref_reference_analyzer",
+            "workspace_file_manager", "workspace_resume_cancel_progress",
+            "apk_resource_table_inspector", "native_authorized_runtime_trace",
+            "lab_engine_registry", "lab_regression_diff_compare",
+            "lab_large_file_benchmark",
+        ))
+        if sid_l in _PENDING_IDS:
+            try:
+                from pending_subtool_adapters import dispatch_pending
+                _folder = {
+                    "apk_compare_resource_diff": "APKDIFF",
+                    "apk_resource_table_inspector": "ARSC",
+                    "pak_selective_extract": "PAK",
+                    "mini_obb_zsdic_adapter": "OBB",
+                    "gamepatch_obb_repacker": "OBB",
+                    "lua_protect_compile": "LPROTECT",
+                    "lua_round_trip_validator": "LUA",
+                    "crypto_output_validator": "DEC",
+                    "modding_uasset_uexp_inspector": "MODDING",
+                    "modding_ue4_string_id_extractor": "MODDING",
+                    "modding_skin_pair_finder": "MODDING",
+                    "modding_zsdic_analyzer": "MODDING",
+                    "modding_offset_size_fixer": "MODDING",
+                    "modding_resource_mapping_recovery": "MODDING",
+                    "native_xref_reference_analyzer": "XREF",
+                    "native_authorized_runtime_trace": "XREF",
+                    "workspace_file_manager": "WORKSPACE",
+                    "workspace_resume_cancel_progress": "WORKSPACE",
+                    "lab_engine_registry": "LAB",
+                    "lab_regression_diff_compare": "LAB",
+                    "lab_large_file_benchmark": "LAB",
+                }[sid_l]
+                _workspace_input = out.parent if sid_l in (
+                    "workspace_file_manager", "workspace_resume_cancel_progress") else ip
+                _pending = dispatch_pending(
+                    sid_l,
+                    input_path=_workspace_input,
+                    output_dir=out / "OUT" / _folder,
+                    work_dir=out / "WORK",
+                )
+                if not isinstance(_pending, dict) or not _pending.get("ok"):
+                    return "\\n".join(lines + ["X PENDING ADAPTER: " + str((_pending or {}).get("error", "operation failed"))[:900]])
+                lines.append("OK PENDING ADAPTER sub=%s" % sid_l)
+                if _pending.get("out"):
+                    lines.append("OUT -> %s" % _pending.get("out"))
+                elif _pending.get("report"):
+                    lines.append("REPORT -> %s" % _pending.get("report"))
+                lines.append("SMART RESULT -> %s" % str(_pending)[:1800])
+                return "\\n".join(lines)
+            except Exception as _pending_exc:
+                return "\\n".join(lines + ["X PENDING ADAPTER exception: %s" % (str(_pending_exc)[:900] or type(_pending_exc).__name__)])
 
         # Unified adapter facade: Smart Lua, Smart PAK/OBB, and Smart Data providers
         # share one fail-closed dispatcher after existing authentication/grant gates.

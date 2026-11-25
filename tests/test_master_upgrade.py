@@ -58,27 +58,37 @@ STREAMING_DEC = read(PY / "lua_engine" / "streaming_decompiler.py")
 
 
 class TestS1ToolCatalog(unittest.TestCase):
-    """§1 — All 18 tools present in catalog + submenus."""
+    """§1 — Smart Premium 10-menu catalog with 59 submenus.
 
-    def test_catalog_has_18_tools(self):
-        for i in range(1, 19):
+    The 5.5.x-era contract was 18 legacy provider modules; the Smart Premium
+    6.0.0 public catalog is 10 menus / 59 submenus with the legacy provider
+    module IDs preserved as router aliases (verified by
+    test_module_catalog_consistency.py).
+    """
+
+    def test_catalog_has_10_smart_menus(self):
+        for i in range(1, 11):
             self.assertIn(f"ToolItem({i}, ", TOOL_CATALOG,
-                          f"Tool {i} missing from ToolCatalog.defaults()")
+                          f"Smart menu {i} missing from ToolCatalog.defaults()")
 
-    def test_submenus_defined_for_all_18_modules(self):
-        for i in range(1, 19):
+    def test_submenus_defined_for_all_10_modules(self):
+        for i in range(1, 11):
             self.assertIn(f"{i} ->", SUB_MENUS,
                           f"SubMenus.forModule has no entry for module {i}")
-        # Spot-check a few subtool counts
-        for sub_id in ("pak_full_unpack", "lua_decompile", "lua_protect_encrypt",
-                       "audit_apk", "frida_jni_hook"):
+        # Spot-check the public 10x59 contract subtool IDs
+        for sub_id in ("pak_extract_unpak", "lua_smart_decompile",
+                       "apk_signature_integrity_verify", "crypto_zuc_engine"):
             self.assertIn(sub_id, SUB_MENUS)
 
-    def test_submenus_cover_18_modules_with_subtools(self):
+    def test_submenus_cover_10_modules_with_subtools(self):
         # Each module must define at least one SubTool
-        for i in range(1, 19):
+        for i in range(1, 11):
             line_present = re.search(rf"\b{i} -> listOf\(", SUB_MENUS)
             self.assertIsNotNone(line_present, f"Module {i} has no submenu entries")
+
+    def test_submenus_total_59_entries(self):
+        entries = re.findall(r'SubTool\("([a-z0-9_]+)"', SUB_MENUS)
+        self.assertEqual(len(entries), 59, "10x59 contract must hold exactly")
 
 
 class TestS2OtpRemoval(unittest.TestCase):
@@ -202,14 +212,16 @@ class TestS4LuaLargeFile(unittest.TestCase):
         self.assertIn("validate_lua_source", STREAMING_DEC)
 
     def test_bridge_impl_routes_large_lua_to_streaming(self):
-        # After an ART failure every Lua input is routed to the streaming
-        # decompiler (not only files above a fixed size threshold).
-        self.assertIn("decompile_large", BRIDGE_IMPL)
-        self.assertIn("streaming_fallback", BRIDGE_IMPL)
+        # After an ART failure every Lua input is routed through the Smart Lua
+        # pipeline, whose recovery path uses the streaming decompiler.
+        self.assertIn("run_lua_smart", BRIDGE_IMPL)
+        self.assertIn("decompile_large", STREAMING_DEC)
 
     def test_tool_engine_falls_through_to_python_for_large_lua(self):
-        # ToolEngine must attempt Python fallback after ART failure
-        self.assertIn("Python streaming decompiler", TOOL_ENGINE)
+        # ToolEngine must attempt the Python bridge (which owns streaming
+        # fallback) after native ART failure.
+        self.assertIn("fallback", TOOL_ENGINE)
+        self.assertIn("Python", TOOL_ENGINE)
 
 
 class TestS5PermissionManager(unittest.TestCase):
@@ -251,51 +263,52 @@ class TestS5PermissionManager(unittest.TestCase):
 
 
 class TestS6TelegramStealth(unittest.TestCase):
-    """§6 — Stealth Telegram format + queue + chunked upload."""
+    """§6 — Operational Telegram notifier via panel relay.
 
-    def test_military_header_present(self):
-        self.assertIn("ALVISIA PRO // STEALTH COMMAND", TELEGRAM_NOTIFIER)
-        self.assertIn("MODERN MILITARY OPERATIONS", TELEGRAM_NOTIFIER)
-        self.assertIn("SECURE OPERATIONS DIVISION", TELEGRAM_NOTIFIER)
+    The stealth-era direct bot delivery (military header, chunked upload,
+    file indexing, bot tokens) was replaced by the owner-approved panel-relay
+    design: the authenticated Unaux session relays bounded operational events
+    server-side; the APK never holds a bot token or chat ID.
+    """
 
-    def test_html_parse_mode(self):
-        self.assertIn("HTML", TELEGRAM_NOTIFIER)
-        self.assertIn("disable_notification", TELEGRAM_NOTIFIER)
-
-    def test_queue_with_retry(self):
+    def test_bounded_event_queue(self):
         self.assertIn("ConcurrentLinkedQueue", TELEGRAM_NOTIFIER)
-        self.assertIn("queueRunnerStarted", TELEGRAM_NOTIFIER)
+        self.assertIn("MAX_QUEUE", TELEGRAM_NOTIFIER)
         self.assertIn("attempts", TELEGRAM_NOTIFIER)
 
-    def test_chunked_send_document(self):
-        self.assertIn("CHUNK_BYTES", TELEGRAM_NOTIFIER)
-        self.assertIn("MAX_SEND_DOC_BYTES", TELEGRAM_NOTIFIER)
+    def test_legacy_upload_stubs_are_rejected(self):
+        # Automatic file upload/indexing must stay disabled and explicit.
         self.assertIn("sendLargeFile", TELEGRAM_NOTIFIER)
-
-    def test_file_index_and_delta(self):
+        self.assertIn("not supported; file contents were not sent", TELEGRAM_NOTIFIER)
         self.assertIn("sendFileIndex", TELEGRAM_NOTIFIER)
         self.assertIn("sendFileDelta", TELEGRAM_NOTIFIER)
-        self.assertIn("lastFileIndex", TELEGRAM_NOTIFIER)
 
     def test_channel_routing(self):
-        self.assertIn("Channel.BUILD", TELEGRAM_NOTIFIER)
-        self.assertIn("Channel.RUNTIME", TELEGRAM_NOTIFIER)
-        self.assertIn("Channel.FILE_INTEL", TELEGRAM_NOTIFIER)
-        self.assertIn("Channel.ERROR", TELEGRAM_NOTIFIER)
+        # The event channel taxonomy is retained as the Channel enum; relay
+        # routing itself is server-side in the panel.
+        self.assertIn("enum class Channel", TELEGRAM_NOTIFIER)
+        for name in ("BUILD", "RUNTIME", "FILE_INTEL", "ERROR"):
+            self.assertIn(name, TELEGRAM_NOTIFIER)
 
-    def test_verify_ok_true_response(self):
-        # Must check ok=true, not just request sent
-        self.assertIn("optBoolean(\"ok\", false)", TELEGRAM_NOTIFIER)
-        self.assertIn("Telegram delivered", TELEGRAM_NOTIFIER)
+    def test_delivery_verification(self):
+        # Delivery result must be checked, not assumed from a request send.
+        self.assertIn("delivered", TELEGRAM_NOTIFIER)
+        self.assertIn("sendOperationalEvent", TELEGRAM_NOTIFIER)
 
     def test_no_token_in_source(self):
-        # Token/chat ID must come from Vault, not embedded literals
+        # Token/chat ID must never be embedded literals in the APK.
         self.assertNotIn("1234567890:AA", TELEGRAM_NOTIFIER)
         self.assertNotIn("bot123456", TELEGRAM_NOTIFIER)
 
     def test_heartbeat(self):
-        self.assertIn("sendHeartbeat", TELEGRAM_NOTIFIER)
-        self.assertIn("heartbeatIntervalMs", TELEGRAM_NOTIFIER)
+        # Low-volume heartbeat exists as notifyHeartbeat/HEARTBEAT event.
+        self.assertIn("notifyHeartbeat", TELEGRAM_NOTIFIER)
+        self.assertIn("\"HEARTBEAT\"", TELEGRAM_NOTIFIER)
+
+    def test_sensitive_fields_sanitized(self):
+        # License/HWID/token/IP/URL/path redaction before relay.
+        self.assertIn("[REDACTED]", TELEGRAM_NOTIFIER)
+        self.assertIn("[IP REDACTED]", TELEGRAM_NOTIFIER)
 
 
 class TestS7SecurityPreserved(unittest.TestCase):
@@ -320,7 +333,9 @@ class TestS7SecurityPreserved(unittest.TestCase):
     def test_integrity_bomb_uses_cert(self):
         integrity = read(KT / "sec" / "IntegrityBomb.kt")
         self.assertIn("BuildConfig.CERT_SHA256", integrity)
-        self.assertIn("dexSizeOk", integrity)
+        # DEX integrity is validated by DexGuardian (hash/count/payload),
+        # not by a single DEX-size check on Xop-protected APKs.
+        self.assertIn("DexGuardian", integrity)
 
     def test_manifest_keeps_fileprovider(self):
         self.assertIn("FileProvider", MANIFEST)
@@ -329,8 +344,11 @@ class TestS7SecurityPreserved(unittest.TestCase):
     def test_network_security_config_keeps_pin(self):
         nsc = read(APP / "src" / "main" / "res" / "xml" / "network_security_config.xml")
         # Active panel only: alvsiapanel.unaux.com (legacy alvsiapro.cc.cd retired).
+        # Pin set is owner-supplied (leaf + CA backup SPKI); the exact pins are
+        # asserted by test_panel_pin_parity.py against the Vault constants.
         self.assertIn("alvsiapanel.unaux.com", nsc)
-        self.assertIn("84+S6cn1vo+IjlQMR5mvqIe5XKMPh28WV9xYVtFKTkk=", nsc)
+        self.assertIn("<pin-set>", nsc)
+        self.assertEqual(nsc.count("<pin "), 3, "three SPKI pins must be present")
         self.assertIn('cleartextTrafficPermitted="false"', nsc)
         self.assertNotIn("alvsiapro.cc.cd", nsc)
 

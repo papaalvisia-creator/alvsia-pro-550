@@ -165,7 +165,7 @@ fun subToolConfig(subId: String): List<SubToolConfig> = when (subId) {
             workFileName = "zuc_config.txt"
         )
     )
-    "pak_deep_sm4" -> listOf(
+    "pak_deep_sm4", "crypto_sm4_engine" -> listOf(
         SubToolConfig(
             field = "sm4_config",
             label = "SM4 Config",
@@ -277,7 +277,7 @@ fun subToolConfig(subId: String): List<SubToolConfig> = when (subId) {
     )
 
     // ALVISIA PRIVATE TOOL configs
-    "priv_zuc_decrypt" -> listOf(
+    "priv_zuc_decrypt", "crypto_zuc_engine" -> listOf(
         SubToolConfig(field = "key", label = "ZUC Key (32 hex chars = 16 bytes)",
             type = ConfigType.HEX, hint = "0000000000000000ffffffffffffffff",
             required = true, workFileName = "zuc_config.txt"),
@@ -303,6 +303,78 @@ fun subToolConfig(subId: String): List<SubToolConfig> = when (subId) {
             hint = "/sdcard/AlvsiaWork/extracted_apk/lib/arm64-v8a",
             required = true,
             workFileName = "so_folder.txt"
+        )
+    )
+
+    // ── Previously-pending subtools (adapter-backed) ──────────────────
+    "apk_compare_resource_diff" -> listOf(
+        SubToolConfig(
+            field = "base_apk",
+            label = "Second APK (B) absolute path",
+            type = ConfigType.PATH,
+            hint = "/sdcard/AlvsiaWork/base.apk",
+            required = true,
+            workFileName = "compare_base.txt"
+        )
+    )
+    "pak_selective_extract" -> listOf(
+        SubToolConfig(
+            field = "selectors",
+            label = "Entries to extract (one name or path prefix per line, or ALL)",
+            type = ConfigType.MULTILINE,
+            hint = "content/lua/scripts/\nsome/entry.lua",
+            required = true,
+            workFileName = "select_entries.txt"
+        )
+    )
+    "lua_round_trip_validator" -> listOf(
+        SubToolConfig(
+            field = "recovered_source",
+            label = "Recovered .lua source absolute path",
+            type = ConfigType.PATH,
+            hint = "/sdcard/AlvsiaWork/OUT/LUA/recovered.lua",
+            required = true,
+            workFileName = "recovered_source.txt"
+        )
+    )
+    "crypto_output_validator" -> listOf(
+        SubToolConfig(
+            field = "expected_hash",
+            label = "Expected SHA-256 (optional)",
+            type = ConfigType.TEXT,
+            hint = "hex64 — leave empty to skip hash comparison",
+            required = false,
+            workFileName = "expected_hash.txt"
+        )
+    )
+    "lab_regression_diff_compare" -> listOf(
+        SubToolConfig(
+            field = "regression_base",
+            label = "Reference artifact absolute path",
+            type = ConfigType.PATH,
+            hint = "/sdcard/AlvsiaWork/OUT/LAB/reference.bin",
+            required = true,
+            workFileName = "regression_base.txt"
+        )
+    )
+    "workspace_file_manager" -> listOf(
+        SubToolConfig(
+            field = "cleanup_actions",
+            label = "Cleanup actions (one per line: clear-work / clear-out)",
+            type = ConfigType.MULTILINE,
+            hint = "clear-work",
+            required = false,
+            workFileName = "cleanup.txt"
+        )
+    )
+    "workspace_resume_cancel_progress" -> listOf(
+        SubToolConfig(
+            field = "cancel_tasks",
+            label = "Task IDs to cancel (one per line)",
+            type = ConfigType.MULTILINE,
+            hint = "task-20261124-01",
+            required = false,
+            workFileName = "cancel.txt"
         )
     )
 

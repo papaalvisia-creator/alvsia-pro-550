@@ -65,6 +65,7 @@ def test_write_is_atomic_and_checks_decompressed_size():
     entry = SimpleNamespace(
         encryption_method=0,
         compression_method=core.CM_ZLIB,
+        compression_block_size=len(plain),
         compressed_blocks=[SimpleNamespace(start=0, end=len(compressed))],
         encrypted=False,
         uncompressed_size=len(plain),
@@ -79,6 +80,7 @@ def test_write_is_atomic_and_checks_decompressed_size():
         corrupt_entry = SimpleNamespace(
             encryption_method=0,
             compression_method=core.CM_ZLIB,
+            compression_block_size=100,
             compressed_blocks=[SimpleNamespace(start=0, end=len(b"corrupt"))],
             encrypted=False,
             uncompressed_size=100,
@@ -167,7 +169,11 @@ def test_unpack_refuses_skipped_entries_and_output_count_mismatch():
         with tempfile.TemporaryDirectory() as td:
             result = core.run_pak_unpack("synthetic.pak", Path(td) / "out")
             assert not result["ok"]
-            assert "output file count mismatch" in result["error"]
+            # The consolidated integrity failure covers both the on-disk file
+            # count mismatch and skipped entries; it must name the numbers so
+            # the failure is auditable.
+            assert "incomplete PAK extraction" in result["error"]
+            assert "on_disk=1" in result["error"]
     finally:
         core.TencentPakFile = original_class
         core._alvsia_require_operation = original_require

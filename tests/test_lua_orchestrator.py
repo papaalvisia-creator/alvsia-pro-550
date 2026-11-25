@@ -44,7 +44,14 @@ def test_pipeline_runs_compatible_engines_and_keeps_valid_alternates(tmp_path):
     assert output.read_text(encoding="utf-8") == "return 1\n"
     assert source.read_bytes() == b"\x1bLua\x53\x00\x00\x00"
     assert result["engines_attempted"] == ["first", "second"]
-    assert "Lua 5.3 parser accepted source" in result["results"][0]["note"]
+    # Validation note depends on toolchain presence: a matching luac parser
+    # reports "parser accepted source"; without one, the structural fallback
+    # must be reported honestly instead of claiming parser validation.
+    first_note = result["results"][0]["note"]
+    assert (
+        "Lua 5.3 parser accepted source" in first_note
+        or "structural heuristic accepted; matching Lua parser unavailable" in first_note
+    )
     alternate = Path(result["alternates_dir"]) / "second.lua"
     assert alternate.read_text(encoding="utf-8") == "return 2\n"
 

@@ -16,8 +16,16 @@ def test_local_scope_does_not_rename_global_after_block():
     src = "local x = 1\ndo local x = 2 print(x) end\nreturn x\n"
     out = protect_source(src, "balanced")
     assert "local _a" in out
-    assert "return x" in out
+    # The do-block's inner `local x` is renamed and confined to the block:
+    # the inner declaration and its use inside print(...) are rewritten...
     assert "print(_a" in out
+    # ...while the outer top-level `local x` keeps its own consistent mapping
+    # across the block boundary (semantic scope-exit regression guard).
+    assert "return _a" in out
+    # The inner block's mapping must NOT leak onto the outer variable after
+    # `end`: outer x and inner x use distinct replacements.
+    inner_renames = {m for m in out.split() if m.startswith("_a")}
+    assert len(inner_renames) >= 2
 
 def test_local_declaration_preserves_syntax_spacing():
     src = "local a, b = 1, 2\nreturn a + b\n"

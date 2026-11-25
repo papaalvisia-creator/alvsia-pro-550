@@ -1,15 +1,16 @@
 name: ALVSIA Program Intelligence Validation
 on:
   push:
-    branches: [ feat/alvsia-program-intelligence-core-20261109, feat/smart-lua-recovery-fusion-20261109 ]
+    branches: [ feat/alvsia-program-intelligence-core-20261109, feat/smart-lua-recovery-fusion-20261109, feat/smart-premium-10x59-ui-refresh-20261124 ]
   pull_request:
     branches: [ main, feat/full-reference-source-registry-20261106 ]
+  workflow_dispatch:
 permissions:
   contents: read
 jobs:
   intelligence:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
       - name: Set up Python
@@ -31,3 +32,25 @@ jobs:
           python -m unittest tests/test_lua_intelligence_candidates.py -v
           python -m unittest tests/test_lua_intelligence_ir.py -v
           python -m unittest tests/test_lua_intelligence_oracle.py -v
+      - name: Audit all five canonical source ZIPs (read-only)
+        run: python tools/audit_canonical_archives.py
+      - name: Upload canonical archive audit report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: alvsia-canonical-five-zip-audit
+          path: reports/canonical-archive-audit.md
+          if-no-files-found: warn
+          retention-days: 14
+      # Temporary handoff for detailed offline source review. The source ZIPs
+      # remain unchanged in their canonical repository; artifact retention is
+      # intentionally short and this does not publish them to the APK.
+      - name: Upload verified canonical ZIP bytes for offline review
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: alvsia-canonical-five-source-archives
+          path: build/archive-audit/*.zip
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 3

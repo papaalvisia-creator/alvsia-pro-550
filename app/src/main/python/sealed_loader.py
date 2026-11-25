@@ -4,7 +4,6 @@ import importlib.abc
 import importlib.util
 import os
 import pkgutil
-import re
 import sys
 
 _MAGIC = b"ALVSEAL2"
@@ -37,7 +36,40 @@ _MAP = {
     "lua_engine.protection": "lua_engine_protection.alv",
     "lua_engine.protection_pipeline": "lua_engine_protection_pipeline.alv",
     "lua_engine.vm_deobfuscator": "lua_engine_vm_deobfuscator.alv",
+    # Batch 2 — previously plain-bytecode modules, now sealed
+    "alvsia_reference_tools": "alvsia_reference_tools.alv",
+    "archive_engine": "archive_engine.alv",
+    "lua_engine": "lua_engine___init__.alv",
+    "lua_engine.protector_registry": "lua_engine_protector_registry.alv",
+    "lua_intelligence": "lua_intelligence___init__.alv",
+    "lua_intelligence.candidates": "lua_intelligence_candidates.alv",
+    "lua_intelligence.core": "lua_intelligence_core.alv",
+    "lua_intelligence.fingerprint": "lua_intelligence_fingerprint.alv",
+    "lua_intelligence.fusion": "lua_intelligence_fusion.alv",
+    "lua_intelligence.ir": "lua_intelligence_ir.alv",
+    "lua_intelligence.knowledge": "lua_intelligence_knowledge.alv",
+    "lua_intelligence.layers": "lua_intelligence_layers.alv",
+    "lua_intelligence.model": "lua_intelligence_model.alv",
+    "lua_intelligence.oracle": "lua_intelligence_oracle.alv",
+    "lua_intelligence.structure": "lua_intelligence_structure.alv",
+    "lua_recovery_proof": "lua_recovery_proof.alv",
+    "module_adapters": "module_adapters.alv",
+    "pending_subtool_adapters": "pending_subtool_adapters.alv",
+    "smart_archive_engine": "smart_archive_engine.alv",
+    "smart_archive_lua_engine": "smart_archive_lua_engine.alv",
+    "smart_data_engine": "smart_data_engine.alv",
+    "smart_lua_engine": "smart_lua_engine.alv",
+    "smart_pak_lua_engine": "smart_pak_lua_engine.alv",
+    "smart_premium_source_fusion": "smart_premium_source_fusion.alv",
 }
+
+# A sealed package must be presented to Python as a real package. Without this,
+# importlib executes lua_engine.__init__ as a flat module, so relative imports
+# fail with "attempted relative import with no known parent package".
+_PACKAGES = frozenset(
+    name for name in _MAP
+    if any(other.startswith(name + ".") for other in _MAP)
+)
 
 def _valid_session() -> bool:
     try:
@@ -51,6 +83,9 @@ class _SealedLoader(importlib.abc.Loader):
         self.fullname = fullname
         self.blob = blob
 
+    def is_package(self, fullname: str) -> bool:
+        return fullname in _PACKAGES
+
     def create_module(self, spec):
         return None
 
@@ -58,14 +93,10 @@ class _SealedLoader(importlib.abc.Loader):
         if not _valid_session():
             raise ImportError("sealed runtime authorization missing")
         try:
-            # Keep the seed, certificate-derived key, and AES key derivation out
-            # of Python. The Kotlin/JNI bridge performs authenticated decryption.
             from com.alvsia.pro.sec import NativeGuard
             raw = pkgutil.get_data("sealed", self.blob)
             if raw is None:
                 raise FileNotFoundError("sealed payload resource missing")
-            # Kotlin object methods may be exposed as instance methods by Chaquopy;
-            # call the singleton explicitly so the payload is never mistaken for `self`.
             guard = getattr(NativeGuard, "INSTANCE", None)
             if guard is not None:
                 build_id = guard.sealBuildId()
@@ -79,7 +110,12 @@ class _SealedLoader(importlib.abc.Loader):
         except Exception as exc:
             raise ImportError("sealed payload authentication/decryption failed") from exc
         module.__file__ = "<ALVISIA-SEALED:%s>" % self.fullname
-        module.__package__ = self.fullname.rpartition(".")[0]
+        # A package needs its own name as __package__ so .detector resolves
+        # correctly to lua_engine.detector.
+        if self.fullname in _PACKAGES:
+            module.__package__ = self.fullname
+        else:
+            module.__package__ = self.fullname.rpartition(".")[0]
         code = compile(source, module.__file__, "exec")
         del source
         exec(code, module.__dict__)
@@ -89,7 +125,10 @@ class _SealedFinder(importlib.abc.MetaPathFinder):
         blob = _MAP.get(fullname)
         if blob is None:
             return None
-        return importlib.util.spec_from_loader(fullname, _SealedLoader(fullname, blob))
+        loader = _SealedLoader(fullname, blob)
+        return importlib.util.spec_from_loader(
+            fullname, loader, is_package=(fullname in _PACKAGES)
+        )
 
 _installed = False
 

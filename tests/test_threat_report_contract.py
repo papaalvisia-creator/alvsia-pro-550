@@ -38,8 +38,11 @@ class ThreatReportContractTests(unittest.TestCase):
         self.assertEqual(main.count("ThreatReport.emit("), 1)
         self.assertIn('"SIG_BLOCK"', main)
 
-    def test_unknown_event_kind_falls_back_to_threat(self):
-        self.assertIn('?: "THREAT"', self.source)
+    def test_unknown_event_kind_is_not_promoted_to_threat(self):
+        # Unknown kinds stay suppressed; only explicit accepted security
+        # kinds may reach TelegramNotifier.
+        self.assertIn("normalized !in acceptedKinds", self.source)
+        self.assertNotIn('?: "THREAT"', self.source)
 
 
 if __name__ == "__main__":

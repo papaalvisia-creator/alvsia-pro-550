@@ -1,4 +1,5 @@
 from pathlib import Path
+import re
 
 ROOT = Path(__file__).resolve().parents[1]
 CATALOG = ROOT / "app/src/main/java/com/alvsia/pro/tool/SubMenus.kt"
@@ -7,33 +8,54 @@ CATALOG_TEXT = CATALOG.read_text(encoding="utf-8")
 ROUTER_TEXT = ROUTER.read_text(encoding="utf-8")
 
 EXPECTED = {
-    1: ["universal_file_detect", "workspace_report", "engine_health"],
-    2: ["lua_smart_analyze", "lua_recovery_normalize", "lua_t24_convert", "lua_multi_xor", "lua_protect_transform", "lua_custom_inject"],
-    3: ["pak_info", "pak_extract", "pak_lua_inject", "pak_repack"],
-    4: ["asset_uasset_classify", "asset_uexp_classify", "asset_locres_umap_classify", "asset_report"],
-    5: ["apk_audit", "dex_report", "url_scan"],
-    6: ["so_audit", "native_strings", "abi_dependency_report"],
-    7: ["aes_scan", "zuc_decrypt", "string_recovery"],
-    8: ["file_report", "strings", "entropy", "hex_preview"],
-    9: ["batch_audit", "regression_compare", "self_test"],
+    1: ["apk_structure_inspector", "apk_manifest_permission_audit", "apk_dex_bytecode_inspector", "apk_resource_table_inspector", "apk_compare_resource_diff", "apk_signature_integrity_verify"],
+    2: ["pak_profile_fingerprint", "pak_explorer_info", "pak_extract_unpak", "pak_selective_extract", "pak_entry_compare_replace", "pak_rebuild_repack", "pak_compact_rebuild_verify"],
+    3: ["obb_format_inspector", "obb_extractor", "mini_obb_zsdic_adapter", "gamepatch_obb_repacker", "obb_integrity_pair_validator"],
+    4: ["lua_smart_analyze", "lua_vm_version_detector", "lua_bytecode_inspector", "lua_smart_decompile", "lua_recovery_normalize", "lua_t24_bgmi_pubg_converter", "lua_protect_compile", "lua_custom_inject", "lua_round_trip_validator"],
+    5: ["crypto_xor_multi_xor", "crypto_aes_candidate_transform", "crypto_sm4_engine", "crypto_zuc_engine", "crypto_key_pattern_scanner", "crypto_output_validator"],
+    6: ["forensics_universal_file_detection", "forensics_file_signature_hash", "forensics_string_url_recovery", "forensics_entropy_region", "forensics_hex_structure_viewer", "forensics_evidence_report"],
+    7: ["modding_uasset_uexp_inspector", "modding_ue4_string_id_extractor", "modding_skin_pair_finder", "modding_zsdic_analyzer", "modding_offset_size_fixer", "modding_resource_mapping_recovery"],
+    8: ["native_elf_so_inspector", "native_strings_symbols", "native_abi_dependency_report", "native_xref_reference_analyzer", "native_authorized_runtime_trace"],
+    9: ["workspace_file_manager", "workspace_recent_files_favorites", "workspace_batch_job_queue", "workspace_resume_cancel_progress", "workspace_output_browser_history"],
+    10: ["lab_engine_registry", "lab_engine_self_test", "lab_regression_diff_compare", "lab_large_file_benchmark"],
 }
 
-def test_catalog_is_exactly_9x33():
-    assert CATALOG_TEXT.count("SubTool(") == 34
-    assert sum(len(v) for v in EXPECTED.values()) == 33
-    for ids in EXPECTED.values():
-        for sub_id in ids:
-            assert f'SubTool("{sub_id}"' in CATALOG_TEXT
-    declared = __import__("re").findall(r'SubTool\(\s*"([^"]+)"', CATALOG_TEXT)
-    assert len(declared) == 33
-    assert len(set(declared)) == 33
-    assert declared == [sid for ids in EXPECTED.values() for sid in ids]
+def test_catalog_is_exactly_10x59():
+    calls = re.findall(r'SubTool\(\s*"([^"]+)"([^\n]*)', CATALOG_TEXT)
+    declared = [sid for sid, _ in calls]
+    assert len(declared) == 59
+    assert len(set(declared)) == 59
+    assert [len(EXPECTED[i]) for i in range(1, 11)] == [6, 7, 5, 9, 6, 6, 6, 5, 5, 4]
+    assert sum(map(len, EXPECTED.values())) == 59
+    assert declared == [sid for i in range(1, 11) for sid in EXPECTED[i]]
 
-def test_all_public_ids_are_explicitly_routed():
-    for ids in EXPECTED.values():
-        for sub_id in ids:
-            assert f'"{sub_id}"' in ROUTER_TEXT
-    assert "Public IDs never become arbitrary Python operations" in ROUTER_TEXT
+def test_every_enabled_public_id_has_an_explicit_router_entry():
+    calls = re.findall(r'SubTool\(\s*"([^"]+)"([^\n]*)', CATALOG_TEXT)
+    enabled = [sid for sid, tail in calls if "enabled = false" not in tail]
+    assert len(enabled) == 59  # 59/59 public subtools enabled
+    native_routes = {
+        "workspace_recent_files_favorites": '"workspace_recent_files_favorites" -> "workspace"',
+        "workspace_batch_job_queue": '"workspace_batch_job_queue" -> "tasks"',
+        "workspace_output_browser_history": '"workspace_output_browser_history" -> "output"',
+    }
+    missing = [
+        sid for sid in enabled
+        if not (
+            native_routes[sid] in ROUTER_TEXT if sid in native_routes
+            else f'"{sid}"' in ROUTER_TEXT
+        )
+    ]
+    assert not missing, f"Enabled menu IDs without explicit backend/native routes: {missing}"
 
-def test_no_ai_namespace_in_smart_catalog():
+def test_unwired_items_are_disabled_and_not_fake_success_actions():
+    calls = re.findall(r'SubTool\(\s*"([^"]+)"([^\n]*)', CATALOG_TEXT)
+    pending = [sid for sid, tail in calls if "enabled = false" in tail]
+    # ALL 21 previously-pending subtools are now adapter-backed and enabled;
+    # no catalog entry is left disabled.
+    assert pending == []
+    screen = (ROOT / "app/src/main/java/com/alvsia/pro/ui/tool/SubMenuScreen.kt").read_text(encoding="utf-8")
+    assert ".clickable(enabled = item.enabled)" in screen
+    assert 'else "PENDING"' in screen
+
+def test_no_separate_ai_namespace_in_smart_catalog():
     assert "com.alvsia.ai.uncensored" not in CATALOG_TEXT

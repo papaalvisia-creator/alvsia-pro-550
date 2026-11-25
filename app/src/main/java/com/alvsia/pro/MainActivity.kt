@@ -51,6 +51,9 @@ import com.alvsia.pro.ui.home.HomeScreen
 import com.alvsia.pro.ui.home.StudioItem
 import com.alvsia.pro.ui.home.StudioScreen
 import com.alvsia.pro.ui.output.OutputBrowserScreen
+import com.alvsia.pro.ui.workspace.WorkspaceHubScreen
+import com.alvsia.pro.ui.workspace.TaskQueueScreen
+import com.alvsia.pro.ui.home.StudioCatalog
 import com.alvsia.pro.ui.loading.LoadingScreen
 import com.alvsia.pro.ui.login.LoginScreen
 import com.alvsia.pro.ui.splash.SplashScreen
@@ -108,6 +111,9 @@ class MainActivity : ComponentActivity() {
                 var selectedStudio by remember { mutableStateOf<StudioItem?>(null) }
                 var pendingInputUri by remember { mutableStateOf<Uri?>(null) }
                 var moduleReturnScreen by remember { mutableStateOf("home") }
+                var toolReturnScreen by remember { mutableStateOf("submenu") }
+                var outputReturnScreen by remember { mutableStateOf("home") }
+                var studioReturnScreen by remember { mutableStateOf("home") }
                 var activeSub by remember { mutableStateOf<SubTool?>(null) }
                 var activeTaskId by remember { mutableStateOf<String?>(null) }
                 val ctx = LocalContext.current
@@ -159,7 +165,7 @@ class MainActivity : ComponentActivity() {
                         "tool" -> {
                             activeTaskId = null
                             activeSub = null
-                            screen = "submenu"
+                            screen = toolReturnScreen
                         }
                         "submenu" -> {
                             moduleId = 0
@@ -168,9 +174,10 @@ class MainActivity : ComponentActivity() {
                         "studio" -> {
                             selectedStudio = null
                             pendingInputUri = null
-                            screen = "home"
+                            screen = studioReturnScreen
                         }
-                        "output" -> screen = "home"
+                        "workspace", "tasks" -> screen = "submenu"
+                        "output" -> screen = outputReturnScreen
                         "profile" -> screen = "home"
                         else -> { }
                     }
@@ -330,8 +337,9 @@ class MainActivity : ComponentActivity() {
                             }
                         },
                         onProfile = { screen = "profile" },
-                        onWorkspace = { screen = "output" },
+                        onWorkspace = { outputReturnScreen = "home"; screen = "output" },
                         onStudio = { studio ->
+                            studioReturnScreen = "home"
                             selectedStudio = studio
                             screen = "studio"
                         },
@@ -352,9 +360,10 @@ class MainActivity : ComponentActivity() {
                             StudioScreen(
                                 studio = studio,
                                 tools = tools,
-                                onBack = { selectedStudio = null; pendingInputUri = null; screen = "home" },
+                                onBack = { selectedStudio = null; pendingInputUri = null; screen = studioReturnScreen },
                                 onTool = { t ->
                                     moduleReturnScreen = "studio"
+                                    toolReturnScreen = "submenu"
                                     moduleId = t.id
                                     activeSub = null
                                     activeTaskId = null
@@ -369,9 +378,16 @@ class MainActivity : ComponentActivity() {
                         items = SubMenus.forModule(moduleId),
                         onBack = { screen = moduleReturnScreen },
                         onSelect = { sub ->
-                            activeSub = sub
-                            activeTaskId = TaskCenter.tasks.lastOrNull { it.moduleId == moduleId && it.subId == sub.id }?.id
-                            screen = "tool"
+                            val nativeScreen = SmartModuleRouter.nativeScreen(sub.id)
+                            if (nativeScreen != null) {
+                                if (nativeScreen == "output") outputReturnScreen = "submenu"
+                                screen = nativeScreen
+                            } else {
+                                toolReturnScreen = "submenu"
+                                activeSub = sub
+                                activeTaskId = TaskCenter.tasks.lastOrNull { it.moduleId == moduleId && it.subId == sub.id }?.id
+                                screen = "tool"
+                            }
                         }
                     )
                     "tool" -> {
@@ -383,7 +399,7 @@ class MainActivity : ComponentActivity() {
                             ToolWorkspaceScreen(
                                 moduleTitle = SubMenus.title(moduleId), moduleId = moduleId, sub = sub,
                                 running = task?.status == TaskStatus.RUNNING, logs = task?.logs ?: emptyList(),
-                                onBack = { activeTaskId = null; screen = "submenu" },
+                                onBack = { activeTaskId = null; screen = toolReturnScreen },
                                 onRun = { uri, extra ->
                                                                         // Visible UI uses only Smart engines. Provider IDs are internal
 // and selected centrally so legacy implementations never become menus.
@@ -467,9 +483,41 @@ val taskId = TaskCenter.start(moduleId, sub.id, sub.title, uri?.lastPathSegment?
                             )
                         }
                     }
+                    "workspace" -> WorkspaceHubScreen(
+                        onBack = { screen = "submenu" },
+                        onUseRecent = { uri ->
+                            studioReturnScreen = "workspace"
+                            selectedStudio = StudioCatalog.find("forensics")
+                            pendingInputUri = uri
+                            screen = "studio"
+                        },
+                        onOpenFavorite = { favoriteModuleId, favoriteSub ->
+                            moduleReturnScreen = "workspace"
+                            toolReturnScreen = "workspace"
+                            moduleId = favoriteModuleId
+                            activeSub = favoriteSub
+                            activeTaskId = TaskCenter.tasks.lastOrNull { it.moduleId == favoriteModuleId && it.subId == favoriteSub.id }?.id
+                            screen = "tool"
+                        }
+                    )
+                    "tasks" -> TaskQueueScreen(
+                        onBack = { screen = "submenu" },
+                        onOpenTask = { live ->
+                            val matching = SubMenus.forModule(live.moduleId).firstOrNull { it.id == live.subId }
+                            if (matching != null && matching.enabled) {
+                                moduleId = live.moduleId
+                                activeSub = matching
+                                activeTaskId = live.id
+                                moduleReturnScreen = "tasks"
+                                toolReturnScreen = "tasks"
+                                screen = "tool"
+                            }
+                        }
+                    )
                     "output" -> OutputBrowserScreen(
-                        onBack = { screen = "home" },
+                        onBack = { screen = outputReturnScreen },
                         onUseWithStudio = { studio, uri ->
+                            studioReturnScreen = "output"
                             selectedStudio = studio
                             pendingInputUri = uri
                             screen = "studio"

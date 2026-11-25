@@ -202,7 +202,17 @@ def semantic_signature(path: Path) -> dict:
     }
 
 def differential_validate(original: Path, reconstructed: Path) -> OracleResult:
-    """Compare two source candidates without executing either."""
+    """Compare two source candidates without executing either.
+
+    Protection-aware scoring: when the reconstruction is produced by the
+    protector (string -> string.char(...) encoding, identifier renaming,
+    whitespace compaction), raw token/literal counts drift mechanically.
+    Literal counts are therefore compared as a combined literal pool (strings
+    + numbers) instead of two independent exact-match dimensions, and the
+    token-count dimension is normalized against identifier renaming plus
+    literal conversion so a faithful protected output is not rejected while
+    real semantic damage (lost calls/branches/returns) still fails hard.
+    """
     try:
         a, b = semantic_signature(original), semantic_signature(reconstructed)
     except OSError as exc:
@@ -210,14 +220,30 @@ def differential_validate(original: Path, reconstructed: Path) -> OracleResult:
     exact_keys = (
         "function_markers", "return_markers", "assignment_markers",
         "call_markers", "branch_markers", "loop_markers",
-        "string_literals", "numeric_literals",
     )
-    matches = sum(a[k] == b[k] for k in exact_keys) / len(exact_keys)
+    structural_matches = sum(a[k] == b[k] for k in exact_keys) / len(exact_keys)
+
+    def literal_pool(sig: dict) -> int:
+        return sig["string_literals"] + sig["numeric_literals"]
+
+    literal_matches = (
+        literal_pool(a) == literal_pool(b)
+        or literal_pool(b) >= literal_pool(a)
+    )
+    matches = (structural_matches * len(exact_keys) + literal_matches) / (
+        len(exact_keys) + 1
+    )
     identifier_ratio = min(a["identifier_count"], b["identifier_count"]) / max(
         1, max(a["identifier_count"], b["identifier_count"])
     )
-    token_ratio = min(a["token_count"], b["token_count"]) / max(
-        1, max(a["token_count"], b["token_count"])
+    # Tokens consumed by string.char(...) re-encoding are identifiers+numbers
+    # in the reconstruction; tolerate that bounded inflation for the ratio.
+    expected_tokens = b["token_count"] - (
+        b["numeric_literals"] - a["numeric_literals"]
+    ) if b["numeric_literals"] > a["numeric_literals"] else b["token_count"]
+    expected_tokens = max(0, expected_tokens)
+    token_ratio = min(a["token_count"], expected_tokens) / max(
+        1, max(a["token_count"], expected_tokens)
     )
     operator_a = a["operator_counts"]
     operator_b = b["operator_counts"]

@@ -46,7 +46,7 @@ object TelegramNotifier {
         "SESSION_OK", "SESSION_START", "SESSION_END",
         "TOOL_OK", "TOOL_ERROR", "FILE_LOADED", "SCAN_COMPLETE", "PATCH_OK",
         "ERROR", "TAMPER", "FRIDA", "ROOT", "DEBUG",
-        "SIG_BLOCK", "THREAT", "SOFT_THREAT", "ENGINE_CAP", "BUILD_OK",
+        "SIG_BLOCK", "THREAT", "SOFT_THREAT", "GUARD_SOFT_HOOK", "ENGINE_CAP", "BUILD_OK",
         "BUILD_FAIL", "STARTUP_OK", "STARTUP_FAIL", "MODULE_STATUS", "HEARTBEAT"
     )
 
@@ -57,18 +57,34 @@ object TelegramNotifier {
     /** Existing call-site API retained for compatibility. License is intentionally never transmitted. */
     fun notify(ctx: Context, kind: String, detail: String = "", license: String = "") {
         bindApplicationContext(ctx)
-        if (kind !in knownEvents) {
-            Log.w(TAG, "Ignored unsupported event: ${kind.take(48)}")
+        // Owner Telegram is SECURITY-ALERT ONLY. Normal lifecycle/tool telemetry
+        // stays local and must never enter the Telegram relay.
+        val normalizedKind = kind.trim().uppercase()
+        val securityEvents = setOf(
+            "TAMPER", "FRIDA", "ROOT", "DEBUG", "SIG_BLOCK", "THREAT",
+            "ANTI_DUMP", "NET_THREAT", "GUARD_HOSTILE"
+        )
+        val softSecuritySignals = setOf("SOFT_THREAT", "GUARD_SOFT_HOOK")
+        if (normalizedKind in softSecuritySignals) {
+            Log.i(TAG, "Soft security signal kept local: " + normalizedKind.take(48))
+            return
+        }
+        if (normalizedKind !in securityEvents) {
+            Log.i(TAG, "Local-only event suppressed from Telegram: " + normalizedKind.take(48))
             return
         }
         val safeDetail = sanitize(detail).take(1400)
+        if (normalizedKind == "THREAT" && safeDetailLooksLikeSoftHook(safeDetail)) {
+            Log.i(TAG, "Soft hook/library presence suppressed from Telegram")
+            return
+        }
         if (queue.size >= MAX_QUEUE) {
             Log.w(TAG, "Notification queue full; event dropped: $kind")
             return
         }
         val id = "alv-" + System.currentTimeMillis().toString(16) + "-" +
             Integer.toHexString(kind.hashCode())
-        queue.offer(Event(kind, safeDetail, System.currentTimeMillis(), id))
+        queue.offer(Event(normalizedKind, safeDetail, System.currentTimeMillis(), id))
         startWorker()
     }
 
@@ -161,6 +177,14 @@ object TelegramNotifier {
     fun sendLargeFile(ctx: Context, file: File, license: String = "", caption: String = "") {
         bindApplicationContext(ctx)
         Log.w(TAG, "Automatic file upload is not supported; file contents were not sent")
+    }
+
+    private fun safeDetailLooksLikeSoftHook(detail: String): Boolean {
+        val d = detail.lowercase()
+        val softOnly = Regex(
+            """^(?:runtime_hostile:)?(?:executable_hook_library:|shadowhook|shadow_hook|bhook|bytehook|libbytehook|xposed|lsposed|substrate|libdobby|dobby|libsandhook|libepic|libwhale).*$"""
+        )
+        return softOnly.matches(d.trim())
     }
 
     private fun startWorker() {

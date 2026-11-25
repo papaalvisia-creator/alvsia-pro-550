@@ -4,18 +4,19 @@ import com.alvsia.pro.ui.home.ToolItem
 import org.json.JSONArray
 import org.json.JSONObject
 
-/** ALVSIA SMART PREMIUM public catalog: exactly 9 menus. */
+/** ALVSIA SMART PREMIUM 6.0.0 public catalog: exactly 10 main menus. */
 object ToolCatalog {
     fun defaults(): List<ToolItem> = listOf(
-        ToolItem(1, "HOME", "Universal detect · workspace report · engine health"),
-        ToolItem(2, "LUA", "Smart analyze · recovery · T24/BGMI · XOR · protect · inject"),
-        ToolItem(3, "PAK / OBB", "PAK inspect · extract · Lua inject · repack"),
-        ToolItem(4, "ASSET / UE", "UAsset · UExp/UBulk · LOCRES/UMAP · asset reports"),
-        ToolItem(5, "APK / DEX", "APK audit · DEX report · URL scan · package/signature audit"),
-        ToolItem(6, "NATIVE", "ELF/SO audit · strings · ABI/dependency report"),
-        ToolItem(7, "CRYPTO / RECOVERY", "AES · ZUC · string recovery · URL recovery"),
-        ToolItem(8, "FORENSIC / STRING", "File report · strings · entropy · hex preview"),
-        ToolItem(9, "BATCH / DEV LAB", "Batch audit · regression/compare · self test")
+        ToolItem(1, "SMART APK", "Structure · manifest · DEX · resources · signature"),
+        ToolItem(2, "SMART PAK", "Profile · explore · extract · inject · rebuild · verify"),
+        ToolItem(3, "SMART OBB", "Inspect · extract · Mini-OBB · GamePatch · verify"),
+        ToolItem(4, "SMART LUA", "Analyze · bytecode · decompile · convert · protect · inject"),
+        ToolItem(5, "SMART CRYPTO", "XOR · AES · SM4 · ZUC · key-pattern recovery"),
+        ToolItem(6, "SMART FORENSICS", "File detection · hashes · strings · entropy · evidence"),
+        ToolItem(7, "SMART MODDING", "UAsset · UEXP · skins · ZSDIC · offsets · resources"),
+        ToolItem(8, "SMART NATIVE", "ELF · SO · symbols · ABI · XREF · authorized tracing"),
+        ToolItem(9, "SMART WORKSPACE", "Files · favorites · batch queue · progress · outputs"),
+        ToolItem(10, "SMART ENGINE LAB", "Registry · diagnostics · regression · large-file tests")
     )
 
     fun parseCore(bytes: ByteArray?): List<ToolItem> {

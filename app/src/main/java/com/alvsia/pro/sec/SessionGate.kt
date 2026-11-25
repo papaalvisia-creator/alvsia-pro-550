@@ -151,6 +151,9 @@ object SessionGate {
 
     // ── Runtime hostile check ─────────────────────────────────────────────
     fun runtimeHostile(ctx: Context): Boolean {
+        // Execute the release True-VMP anchor at the exact protected-operation
+        // boundary. The protector virtualizes this method in the final APK.
+        if (!VmpAnchor.healthy()) return true
         if (Guard.hostile(ctx)) return true
         // Re-check executable foreign mappings at the exact protected-operation
         // boundary, not only on the periodic RASP schedule.

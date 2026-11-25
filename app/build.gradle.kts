@@ -6,15 +6,15 @@ plugins {
 
 android {
     namespace = "com.alvsia.pro"
-    compileSdk = 34
-    ndkVersion = "27.0.12077973"
+    compileSdk = 35
+    ndkVersion = "26.1.10909125"
 
     defaultConfig {
         applicationId = "com.alvsia.pro"
         minSdk = 26
         targetSdk = 34
-        versionCode = 100
-        versionName = "6.0.0-smart-premium"
+        versionCode = 104
+        versionName = "6.0.4-smart-premium"
         buildConfigField("int", "PROTO", "2")
         buildConfigField("String", "CERT_SHA256", "\"99b33815c88a17abbcfe22be15250363f6dfc79c11ffc980e71b62b74b1f295c\"")
         // Sprint 1: DEX hash placeholder — CodeMagic seal script patches this at build time

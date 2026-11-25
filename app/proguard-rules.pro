@@ -125,3 +125,7 @@
 -keepclasseswithmembers class * {
     public static void main(java.lang.String[]);
 }
+
+# Keep the executable True-VMP anchor stable and visible to the release protector.
+-keep class com.alvsia.pro.sec.VmpAnchor { public static boolean healthy(); }
+-keepnames class com.alvsia.pro.sec.VmpAnchor

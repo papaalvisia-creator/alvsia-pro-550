@@ -51,10 +51,16 @@ def execute(input_path, output_dir, work_dir=None, archive_kind="auto",
                 "error": detected.get("error", "unsupported archive"), "detect": detected}
 
     fmt = detected.get("format")
-    if archive_kind not in ("auto", fmt):
-        expected = "tencent-pak" if archive_kind == "pak" else "obb-zip"
+    # archive_kind is the caller's hint ("pak" / "obb" / "auto"); detected
+    # formats are engine names ("tencent-pak" / "obb-zip"). Normalize the
+    # hint to the engine name before comparing so a correct hint does not
+    # reject a correctly detected archive.
+    hinted_format = archive_kind if archive_kind in ("auto", "tencent-pak", "obb-zip") else (
+        "tencent-pak" if archive_kind == "pak" else "obb-zip"
+    )
+    if hinted_format not in ("auto", fmt):
         return {"ok": False, "engine": "SMART " + archive_kind.upper(),
-                "stage": "detect", "error": f"expected {expected}, detected {fmt}"}
+                "stage": "detect", "error": f"expected {hinted_format}, detected {fmt}"}
 
     extracted_root = out / ("PAK" if fmt == "tencent-pak" else "OBB")
     extracted = extract_archive(source, extracted_root)
