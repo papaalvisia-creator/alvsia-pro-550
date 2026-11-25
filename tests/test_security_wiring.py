@@ -149,11 +149,13 @@ class SecurityWiringTests(unittest.TestCase):
         self.assertIn('out += "hooklib:$it"', anti_hook)
         self.assertIn('if (signal.startsWith("hooklib:")) soft += signal', rasp)
         self.assertIn('"linjector"', native_guard)
-        maps_block = native.split("static const char* MAP_NEEDLES[] = {", 1)[1].split("};", 1)[0]
-        late_block = native.split("static const char* LATE_LIB_NEEDLES[] = {", 1)[1].split("};", 1)[0]
+        # RASP marker tables are intentionally XOR-encoded in the native binary.
+        # Verify the plaintext soft-hook signatures are not reintroduced by source.
+        self.assertIn("map_needles()", native)
+        self.assertIn("late_lib_needles()", native)
+        self.assertIn("dev_file_paths()", native)
         for soft_marker in ("shadowhook", "bytehook", "libdobby", "xposed"):
-            self.assertNotIn(soft_marker, maps_block)
-            self.assertNotIn(soft_marker, late_block)
+            self.assertNotIn(soft_marker, native)
 
     def test_rasp_layers_include_debug_hook_memory_and_integrity(self):
         rasp = read("app/src/main/java/com/alvsia/pro/sec/RaspEngine.kt")
